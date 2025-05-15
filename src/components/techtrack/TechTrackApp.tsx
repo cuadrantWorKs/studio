@@ -10,7 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { MapPin, Play, Pause, StopCircle, Briefcase, Clock, CheckCircle, AlertTriangle, Loader2, History } from 'lucide-react';
+import { MapPin, Play, Pause, StopCircle, Briefcase, Clock, CheckCircle, AlertTriangle, Loader2, History, CloudUpload } from 'lucide-react';
 import type { LocationPoint, Job, TrackingStatus, TrackingEvent, Workday, PauseInterval, GeolocationError, WorkdaySummaryContext } from '@/lib/techtrack/types';
 import { haversineDistance } from '@/lib/techtrack/geometry';
 import { summarizeJobDescription } from '@/ai/flows/summarize-job-description';
@@ -19,13 +19,16 @@ import { decidePromptForJobCompletion } from '@/ai/flows/decide-prompt-for-job-c
 import { formatTime } from '@/lib/utils';
 import { calculateWorkdaySummary } from '@/lib/techtrack/summary';
 import WorkdaySummaryDisplay from './WorkdaySummaryDisplay';
+import { db } from '@/lib/firebase'; // Import Firestore instance
+import { doc, setDoc, getDoc } from 'firebase/firestore';
 
 
 const LOCATION_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 const STOP_DETECT_DURATION_MS = 15 * 60 * 1000; // 15 minutes
 const MOVEMENT_THRESHOLD_METERS = 100; // 100 meters
 const RECENT_PROMPT_THRESHOLD_MS = 30 * 60 * 1000; // 30 minutes
-const LOCAL_STORAGE_KEY = 'TECHTRACK_WORKDAYS_HISTORY';
+const LOCAL_STORAGE_CURRENT_WORKDAY_KEY = 'TECHTRACK_CURRENT_WORKDAY';
+
 
 export default function TechTrackApp() {
   const [workday, setWorkday] = useState<Workday | null>(null);
@@ -41,11 +44,42 @@ export default function TechTrackApp() {
   const [isSummaryModalOpen, setIsSummaryModalOpen] = useState(false);
   const [endOfDaySummary, setEndOfDaySummary] = useState<WorkdaySummaryContext | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isSavingToCloud, setIsSavingToCloud] = useState(false);
   const [aiLoading, setAiLoading] = useState<Record<string, boolean>>({});
 
   const { toast } = useToast();
 
   const getCurrentFormattedDate = () => new Date().toISOString().split('T')[0];
+
+  // Load workday from localStorage on mount
+  useEffect(() => {
+    const savedWorkdayJson = localStorage.getItem(LOCAL_STORAGE_CURRENT_WORKDAY_KEY);
+    if (savedWorkdayJson) {
+      try {
+        const savedWorkday = JSON.parse(savedWorkdayJson) as Workday;
+        // Do not load if day has ended
+        if (savedWorkday.status !== 'ended') {
+            setWorkday(savedWorkday);
+        } else {
+            localStorage.removeItem(LOCAL_STORAGE_CURRENT_WORKDAY_KEY);
+        }
+      } catch (e) {
+        console.error("Error parsing workday from localStorage", e);
+        localStorage.removeItem(LOCAL_STORAGE_CURRENT_WORKDAY_KEY);
+      }
+    }
+  }, []);
+
+  // Save workday to localStorage whenever it changes (if active)
+  useEffect(() => {
+    if (workday && workday.status !== 'ended') {
+      localStorage.setItem(LOCAL_STORAGE_CURRENT_WORKDAY_KEY, JSON.stringify(workday));
+    }
+    if (workday && workday.status === 'ended') {
+        localStorage.removeItem(LOCAL_STORAGE_CURRENT_WORKDAY_KEY);
+    }
+  }, [workday]);
+
 
   const currentJob = useMemo(() => {
     if (!workday?.currentJobId) return null;
@@ -202,7 +236,7 @@ export default function TechTrackApp() {
     setEndOfDaySummary(null); // Reset summary for new day
     const newWorkday: Workday = {
       id: crypto.randomUUID(),
-      userId: 'technician1', 
+      userId: 'technician1', // TODO: Replace with actual user ID after implementing auth
       date: getCurrentFormattedDate(),
       startTime: Date.now(),
       startLocation: currentLocation,
@@ -261,17 +295,17 @@ export default function TechTrackApp() {
     setIsLoading(false);
   };
 
-  const handleEndDay = () => {
+  const handleEndDay = async () => {
     if (!workday || !currentLocation) return;
     setIsLoading(true);
+    setIsSavingToCloud(true);
     
     const now = Date.now();
     let finalWorkdayState = { ...workday };
 
-    // Ensure last pause interval is closed if day ends while paused
     if (finalWorkdayState.status === 'paused' && finalWorkdayState.pauseIntervals.length > 0) {
         const lastPause = finalWorkdayState.pauseIntervals[finalWorkdayState.pauseIntervals.length - 1];
-        if (lastPause.startTime && !lastPause.endTime) { // check startTime
+        if (lastPause.startTime && !lastPause.endTime) { 
             lastPause.endTime = now;
             lastPause.endLocation = currentLocation;
         }
@@ -282,37 +316,36 @@ export default function TechTrackApp() {
       status: 'ended',
       endTime: now,
       endLocation: currentLocation,
+      events: [...finalWorkdayState.events, { id: crypto.randomUUID(), type: 'SESSION_END', timestamp: now, location: currentLocation }]
     };
 
-    setWorkday(finalWorkdayState); // Update workday state first
-    recordEvent('SESSION_END', currentLocation);
+    // Update local state immediately for UI responsiveness
+    setWorkday(finalWorkdayState); 
 
     try {
-      const existingHistoryString = localStorage.getItem(LOCAL_STORAGE_KEY);
-      const existingHistory: Workday[] = existingHistoryString ? JSON.parse(existingHistoryString) : [];
-      if (!existingHistory.find(wd => wd.id === finalWorkdayState.id)) {
-        localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify([...existingHistory, finalWorkdayState]));
-      }
+      const workdayDocRef = doc(db, "workdays", finalWorkdayState.id);
+      await setDoc(workdayDocRef, finalWorkdayState);
+      toast({ title: "Day Ended & Saved", description: "Workday session concluded and saved to cloud." });
+      localStorage.removeItem(LOCAL_STORAGE_CURRENT_WORKDAY_KEY); // Remove from local storage after successful cloud save
     } catch (error) {
-      console.error("Failed to save workday to localStorage:", error);
-      toast({ title: "History Error", description: "Could not save workday to local history.", variant: "destructive" });
+      console.error("Failed to save workday to Firestore:", error);
+      toast({ title: "Save Error", description: "Could not save workday to cloud. Data is still available locally for this session.", variant: "destructive" });
+      // Optionally, implement a fallback to save to localStorage again if cloud save fails
+      // localStorage.setItem(SOME_FALLBACK_KEY, JSON.stringify(finalWorkdayState));
+    } finally {
+      setIsSavingToCloud(false);
     }
 
-    toast({ title: "Day Ended", description: "Workday session concluded." });
-
-    // Calculate summary and then open modal
-    calculateWorkdaySummary(finalWorkdayState)
-      .then(summary => {
-        setEndOfDaySummary(summary);
-        setIsSummaryModalOpen(true);
-      })
-      .catch(error => {
-        console.error("Error calculating end of day summary:", error);
-        toast({ title: "Summary Error", description: "Could not calculate workday summary.", variant: "destructive" });
-      })
-      .finally(() => {
-        setIsLoading(false);
-      });
+    try {
+      const summary = await calculateWorkdaySummary(finalWorkdayState);
+      setEndOfDaySummary(summary);
+      setIsSummaryModalOpen(true);
+    } catch (error) {
+      console.error("Error calculating end of day summary:", error);
+      toast({ title: "Summary Error", description: "Could not calculate workday summary.", variant: "destructive" });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleJobFormSubmit = () => {
@@ -399,24 +432,28 @@ export default function TechTrackApp() {
       <div className="flex items-center space-x-2">
         <IconComponent className="h-5 w-5 text-accent" />
         <span>{statusText}</span>
+        {isSavingToCloud && <Loader2 className="h-4 w-4 animate-spin text-accent" />}
       </div>
     );
   };
   
   const ActionButton = () => {
+    const commonDisabled = isLoading || isSavingToCloud;
     if (!workday || workday.status === 'idle') {
-      return <Button onClick={handleStartTracking} disabled={!currentLocation || isLoading} className="w-full" size="lg">
+      return <Button onClick={handleStartTracking} disabled={!currentLocation || commonDisabled} className="w-full" size="lg">
         {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Play className="mr-2 h-5 w-5" />} Start Tracking
       </Button>;
     }
     if (workday.status === 'tracking') {
       return (
         <div className="grid grid-cols-2 gap-4">
-          <Button onClick={handlePauseTracking} variant="outline" disabled={isLoading} className="w-full" size="lg">
+          <Button onClick={handlePauseTracking} variant="outline" disabled={commonDisabled} className="w-full" size="lg">
             {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Pause className="mr-2 h-5 w-5" />} Pause
           </Button>
-          <Button onClick={handleEndDay} variant="destructive" disabled={isLoading} className="w-full" size="lg">
-             {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <StopCircle className="mr-2 h-5 w-5" />} End Day
+          <Button onClick={handleEndDay} variant="destructive" disabled={commonDisabled} className="w-full" size="lg">
+             {isSavingToCloud && <CloudUpload className="mr-2 h-5 w-5 animate-pulse" />}
+             {isLoading && !isSavingToCloud && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+             {!isLoading && !isSavingToCloud && <StopCircle className="mr-2 h-5 w-5" />} End Day
           </Button>
         </div>
       );
@@ -424,11 +461,13 @@ export default function TechTrackApp() {
     if (workday.status === 'paused') {
        return (
         <div className="grid grid-cols-2 gap-4">
-          <Button onClick={handleResumeTracking} disabled={isLoading} className="w-full" size="lg">
+          <Button onClick={handleResumeTracking} disabled={commonDisabled} className="w-full" size="lg">
             {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Play className="mr-2 h-5 w-5" />} Resume
           </Button>
-          <Button onClick={handleEndDay} variant="destructive" disabled={isLoading} className="w-full" size="lg">
-            {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <StopCircle className="mr-2 h-5 w-5" />} End Day
+          <Button onClick={handleEndDay} variant="destructive" disabled={commonDisabled} className="w-full" size="lg">
+            {isSavingToCloud && <CloudUpload className="mr-2 h-5 w-5 animate-pulse" />}
+            {isLoading && !isSavingToCloud && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            {!isLoading && !isSavingToCloud && <StopCircle className="mr-2 h-5 w-5" />} End Day
           </Button>
         </div>
       );
@@ -557,7 +596,10 @@ export default function TechTrackApp() {
           {endOfDaySummary ? (
              <WorkdaySummaryDisplay summary={endOfDaySummary} showTitle={true} />
           ) : (
-            <p>Loading summary...</p> // Or some loading indicator
+            <div className="flex items-center justify-center h-40">
+              <Loader2 className="mr-2 h-6 w-6 animate-spin" />
+              <p>Calculating summary...</p>
+            </div>
           )}
           <DialogFooter>
             <DialogClose asChild>
