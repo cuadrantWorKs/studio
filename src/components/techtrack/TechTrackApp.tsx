@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { MapPin, Play, Pause, StopCircle, Briefcase, Clock, CheckCircle, AlertTriangle, Loader2 } from 'lucide-react';
+import { MapPin, Play, Pause, StopCircle, Briefcase, Clock, CheckCircle, AlertTriangle, Loader2, ExternalLink } from 'lucide-react';
 import type { LocationPoint, Job, TrackingStatus, TrackingEvent, Workday, PauseInterval, GeolocationError, WorkdaySummaryContext } from '@/lib/techtrack/types';
 import { haversineDistance, calculateTotalDistance } from '@/lib/techtrack/geometry';
 import { summarizeJobDescription } from '@/ai/flows/summarize-job-description';
@@ -95,6 +95,7 @@ export default function TechTrackApp() {
           if (p.endTime) {
             activeTime -= (p.endTime - p.startTime);
           } else if (workday.status === 'paused' && p.startTime === workday.pauseIntervals[workday.pauseIntervals.length-1]?.startTime) {
+            // This case might not be perfectly accurate if app is backgrounded, but good for active view
             activeTime -= (now - p.startTime);
           }
         });
@@ -147,7 +148,11 @@ export default function TechTrackApp() {
   // Smart Job Completion Prompt (Movement Detection)
   useEffect(() => {
     if (workday?.status === 'tracking' && currentJob && currentJob.status === 'active' && currentLocation) {
-        const distance = haversineDistance(currentJob.startLocation, currentLocation);
+        const jobStartLocation = currentJob.startLocation;
+        // Ensure jobStartLocation is valid before calculating distance
+        if (!jobStartLocation) return;
+
+        const distance = haversineDistance(jobStartLocation, currentLocation);
         if (distance > MOVEMENT_THRESHOLD_METERS) {
           const lastPromptTime = workday.lastJobCompletionPromptTime;
           
@@ -359,6 +364,8 @@ export default function TechTrackApp() {
     return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
   };
 
+  const getGoogleMapsLink = (location: LocationPoint) => `https://www.google.com/maps/search/?api=1&query=${location.latitude},${location.longitude}`;
+
   const CurrentStatusDisplay = () => {
     if (!workday) return <p className="text-muted-foreground">Press "Start Tracking" to begin your day.</p>;
     let statusText = "Unknown";
@@ -413,6 +420,21 @@ export default function TechTrackApp() {
     }
     return null;
   };
+
+  const LocationInfo = ({ location, label, time }: { location?: LocationPoint; label: string; time?: number }) => {
+    if (!location) return null;
+    return (
+      <div className="text-xs mt-1">
+        <span className="font-medium">{label}</span>
+        {time && ` ${new Date(time).toLocaleTimeString()}`}
+        : (Lat: {location.latitude.toFixed(4)}, Lon: {location.longitude.toFixed(4)})
+        <a href={getGoogleMapsLink(location)} target="_blank" rel="noopener noreferrer" className="text-accent hover:underline ml-1 inline-flex items-center">
+          <MapPin className="h-3 w-3 mr-0.5" />Map
+        </a>
+      </div>
+    );
+  };
+
 
   return (
     <div className="flex flex-col min-h-screen items-center justify-center p-4 bg-background text-foreground">
@@ -522,23 +544,30 @@ export default function TechTrackApp() {
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Workday Summary</DialogTitle>
-            {workdaySummary?.date && <DialogDescription>Summary for {new Date(workdaySummary.date).toLocaleDateString()}</DialogDescription>}
+            {workdaySummary?.date && <DialogDescription>Summary for {new Date(workdaySummary.date).toLocaleDateString('es-ES', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</DialogDescription>}
           </DialogHeader>
           {workdaySummary && (
             <div className="max-h-[60vh] overflow-y-auto space-y-4 p-1 pr-2">
-              <p><strong>Start:</strong> {new Date(workdaySummary.startTime || 0).toLocaleTimeString()} at ({workdaySummary.startLocation?.latitude.toFixed(4)}, {workdaySummary.startLocation?.longitude.toFixed(4)})</p>
-              <p><strong>End:</strong> {new Date(workdaySummary.endTime || 0).toLocaleTimeString()} at ({workdaySummary.endLocation?.latitude.toFixed(4)}, {workdaySummary.endLocation?.longitude.toFixed(4)})</p>
+              <div className="space-y-1">
+                <LocationInfo location={workdaySummary.startLocation} label="Workday Started:" time={workdaySummary.startTime} />
+                <LocationInfo location={workdaySummary.endLocation} label="Workday Ended:" time={workdaySummary.endTime} />
+              </div>
+              
               <p><strong>Total Active Time:</strong> {formatTime(workdaySummary.totalActiveTime)}</p>
               <p><strong>Total Paused Time:</strong> {formatTime(workdaySummary.totalPausedTime)}</p>
               <p><strong>Total Distance:</strong> {workdaySummary.totalDistanceKm.toFixed(2)} km</p>
               
               <h4 className="font-semibold mt-2">Jobs ({workdaySummary.jobs.length}):</h4>
               {workdaySummary.jobs.length > 0 ? (
-                <ul className="list-disc pl-5 space-y-1 text-sm">
+                <ul className="list-disc pl-5 space-y-2 text-sm">
                   {workdaySummary.jobs.map(job => (
                     <li key={job.id}>
-                      <strong>{job.description}</strong> ({job.status})
-                      {job.summary && <p className="text-xs text-muted-foreground">Summary: {job.summary}</p>}
+                      <div><strong>{job.description}</strong> ({job.status})</div>
+                      <LocationInfo location={job.startLocation} label="Started at" time={job.startTime}/>
+                      {job.endTime && job.endLocation && (
+                         <LocationInfo location={job.endLocation} label="Ended at" time={job.endTime}/>
+                      )}
+                      {job.summary && <p className="text-xs text-muted-foreground mt-1">Summary: {job.summary}</p>}
                       {job.aiSummary && <p className="text-xs text-muted-foreground">AI Summary: {job.aiSummary}</p>}
                     </li>
                   ))}
@@ -547,10 +576,14 @@ export default function TechTrackApp() {
 
               <h4 className="font-semibold mt-2">Pauses ({workdaySummary.pauseIntervals.filter(p => p.endTime).length}):</h4>
                {workdaySummary.pauseIntervals.filter(p => p.endTime).length > 0 ? (
-                <ul className="list-disc pl-5 space-y-1 text-sm">
+                <ul className="list-disc pl-5 space-y-2 text-sm">
                   {workdaySummary.pauseIntervals.filter(p => p.endTime).map((pause,idx) => (
                     <li key={idx}>
-                      Paused at {new Date(pause.startTime).toLocaleTimeString()} for {formatTime(pause.endTime! - pause.startTime)}
+                      Paused from {new Date(pause.startTime).toLocaleTimeString()} for {formatTime(pause.endTime! - pause.startTime)}
+                      <LocationInfo location={pause.startLocation} label="Paused at" />
+                      {pause.endLocation && (
+                        <LocationInfo location={pause.endLocation} label="Resumed at" />
+                      )}
                     </li>
                   ))}
                 </ul>
@@ -567,4 +600,3 @@ export default function TechTrackApp() {
     </div>
   );
 }
-
