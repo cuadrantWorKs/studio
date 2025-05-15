@@ -33,6 +33,7 @@ export interface TrackingEvent {
     | 'JOB_COMPLETION_PROMPT'
     | 'JOB_COMPLETED'
     | 'NEW_JOB_PROMPT'
+    | 'USER_ACTION' // Added for manual user interactions
     | 'ERROR';
   timestamp: number;
   location?: LocationPoint;
@@ -75,3 +76,4 @@ export interface GeolocationError {
   code: number;
   message: string;
 }
+

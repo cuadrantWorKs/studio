@@ -40,6 +40,11 @@ export default function TechTrackApp() {
 
   const getCurrentFormattedDate = () => new Date().toISOString().split('T')[0];
 
+  const currentJob = useMemo(() => {
+    if (!workday?.currentJobId) return null;
+    return workday.jobs.find(j => j.id === workday.currentJobId);
+  }, [workday]);
+
   // Geolocation effect
   useEffect(() => {
     if (typeof navigator !== 'undefined' && navigator.geolocation) {
@@ -53,12 +58,6 @@ export default function TechTrackApp() {
           };
           setCurrentLocation(newLocation);
           setGeolocationError(null);
-
-          // If tracking, add to history (this might be redundant if periodic/event-based logging is preferred)
-          if (workday?.status === 'tracking') {
-            // Debounce or manage frequency of adding to history from watchPosition
-            // For now, let specific actions/intervals handle history addition
-          }
         },
         (error) => {
           setGeolocationError({ code: error.code, message: error.message });
@@ -68,7 +67,7 @@ export default function TechTrackApp() {
       );
       return () => navigator.geolocation.clearWatch(watchId);
     }
-  }, [toast, workday?.status]);
+  }, [toast]);
 
   const recordEvent = useCallback((type: TrackingEvent['type'], location?: LocationPoint, jobId?: string, details?: string) => {
     setWorkday(prev => {
@@ -96,7 +95,6 @@ export default function TechTrackApp() {
           if (p.endTime) {
             activeTime -= (p.endTime - p.startTime);
           } else if (workday.status === 'paused' && p.startTime === workday.pauseIntervals[workday.pauseIntervals.length-1]?.startTime) {
-            // Current pause, subtract time since pause started
             activeTime -= (now - p.startTime);
           }
         });
@@ -122,18 +120,13 @@ export default function TechTrackApp() {
 
   // Smart New Job Prompt (Stop Detection)
   useEffect(() => {
-    let stopTimerId: NodeJS.Timeout;
-    if (workday?.status === 'tracking' && !workday.currentJobId) { // Only if not in an active job or just generally tracking
-      // This logic needs refinement: Detect if stopped for 15 mins
-      // Simplified: If last location update is > 15 mins ago and no significant movement
-      // For a more robust solution, track movement history.
-      // This is a placeholder for a more complex stop detection logic.
-      
-      // Pseudo-logic for stop detection
+    if (workday?.status === 'tracking' && !currentJob) { 
       const lastMovementTime = workday.locationHistory[workday.locationHistory.length -1]?.timestamp || workday.startTime;
       if (Date.now() - (lastMovementTime || Date.now()) > STOP_DETECT_DURATION_MS) {
         const hasBeenPromptedRecently = workday.lastNewJobPromptTime && (Date.now() - workday.lastNewJobPromptTime < RECENT_PROMPT_THRESHOLD_MS);
         
+        if(isJobModalOpen) return; // Don't prompt if modal is already open
+
         setAiLoading(prev => ({...prev, newJob: true}));
         decidePromptForNewJob({ hasBeenPromptedRecently: !!hasBeenPromptedRecently, timeStoppedInMinutes: 15 })
           .then(res => {
@@ -141,7 +134,7 @@ export default function TechTrackApp() {
               toast({ title: "New Job?", description: "It looks like you've stopped. Starting a new job? AI: " + res.reason });
               setJobModalMode('new');
               setIsJobModalOpen(true);
-              recordEvent('NEW_JOB_PROMPT', currentLocation, undefined, res.reason);
+              recordEvent('NEW_JOB_PROMPT', currentLocation, undefined, `AI: ${res.reason}`);
             }
             setWorkday(prev => prev ? ({...prev, lastNewJobPromptTime: Date.now()}) : null);
           })
@@ -149,18 +142,17 @@ export default function TechTrackApp() {
           .finally(() => setAiLoading(prev => ({...prev, newJob: false})));
       }
     }
-    return () => clearTimeout(stopTimerId);
-  }, [workday, currentLocation, toast, recordEvent]);
+  }, [workday, currentLocation, toast, recordEvent, currentJob, isJobModalOpen]);
 
   // Smart Job Completion Prompt (Movement Detection)
   useEffect(() => {
-    if (workday?.status === 'tracking' && workday.currentJobId && currentLocation) {
-      const currentJob = workday.jobs.find(j => j.id === workday.currentJobId);
-      if (currentJob && currentJob.status === 'active') {
+    if (workday?.status === 'tracking' && currentJob && currentJob.status === 'active' && currentLocation) {
         const distance = haversineDistance(currentJob.startLocation, currentLocation);
         if (distance > MOVEMENT_THRESHOLD_METERS) {
           const lastPromptTime = workday.lastJobCompletionPromptTime;
           
+          if(isJobModalOpen) return; // Don't prompt if modal is already open
+
           setAiLoading(prev => ({...prev, jobCompletion: true}));
           decidePromptForJobCompletion({ distanceMovedMeters: distance, lastJobPromptedTimestamp: lastPromptTime })
             .then(res => {
@@ -170,16 +162,15 @@ export default function TechTrackApp() {
                 setJobModalMode('summary');
                 setCurrentJobFormData({ description: currentJob.description, summary: '' });
                 setIsJobModalOpen(true);
-                recordEvent('JOB_COMPLETION_PROMPT', currentLocation, currentJob.id, res.reason);
+                recordEvent('JOB_COMPLETION_PROMPT', currentLocation, currentJob.id, `AI: ${res.reason}`);
               }
               setWorkday(prev => prev ? ({...prev, lastJobCompletionPromptTime: Date.now()}) : null);
             })
             .catch(err => toast({ title: "AI Error", description: "Could not check for job completion.", variant: "destructive" }))
             .finally(() => setAiLoading(prev => ({...prev, jobCompletion: false})));
         }
-      }
     }
-  }, [workday, currentLocation, toast, recordEvent]);
+  }, [workday, currentJob, currentLocation, toast, recordEvent, isJobModalOpen]);
 
 
   const handleStartTracking = () => {
@@ -190,7 +181,7 @@ export default function TechTrackApp() {
     setIsLoading(true);
     const newWorkday: Workday = {
       id: crypto.randomUUID(),
-      userId: 'technician1', // Placeholder
+      userId: 'technician1', 
       date: getCurrentFormattedDate(),
       startTime: Date.now(),
       startLocation: currentLocation,
@@ -204,11 +195,11 @@ export default function TechTrackApp() {
     setElapsedTime(0);
     toast({ title: "Tracking Started", description: "Your workday has begun." });
     
-    // Ask if starting a new job
-    setTimeout(() => { // Timeout to allow state to settle
+    setTimeout(() => { 
         setJobModalMode('new');
         setCurrentJobFormData({ description: '', summary: '' });
         setIsJobModalOpen(true);
+        recordEvent('NEW_JOB_PROMPT', currentLocation, undefined, "Initial prompt after session start");
     }, 100);
     setIsLoading(false);
   };
@@ -280,7 +271,7 @@ export default function TechTrackApp() {
         jobs: [...prev.jobs, newJob],
         currentJobId: newJob.id,
       }) : null);
-      recordEvent('JOB_START', currentLocation, newJob.id, newJob.description);
+      recordEvent('JOB_START', currentLocation, newJob.id, `New job started: ${newJob.description}`);
       toast({ title: "New Job Started", description: newJob.description });
     } else if (jobModalMode === 'summary' && jobToSummarizeId) {
       setAiLoading(prev => ({...prev, summarize: true}));
@@ -292,16 +283,16 @@ export default function TechTrackApp() {
               ...prev,
               jobs: prev.jobs.map(j => j.id === jobToSummarizeId ? {
                 ...j,
-                summary: currentJobFormData.summary, // User's summary
-                aiSummary: aiRes.summary, // AI's summary
+                summary: currentJobFormData.summary, 
+                aiSummary: aiRes.summary, 
                 status: 'completed',
                 endTime: Date.now(),
                 endLocation: currentLocation,
               } : j),
-              currentJobId: null, // No longer the current job
+              currentJobId: null, 
             };
           });
-          recordEvent('JOB_COMPLETED', currentLocation, jobToSummarizeId, `User: ${currentJobFormData.summary}, AI: ${aiRes.summary}`);
+          recordEvent('JOB_COMPLETED', currentLocation, jobToSummarizeId, `Job completed. User: ${currentJobFormData.summary}, AI: ${aiRes.summary}`);
           toast({ title: "Job Completed", description: `Summary saved for job.` });
         })
         .catch(err => toast({ title: "AI Error", description: "Could not generate AI summary.", variant: "destructive" }))
@@ -311,6 +302,26 @@ export default function TechTrackApp() {
     setIsJobModalOpen(false);
     setCurrentJobFormData({ description: '', summary: '' });
     setJobToSummarizeId(null);
+  };
+
+  const handleManualStartNewJob = () => {
+    if (!currentLocation) {
+      toast({ title: "Location Required", description: "Cannot start a new job without location.", variant: "destructive" });
+      return;
+    }
+    setJobModalMode('new');
+    setCurrentJobFormData({ description: '', summary: '' });
+    setIsJobModalOpen(true);
+    recordEvent('USER_ACTION', currentLocation, undefined, "Manually opened new job modal");
+  };
+
+  const handleManualCompleteJob = () => {
+    if (!currentJob || !currentLocation) return;
+    setJobToSummarizeId(currentJob.id);
+    setJobModalMode('summary');
+    setCurrentJobFormData({ description: currentJob.description, summary: '' });
+    setIsJobModalOpen(true);
+    recordEvent('USER_ACTION', currentLocation, currentJob.id, "Manually opened complete job modal");
   };
 
   const workdaySummary: WorkdaySummaryContext | null = useMemo(() => {
@@ -426,19 +437,30 @@ export default function TechTrackApp() {
           )}
           {geolocationError && <p className="text-xs text-destructive">Location Error: {geolocationError.message}</p>}
 
-          {workday?.currentJobId && workday.jobs.find(j => j.id === workday.currentJobId)?.status === 'active' && (
+          {currentJob && currentJob.status === 'active' && (
             <Card className="bg-accent/10">
               <CardHeader className="p-3">
                 <CardTitle className="text-sm flex items-center"><Briefcase className="mr-2 h-4 w-4 text-accent"/>Current Job</CardTitle>
               </CardHeader>
               <CardContent className="p-3 pt-0">
-                <p className="text-sm">{workday.jobs.find(j => j.id === workday.currentJobId)?.description}</p>
+                <p className="text-sm">{currentJob.description}</p>
               </CardContent>
+              <CardFooter className="p-3">
+                <Button onClick={handleManualCompleteJob} size="sm" className="w-full">
+                  <CheckCircle className="mr-2 h-4 w-4" /> Complete This Job
+                </Button>
+              </CardFooter>
             </Card>
           )}
           
+          {workday?.status === 'tracking' && !currentJob && (
+            <Button onClick={handleManualStartNewJob} variant="outline" className="w-full mt-2">
+              <Briefcase className="mr-2 h-4 w-4" /> Start New Job
+            </Button>
+          )}
+
           {(aiLoading.newJob || aiLoading.jobCompletion || aiLoading.summarize) && (
-            <div className="flex items-center justify-center text-sm text-muted-foreground">
+            <div className="flex items-center justify-center text-sm text-muted-foreground pt-2">
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               <span>AI is thinking...</span>
             </div>
