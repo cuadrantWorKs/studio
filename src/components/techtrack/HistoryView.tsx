@@ -9,7 +9,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import type { Workday, WorkdaySummaryContext } from '@/lib/techtrack/types';
 import { calculateWorkdaySummary } from '@/lib/techtrack/summary';
 import WorkdaySummaryDisplay from './WorkdaySummaryDisplay';
-import { ArrowLeft, Loader2 } from 'lucide-react';
+import { ArrowLeft, Loader2, AlertTriangle } from 'lucide-react'; // Added AlertTriangle
 import { db } from '@/lib/firebase';
 import { collection, getDocs, query, orderBy } from 'firebase/firestore';
 
@@ -28,22 +28,19 @@ export default function HistoryView() {
       setError(null);
       try {
         const workdaysCollectionRef = collection(db, "workdays");
-        // Assuming 'startTime' is a reliable field for ordering.
-        // Firestore timestamps can also be used if preferred and available.
         const q = query(workdaysCollectionRef, orderBy("startTime", "desc"));
         const querySnapshot = await getDocs(q);
         const fetchedWorkdays: Workday[] = [];
         querySnapshot.forEach((doc) => {
-          // Ensure you cast doc.data() to Workday type
-          // You might want to add more robust type checking or data transformation here
           fetchedWorkdays.push({ id: doc.id, ...doc.data() } as Workday);
         });
         setPastWorkdays(fetchedWorkdays);
       } catch (err) {
         console.error("Error fetching history from Firestore:", err);
         setError("Failed to load history. Please check your Firebase setup and network connection.");
+      } finally {
+        setIsLoadingHistory(false);
       }
-      setIsLoadingHistory(false);
     };
 
     fetchHistory();
@@ -85,7 +82,7 @@ export default function HistoryView() {
   if (error) {
      return (
       <div className="flex flex-col min-h-screen items-center justify-center p-4 text-center">
-        <AlertTriangle className="h-12 w-12 text-destructive mb-4" />
+        <AlertTriangle className="h-12 w-12 text-destructive mb-4" /> {/* Added Icon */}
         <p className="text-destructive text-xl mb-2">Error Loading History</p>
         <p className="text-muted-foreground mb-4">{error}</p>
         <Link href="/" passHref legacyBehavior>
@@ -126,10 +123,10 @@ export default function HistoryView() {
                     >
                       <div className="flex flex-col">
                         <span>
-                            {new Date(wd.date).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })}
+                            {wd.date ? new Date(wd.date).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' }) : 'Date N/A'}
                         </span>
                         <span className="text-xs text-muted-foreground">
-                            {wd.startTime && `Started: ${new Date(wd.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`}
+                            {wd.startTime ? `Started: ${new Date(wd.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : 'Start Time N/A'}
                         </span>
                        </div>
                     </Button>
@@ -157,3 +154,4 @@ export default function HistoryView() {
     </div>
   );
 }
+

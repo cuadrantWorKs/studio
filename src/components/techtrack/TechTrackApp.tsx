@@ -55,7 +55,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
   const { toast } = useToast();
 
   const getCurrentFormattedDate = () => new Date().toISOString().split('T')[0];
-  const getLocalStorageKey = () => `${LOCAL_STORAGE_CURRENT_WORKDAY_KEY_PREFIX}${technicianName}`;
+  const getLocalStorageKey = useCallback(() => `${LOCAL_STORAGE_CURRENT_WORKDAY_KEY_PREFIX}${technicianName}`, [technicianName]);
 
 
   // Load workday from localStorage on mount
@@ -75,7 +75,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
         localStorage.removeItem(localStorageKey);
       }
     }
-  }, [technicianName]);
+  }, [technicianName, getLocalStorageKey]);
 
   // Save workday to localStorage whenever it changes (if active)
   useEffect(() => {
@@ -86,7 +86,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
     if (workday && workday.status === 'ended') {
         localStorage.removeItem(localStorageKey);
     }
-  }, [workday, technicianName]);
+  }, [workday, technicianName, getLocalStorageKey]);
 
 
   const currentJob = useMemo(() => {
@@ -310,73 +310,69 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
 
   const finalizeWorkdayAndSave = async (workdayToEnd: Workday) => {
     if (!workdayToEnd) return;
+
     setIsLoading(true);
     setIsSavingToCloud(true);
 
     const now = Date.now();
-    let finalWorkdayState = { ...workdayToEnd };
+    let tempWorkdayState = { ...workdayToEnd };
 
-    const endLocationToUse = currentLocation || 
-                             (finalWorkdayState.locationHistory.length > 0 ? finalWorkdayState.locationHistory[finalWorkdayState.locationHistory.length - 1] : null) || 
-                             finalWorkdayState.startLocation || 
-                             null;
+    const endLocationToUse: LocationPoint | null =
+        currentLocation ||
+        (tempWorkdayState.locationHistory.length > 0 ? tempWorkdayState.locationHistory[tempWorkdayState.locationHistory.length - 1] : null) ||
+        (tempWorkdayState.startLocation as LocationPoint | null) || // Cast to ensure type compatibility or handle if it can be undefined
+        null;
 
-
-    if (finalWorkdayState.status === 'paused' && finalWorkdayState.pauseIntervals.length > 0) {
-        const lastPause = finalWorkdayState.pauseIntervals[finalWorkdayState.pauseIntervals.length - 1];
-        if (lastPause.startTime && !lastPause.endTime) { 
+    if (tempWorkdayState.status === 'paused' && tempWorkdayState.pauseIntervals.length > 0) {
+        const lastPause = tempWorkdayState.pauseIntervals[tempWorkdayState.pauseIntervals.length - 1];
+        if (lastPause.startTime && !lastPause.endTime) {
             lastPause.endTime = now;
             lastPause.endLocation = endLocationToUse || undefined;
         }
     }
     
-    finalWorkdayState = {
-      ...finalWorkdayState,
-      status: 'ended',
+    const finalizedWorkdayForSave: Workday = {
+      ...tempWorkdayState,
+      status: 'ended', // Status is 'ended' for the object to be saved
       endTime: now,
-      endLocation: endLocationToUse || undefined, // Ensure it is not undefined
-      events: [...finalWorkdayState.events, { id: crypto.randomUUID(), type: 'SESSION_END', timestamp: now, location: endLocationToUse || undefined, details: `Sesión finalizada por ${technicianName}` }]
+      endLocation: endLocationToUse || undefined,
+      events: [...tempWorkdayState.events, { 
+          id: crypto.randomUUID(), 
+          type: 'SESSION_END', 
+          timestamp: now, 
+          location: endLocationToUse || undefined, 
+          details: `Sesión finalizada por ${technicianName}` 
+      }]
     };
     
-    // Ensure all location properties are either LocationPoint or null/undefined for stringify
-    finalWorkdayState.startLocation = finalWorkdayState.startLocation || undefined;
-    finalWorkdayState.endLocation = finalWorkdayState.endLocation || undefined;
-    finalWorkdayState.events.forEach(event => event.location = event.location || undefined);
-    finalWorkdayState.jobs.forEach(job => {
-        job.startLocation = job.startLocation || undefined;
-        job.endLocation = job.endLocation || undefined;
-        if (job.aiSummary === undefined) delete job.aiSummary; 
-    });
-    finalWorkdayState.pauseIntervals.forEach(pause => {
-        pause.startLocation = pause.startLocation || undefined;
-        pause.endLocation = pause.endLocation || undefined;
-    });
-
-
-    setWorkday(finalWorkdayState); 
+    const dataToSave = JSON.parse(JSON.stringify(finalizedWorkdayForSave));
 
     try {
-      const dataToSave = JSON.parse(JSON.stringify(finalWorkdayState));
       const workdayDocRef = doc(db, "workdays", dataToSave.id);
       await setDoc(workdayDocRef, dataToSave);
+
+      // IMPORTANT: Only set the global workday state to 'ended' AFTER successful save
+      setWorkday(finalizedWorkdayForSave); 
+      
       toast({ title: "Día Finalizado y Guardado", description: "La sesión de trabajo ha concluido y se ha guardado en la nube." });
       localStorage.removeItem(getLocalStorageKey()); 
+
+      try {
+        const summary = await calculateWorkdaySummary(finalizedWorkdayForSave);
+        setEndOfDaySummary(summary);
+        setIsSummaryModalOpen(true);
+      } catch (summaryError) {
+        console.error("Error al calcular el resumen del fin de día:", summaryError);
+        toast({ title: "Error de Resumen", description: "No se pudo calcular el resumen de la jornada.", variant: "destructive" });
+      }
+
     } catch (error) {
       console.error("Error al guardar la jornada en Firestore:", error);
       const errorMessage = error instanceof Error ? error.message : String(error);
       toast({ title: "Error al Guardar", description: `No se pudo guardar la jornada en la nube. ${errorMessage}`, variant: "destructive" });
+      // Do not set workday to 'ended' if save failed. User should be able to retry or see the error.
     } finally {
       setIsSavingToCloud(false);
-    }
-
-    try {
-      const summary = await calculateWorkdaySummary(finalWorkdayState);
-      setEndOfDaySummary(summary);
-      setIsSummaryModalOpen(true);
-    } catch (error) {
-      console.error("Error al calcular el resumen del fin de día:", error);
-      toast({ title: "Error de Resumen", description: "No se pudo calcular el resumen de la jornada.", variant: "destructive" });
-    } finally {
       setIsLoading(false);
       setPendingEndDayAction(false); 
     }
@@ -444,7 +440,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
                 if (aiSummaryValue !== undefined && aiSummaryValue !== null) { 
                   jobUpdatePayload.aiSummary = aiSummaryValue;
                 } else {
-                  delete jobUpdatePayload.aiSummary; // Explicitly remove if null/undefined
+                  delete jobUpdatePayload.aiSummary; 
                 }
                 const updatedJob = { ...j, ...jobUpdatePayload };
                 if (updatedJob.endLocation === undefined) delete updatedJob.endLocation; 
@@ -523,7 +519,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
       <div className="flex items-center space-x-2">
         <IconComponent className="h-5 w-5 text-accent" />
         <span>{statusText}</span>
-        {isSavingToCloud && <Loader2 className="h-4 w-4 animate-spin text-accent" />}
+         {/* Removed general saving spinner from here, button has its own */}
       </div>
     );
   };
@@ -588,9 +584,8 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
                 <User className="mr-1 h-4 w-4 text-muted-foreground"/> Bienvenido, {technicianName}.
             </CardDescription>
           </div>
-          {/* Placeholder to balance the History button, adjust width as needed if history button is very wide */}
-          <div className="w-auto min-w-[calc(theme(spacing.12)+theme(spacing.2))]"> 
-             {/* Empty div for spacing, ensures title remains centered */}
+          <div className="w-auto min-w-[calc(theme(spacing.12)+theme(spacing.2)+theme(spacing.3))]"> 
+             {/* Adjusted placeholder width to better match history button */}
           </div>
         </CardHeader>
         <CardContent className="space-y-6">
@@ -647,10 +642,12 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
       <Dialog open={isJobModalOpen} onOpenChange={(open) => {
         if (pendingEndDayAction && jobModalMode === 'summary' && !open) {
             toast({title: "Acción Requerida", description: "Por favor, complete los detalles del trabajo antes de finalizar el día.", variant: "default"});
+            // Do not close modal if pending end day action and it's a summary modal being cancelled
+            // setIsJobModalOpen(true) would be needed here if we want to force it open, but Dialog handles it
             return; 
         }
         setIsJobModalOpen(open);
-        if (pendingEndDayAction && !open) {
+        if (pendingEndDayAction && !open) { // If it was allowed to close (e.g. not a summary cancel)
             setPendingEndDayAction(false);
             setCurrentJobFormData({ description: '', summary: '' });
             setJobToSummarizeId(null);
@@ -697,10 +694,11 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
                  }
                  setCurrentJobFormData({ description: '', summary: '' });
                  setJobToSummarizeId(null);
+                 setIsJobModalOpen(false); // Explicitly close
               }}>Cancelar</Button>
             </DialogClose>
-            <Button onClick={handleJobFormSubmit} disabled={aiLoading.summarize}>
-              {aiLoading.summarize && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            <Button onClick={handleJobFormSubmit} disabled={aiLoading.summarize || isLoading || isSavingToCloud}>
+              {(aiLoading.summarize || isLoading || isSavingToCloud) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               {jobModalMode === 'new' ? 'Iniciar Trabajo' : 'Completar Trabajo'}
             </Button>
           </DialogFooter>
@@ -727,3 +725,4 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
     </div>
   );
 }
+
