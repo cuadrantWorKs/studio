@@ -47,8 +47,8 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
 
   const [isSummaryModalOpen, setIsSummaryModalOpen] = useState(false);
   const [endOfDaySummary, setEndOfDaySummary] = useState<WorkdaySummaryContext | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [isSavingToCloud, setIsSavingToCloud] = useState(false);
+  const [isLoading, setIsLoading] = useState(false); // General loading for actions like pause/resume
+  const [isSavingToCloud, setIsSavingToCloud] = useState(false); // Specific for cloud save operation
   const [aiLoading, setAiLoading] = useState<Record<string, boolean>>({});
   const [pendingEndDayAction, setPendingEndDayAction] = useState(false);
 
@@ -77,15 +77,13 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
     }
   }, [technicianName, getLocalStorageKey]);
 
-  // Save workday to localStorage whenever it changes (if active)
+  // Save workday to localStorage whenever it changes (if active and not ended)
   useEffect(() => {
     const localStorageKey = getLocalStorageKey();
     if (workday && workday.status !== 'ended' && workday.userId === technicianName) {
       localStorage.setItem(localStorageKey, JSON.stringify(workday));
     }
-    if (workday && workday.status === 'ended') {
-        localStorage.removeItem(localStorageKey);
-    }
+    // if workday.status becomes 'ended' (after successful cloud save), it will be removed from LS
   }, [workday, technicianName, getLocalStorageKey]);
 
 
@@ -138,7 +136,8 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
 
   // Timer for elapsed time
   useEffect(() => {
-    let intervalId: NodeJS.Timeout;
+    let intervalId: NodeJS.Timeout | undefined = undefined;
+    
     if (workday?.status === 'tracking') {
       intervalId = setInterval(() => {
         const now = Date.now();
@@ -146,24 +145,34 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
         workday.pauseIntervals.forEach(p => {
           if (p.endTime && p.startTime) {
             activeTime -= (p.endTime - p.startTime);
-          } else if (workday.status === 'paused' && p.startTime === workday.pauseIntervals[workday.pauseIntervals.length-1]?.startTime) {
-             if (p.startTime) activeTime -= (now - p.startTime);
-          }
+          } 
+          // Do not subtract current pause interval if it's ongoing, status would be 'paused'
         });
         setElapsedTime(activeTime < 0 ? 0 : activeTime);
       }, 1000);
-    } else if (workday?.status === 'paused') {
-        const now = Date.now();
-        let activeTime = (workday.pauseIntervals[workday.pauseIntervals.length -1]?.startTime || now) - (workday.startTime || now) ;
-         workday.pauseIntervals.slice(0,-1).forEach(p => {
+    } else if (workday?.status === 'paused' || workday?.status === 'ended') {
+        // Calculate static elapsed time for paused or ended states
+        const baseTime = (workday.endTime || workday.pauseIntervals[workday.pauseIntervals.length-1]?.startTime || Date.now());
+        let activeTime = (baseTime) - (workday.startTime || baseTime) ;
+         workday.pauseIntervals.forEach(p => {
           if (p.endTime && p.startTime) {
-            activeTime -= (p.endTime - p.startTime);
+            // if it's the *current* pause interval for 'paused' status, it's handled by baseTime
+            if (workday.status === 'paused' && p.startTime === workday.pauseIntervals[workday.pauseIntervals.length-1]?.startTime) {
+                // already accounted for by taking pause startTime as baseTime
+            } else {
+                 activeTime -= (p.endTime - p.startTime);
+            }
           }
         });
         setElapsedTime(activeTime < 0 ? 0 : activeTime);
+    } else if (workday?.status === 'idle'){
+        setElapsedTime(0);
     }
-    return () => clearInterval(intervalId);
-  }, [workday]);
+
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, [workday]); // Reruns when workday (and its status/times) changes
   
   // Periodic location tracking
   useEffect(() => {
@@ -224,7 +233,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
                 toast({ title: "¿Actualizar Trabajo?", description: `Te has movido significativamente. ¿Completaste el trabajo: ${currentJob.description}? IA: ${res.reason}` });
                 setJobToSummarizeId(currentJob.id);
                 setJobModalMode('summary');
-                setCurrentJobFormData({ description: currentJob.description, summary: '' });
+setCurrentJobFormData({ description: currentJob.description || '', summary: '' });
                 setIsJobModalOpen(true);
                 recordEvent('JOB_COMPLETION_PROMPT', currentLocation, currentJob.id, `IA: ${res.reason}`);
               }
@@ -242,22 +251,23 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
       toast({ title: "Ubicación Requerida", description: "No se puede iniciar el seguimiento sin ubicación.", variant: "destructive" });
       return;
     }
-    setIsLoading(true);
+    setIsLoading(true); // General loading for the action itself
     setEndOfDaySummary(null); 
+    const startTime = Date.now();
     const newWorkday: Workday = {
       id: crypto.randomUUID(),
       userId: technicianName, 
       date: getCurrentFormattedDate(),
-      startTime: Date.now(),
-      startLocation: currentLocation || null,
+      startTime: startTime,
+      startLocation: currentLocation,
       status: 'tracking',
-      locationHistory: currentLocation ? [currentLocation] : [],
+      locationHistory: [currentLocation],
       jobs: [],
-      events: [{ id: crypto.randomUUID(), type: 'SESSION_START', timestamp: Date.now(), location: currentLocation || undefined, details: `Sesión iniciada por ${technicianName}` }],
+      events: [{ id: crypto.randomUUID(), type: 'SESSION_START', timestamp: startTime, location: currentLocation, details: `Sesión iniciada por ${technicianName}` }],
       pauseIntervals: [],
     };
     setWorkday(newWorkday);
-    setElapsedTime(0);
+    // Elapsed time will start calculating via useEffect
     toast({ title: "Seguimiento Iniciado", description: "Tu jornada laboral ha comenzado." });
     
     setTimeout(() => { 
@@ -308,38 +318,65 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
     setIsLoading(false);
   };
 
-  const finalizeWorkdayAndSave = async (workdayToEnd: Workday) => {
-    if (!workdayToEnd) return;
-
-    setIsLoading(true);
+  const initiateEndDayProcess = async (workdayDataToEnd: Workday) => {
+    const actionTime = Date.now();
+    setIsLoading(true); 
     setIsSavingToCloud(true);
 
-    const now = Date.now();
-    let tempWorkdayState = { ...workdayToEnd };
+    // Immediately update UI to stop timer and show "ending" state
+    setWorkday(prev => {
+        if (!prev) return null; // Should not happen if we have workdayDataToEnd
+        let tempWorkday = { ...workdayDataToEnd }; // Use the passed data which might have job completed
+        
+        // If current status was paused, finalize that pause interval
+        if (tempWorkday.status === 'paused' && tempWorkday.pauseIntervals.length > 0) {
+            const lastPause = tempWorkday.pauseIntervals[tempWorkday.pauseIntervals.length - 1];
+            if (lastPause.startTime && !lastPause.endTime) {
+                lastPause.endTime = actionTime;
+                lastPause.endLocation = currentLocation || undefined;
+            }
+        }
+        // Even if it was tracking, we set to paused to stop the timer effect
+        return {
+            ...tempWorkday,
+            status: 'paused', // This will stop the active timer via useEffect
+            endTime: actionTime, // Tentative end time, will be finalized in finalizeWorkdayAndSave
+        };
+    });
+
+    await finalizeWorkdayAndSave(workdayDataToEnd, actionTime);
+  };
+
+
+  const finalizeWorkdayAndSave = async (workdayAtStartOfEnd: Workday, finalizationTimestamp: number) => {
+    // setIsLoading and setIsSavingToCloud are already true from initiateEndDayProcess
 
     const endLocationToUse: LocationPoint | null =
         currentLocation ||
-        (tempWorkdayState.locationHistory.length > 0 ? tempWorkdayState.locationHistory[tempWorkdayState.locationHistory.length - 1] : null) ||
-        (tempWorkdayState.startLocation as LocationPoint | null) || // Cast to ensure type compatibility or handle if it can be undefined
+        (workdayAtStartOfEnd.locationHistory.length > 0 ? workdayAtStartOfEnd.locationHistory[workdayAtStartOfEnd.locationHistory.length - 1] : null) ||
+        (workdayAtStartOfEnd.startLocation) || 
         null;
 
+    let tempWorkdayState = { ...workdayAtStartOfEnd };
+
+    // Ensure last pause interval is correctly closed if status was 'paused'
     if (tempWorkdayState.status === 'paused' && tempWorkdayState.pauseIntervals.length > 0) {
         const lastPause = tempWorkdayState.pauseIntervals[tempWorkdayState.pauseIntervals.length - 1];
-        if (lastPause.startTime && !lastPause.endTime) {
-            lastPause.endTime = now;
-            lastPause.endLocation = endLocationToUse || undefined;
+        if (lastPause.startTime && !lastPause.endTime) { // This check might be redundant if initiateEndDayProcess did it
+            lastPause.endTime = finalizationTimestamp;
+            lastPause.endLocation = currentLocation || undefined; // Use current location at time of finalization
         }
     }
     
     const finalizedWorkdayForSave: Workday = {
       ...tempWorkdayState,
-      status: 'ended', // Status is 'ended' for the object to be saved
-      endTime: now,
+      status: 'ended', 
+      endTime: finalizationTimestamp, // Use precise finalization time
       endLocation: endLocationToUse || undefined,
       events: [...tempWorkdayState.events, { 
           id: crypto.randomUUID(), 
           type: 'SESSION_END', 
-          timestamp: now, 
+          timestamp: finalizationTimestamp, 
           location: endLocationToUse || undefined, 
           details: `Sesión finalizada por ${technicianName}` 
       }]
@@ -350,9 +387,8 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
     try {
       const workdayDocRef = doc(db, "workdays", dataToSave.id);
       await setDoc(workdayDocRef, dataToSave);
-
-      // IMPORTANT: Only set the global workday state to 'ended' AFTER successful save
-      setWorkday(finalizedWorkdayForSave); 
+      
+      setWorkday(finalizedWorkdayForSave); // Update UI to "Día Finalizado" only on success
       
       toast({ title: "Día Finalizado y Guardado", description: "La sesión de trabajo ha concluido y se ha guardado en la nube." });
       localStorage.removeItem(getLocalStorageKey()); 
@@ -370,7 +406,10 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
       console.error("Error al guardar la jornada en Firestore:", error);
       const errorMessage = error instanceof Error ? error.message : String(error);
       toast({ title: "Error al Guardar", description: `No se pudo guardar la jornada en la nube. ${errorMessage}`, variant: "destructive" });
-      // Do not set workday to 'ended' if save failed. User should be able to retry or see the error.
+      // If save failed, revert workday state to allow retry or show error more permanently?
+      // For now, it remains 'paused' (from initiateEndDayProcess), buttons will be re-enabled.
+      // User would need to press "Finalizar Día" again.
+      setWorkday(prev => prev ? ({...prev, status: workdayAtStartOfEnd.status }) : null); // Revert to original status before 'paused'
     } finally {
       setIsSavingToCloud(false);
       setIsLoading(false);
@@ -390,13 +429,15 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
       setPendingEndDayAction(true);
       setJobToSummarizeId(activeJob.id);
       setJobModalMode('summary');
-      setCurrentJobFormData({ description: activeJob.description, summary: '' });
+      setCurrentJobFormData({ description: activeJob.description || '', summary: '' });
       setIsJobModalOpen(true);
       recordEvent('JOB_COMPLETION_PROMPT', currentLocation, activeJob.id, "Prompt al finalizar el día");
+      // The actual end day process will be triggered from handleJobFormSubmit if pendingEndDayAction is true
       return; 
     }
 
-    await finalizeWorkdayAndSave(workday);
+    // No active job, proceed to end day directly
+    initiateEndDayProcess(workday);
   };
 
   const handleJobFormSubmit = () => {
@@ -423,11 +464,13 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
     } else if (jobModalMode === 'summary' && jobToSummarizeId) {
       setAiLoading(prev => ({...prev, summarize: true}));
       
-      const completeJobInState = (aiSummaryValue?: string | null) => {
-        let completedWorkday: Workday | null = null;
+      let completedWorkdayForSave: Workday | null = null; // To pass to finalize if pending
+
+      const updateLocalWorkdayStateWithCompletedJob = (aiSummaryValue?: string | null) => {
+        let updatedWorkday: Workday | null = null;
         setWorkday(prev => {
           if (!prev) return null;
-          completedWorkday = {
+          updatedWorkday = {
             ...prev,
             jobs: prev.jobs.map(j => {
               if (j.id === jobToSummarizeId) {
@@ -442,40 +485,38 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
                 } else {
                   delete jobUpdatePayload.aiSummary; 
                 }
-                const updatedJob = { ...j, ...jobUpdatePayload };
-                if (updatedJob.endLocation === undefined) delete updatedJob.endLocation; 
-                return updatedJob as Job;
+                const finalJob = { ...j, ...jobUpdatePayload };
+                if (finalJob.endLocation === undefined) delete finalJob.endLocation; 
+                return finalJob as Job;
               }
               return j;
             }),
             currentJobId: null, 
           };
-          return completedWorkday;
+          completedWorkdayForSave = updatedWorkday; // Capture for potential end day
+          return updatedWorkday;
         });
-        return completedWorkday; 
       };
 
       summarizeJobDescription({ jobDescription: currentJobFormData.summary })
         .then(aiRes => {
           recordEvent('JOB_COMPLETED', currentLocation, jobToSummarizeId, `Trabajo completado. Usuario: ${currentJobFormData.summary}, IA: ${aiRes.summary}`);
           toast({ title: "Trabajo Completado", description: `Resumen guardado para el trabajo.` });
-          const finalWorkdayState = completeJobInState(aiRes.summary);
-          if (pendingEndDayAction && finalWorkdayState) {
-            finalizeWorkdayAndSave(finalWorkdayState);
-          }
+          updateLocalWorkdayStateWithCompletedJob(aiRes.summary);
         })
         .catch(err => {
           toast({ title: "Error de IA", description: "No se pudo generar el resumen de IA. Trabajo guardado sin él.", variant: "destructive" });
           recordEvent('JOB_COMPLETED', currentLocation, jobToSummarizeId, `Trabajo completado (falló resumen IA). Usuario: ${currentJobFormData.summary}`);
-          const finalWorkdayState = completeJobInState(null); 
-          if (pendingEndDayAction && finalWorkdayState) {
-            finalizeWorkdayAndSave(finalWorkdayState);
-          }
+          updateLocalWorkdayStateWithCompletedJob(null); 
         })
         .finally(() => {
           setAiLoading(prev => ({...prev, summarize: false}));
           setIsJobModalOpen(false);
-          if (!pendingEndDayAction) {
+          
+          if (pendingEndDayAction && completedWorkdayForSave) {
+            initiateEndDayProcess(completedWorkdayForSave);
+            // pendingEndDayAction will be reset inside finalizeWorkdayAndSave's finally block
+          } else if (!pendingEndDayAction) { // Only reset form if not immediately ending day
               setCurrentJobFormData({ description: '', summary: '' });
               setJobToSummarizeId(null);
           }
@@ -499,13 +540,23 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
     if (!currentJob) return;
     setJobToSummarizeId(currentJob.id);
     setJobModalMode('summary');
-    setCurrentJobFormData({ description: currentJob.description, summary: '' });
+    setCurrentJobFormData({ description: currentJob.description || '', summary: '' });
     setIsJobModalOpen(true);
     recordEvent('USER_ACTION', currentLocation, currentJob.id, "Modal de completar trabajo abierto manualmente");
   };
 
   const CurrentStatusDisplay = () => {
     if (!workday) return <p className="text-muted-foreground">Presiona "Iniciar Seguimiento" para comenzar tu día.</p>;
+    
+    if (isSavingToCloud && (isLoading || workday.status === 'paused')) { // Show finalizing message
+        return (
+          <div className="flex items-center space-x-2">
+            <Loader2 className="h-5 w-5 text-accent animate-spin" />
+            <span>Finalizando jornada...</span>
+          </div>
+        );
+    }
+
     let statusText = "Desconocido";
     let IconComponent = AlertTriangle;
 
@@ -519,7 +570,6 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
       <div className="flex items-center space-x-2">
         <IconComponent className="h-5 w-5 text-accent" />
         <span>{statusText}</span>
-         {/* Removed general saving spinner from here, button has its own */}
       </div>
     );
   };
@@ -535,26 +585,24 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
       return (
         <div className="grid grid-cols-2 gap-4">
           <Button onClick={handlePauseTracking} variant="outline" disabled={commonDisabled} className="w-full" size="lg">
-            {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Pause className="mr-2 h-5 w-5" />} Pausar
+            {isLoading && !isSavingToCloud ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Pause className="mr-2 h-5 w-5" />} Pausar
           </Button>
           <Button onClick={handleEndDay} variant="destructive" disabled={commonDisabled} className="w-full" size="lg">
-             {isSavingToCloud && <CloudUpload className="mr-2 h-5 w-5 animate-pulse" />}
-             {isLoading && !isSavingToCloud && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-             {!isLoading && !isSavingToCloud && <StopCircle className="mr-2 h-5 w-5" />} Finalizar Día
+             {isSavingToCloud ? <CloudUpload className="mr-2 h-5 w-5 animate-pulse" /> : (isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> :<StopCircle className="mr-2 h-5 w-5" />)}
+              Finalizar Día
           </Button>
         </div>
       );
     }
-    if (workday.status === 'paused') {
+    if (workday.status === 'paused') { // Also covers the 'ending' state if we make status 'paused'
        return (
         <div className="grid grid-cols-2 gap-4">
           <Button onClick={handleResumeTracking} disabled={commonDisabled} className="w-full" size="lg">
-            {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Play className="mr-2 h-5 w-5" />} Reanudar
+            {isLoading && !isSavingToCloud ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Play className="mr-2 h-5 w-5" />} Reanudar
           </Button>
           <Button onClick={handleEndDay} variant="destructive" disabled={commonDisabled} className="w-full" size="lg">
-            {isSavingToCloud && <CloudUpload className="mr-2 h-5 w-5 animate-pulse" />}
-            {isLoading && !isSavingToCloud && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            {!isLoading && !isSavingToCloud && <StopCircle className="mr-2 h-5 w-5" />} Finalizar Día
+            {isSavingToCloud ? <CloudUpload className="mr-2 h-5 w-5 animate-pulse" /> : (isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <StopCircle className="mr-2 h-5 w-5" />)}
+             Finalizar Día
           </Button>
         </div>
       );
@@ -572,20 +620,21 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
   return (
     <div className="flex flex-col min-h-screen items-center justify-center p-4 bg-background text-foreground">
       <Card className="w-full max-w-md shadow-xl">
-        <CardHeader className="flex flex-row items-center justify-between space-x-2">
+        <CardHeader>
+          <div className="flex justify-between items-center space-x-2">
             <Link href="/history" passHref legacyBehavior>
               <Button variant="outline" size="sm" asChild>
                 <a><History className="mr-1 h-4 w-4" /> Historial Empresa</a>
               </Button>
             </Link>
-          <div className="flex-grow text-center">
-            <CardTitle className="text-3xl font-bold text-primary">TechTrack</CardTitle>
-            <CardDescription className="flex items-center justify-center">
-                <User className="mr-1 h-4 w-4 text-muted-foreground"/> Bienvenido, {technicianName}.
-            </CardDescription>
-          </div>
-          <div className="w-auto min-w-[calc(theme(spacing.12)+theme(spacing.2)+theme(spacing.3))]"> 
-             {/* Adjusted placeholder width to better match history button */}
+            <div className="flex-grow text-center">
+                <CardTitle className="text-3xl font-bold text-primary">TechTrack</CardTitle>
+                <CardDescription className="flex items-center justify-center">
+                    <User className="mr-1 h-4 w-4 text-muted-foreground"/> Bienvenido, {technicianName}.
+                </CardDescription>
+            </div>
+            <div className="w-auto min-w-[calc(theme(spacing.12)+theme(spacing.2)+theme(spacing.3)+1rem)]"> {/* Placeholder for balance */}
+            </div>
           </div>
         </CardHeader>
         <CardContent className="space-y-6">
@@ -594,6 +643,9 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
             {workday && (workday.status === 'tracking' || workday.status === 'paused') && (
               <p className="text-4xl font-mono font-bold text-center mt-2">{formatTime(elapsedTime)}</p>
             )}
+             {workday?.status === 'ended' && endOfDaySummary && (
+                 <p className="text-sm text-muted-foreground text-center mt-2">Tiempo total activo: {formatTime(endOfDaySummary.totalActiveTime)}</p>
+             )}
           </div>
           
           {currentLocation && (
@@ -613,7 +665,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
                 <p className="text-sm">{currentJob.description}</p>
               </CardContent>
               <CardFooter className="p-3">
-                <Button onClick={handleManualCompleteJob} size="sm" className="w-full">
+                <Button onClick={handleManualCompleteJob} size="sm" className="w-full" disabled={isLoading || isSavingToCloud}>
                   <CheckCircle className="mr-2 h-4 w-4" /> Completar Este Trabajo
                 </Button>
               </CardFooter>
@@ -621,7 +673,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
           )}
           
           {workday?.status === 'tracking' && !currentJob && (
-            <Button onClick={handleManualStartNewJob} variant="outline" className="w-full mt-2">
+            <Button onClick={handleManualStartNewJob} variant="outline" className="w-full mt-2" disabled={isLoading || isSavingToCloud}>
               <Briefcase className="mr-2 h-4 w-4" /> Iniciar Nuevo Trabajo
             </Button>
           )}
@@ -642,17 +694,23 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
       <Dialog open={isJobModalOpen} onOpenChange={(open) => {
         if (pendingEndDayAction && jobModalMode === 'summary' && !open) {
             toast({title: "Acción Requerida", description: "Por favor, complete los detalles del trabajo antes de finalizar el día.", variant: "default"});
-            // Do not close modal if pending end day action and it's a summary modal being cancelled
-            // setIsJobModalOpen(true) would be needed here if we want to force it open, but Dialog handles it
             return; 
         }
         setIsJobModalOpen(open);
-        if (pendingEndDayAction && !open) { // If it was allowed to close (e.g. not a summary cancel)
-            setPendingEndDayAction(false);
-            setCurrentJobFormData({ description: '', summary: '' });
-            setJobToSummarizeId(null);
+        if (!open) { // If modal is closed for any reason (cancel or submit)
+            if (pendingEndDayAction && jobModalMode === 'summary') {
+                // If it was pending and a summary modal, the action is handled by submit or cancel.
+                // If cancelled, pendingEndDayAction is reset below.
+            }
+            // Reset form only if not actively processing end of day through this modal
+            if (!pendingEndDayAction || jobModalMode !== 'summary') {
+                setCurrentJobFormData({ description: '', summary: '' });
+                setJobToSummarizeId(null);
+            }
+            if(pendingEndDayAction && jobModalMode === 'summary' && !open && !aiLoading.summarize && !isSavingToCloud){ // if summary cancelled explicitly
+                setPendingEndDayAction(false); 
+            }
         }
-
       }}>
         <DialogContent>
           <DialogHeader>
@@ -689,12 +747,12 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
             <DialogClose asChild>
               <Button variant="outline" onClick={() => {
                  if (pendingEndDayAction && jobModalMode === 'summary') {
-                    setPendingEndDayAction(false); 
-                    toast({ title: "Finalización de Día Detenida", description: "Se canceló la finalización del trabajo. El día no ha finalizado.", variant: "default" });
+                    setPendingEndDayAction(false); // User explicitly cancelled ending the day
+                    toast({ title: "Finalización de Día Cancelada", description: "Se canceló la finalización del trabajo. El día no ha finalizado.", variant: "default" });
                  }
                  setCurrentJobFormData({ description: '', summary: '' });
                  setJobToSummarizeId(null);
-                 setIsJobModalOpen(false); // Explicitly close
+                 setIsJobModalOpen(false); 
               }}>Cancelar</Button>
             </DialogClose>
             <Button onClick={handleJobFormSubmit} disabled={aiLoading.summarize || isLoading || isSavingToCloud}>
