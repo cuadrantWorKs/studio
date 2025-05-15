@@ -476,7 +476,6 @@ export default function TechTrackApp() {
       return (
         <div className="w-full space-y-2">
             <Button onClick={() => {setWorkday(null); setElapsedTime(0); setEndOfDaySummary(null);}} variant="secondary" className="w-full" size="lg">Start New Day</Button>
-            {/* The history button here is now removed as per new requirement for a permanent one */}
         </div>
       );
     }
@@ -484,18 +483,20 @@ export default function TechTrackApp() {
   };
 
   return (
-    <div className="flex flex-col min-h-screen items-center justify-center p-4 bg-background text-foreground relative">
-      <div className="absolute top-4 left-4">
-        <Link href="/history" passHref legacyBehavior>
-          <Button variant="outline" size="sm" asChild>
-            <a><History className="mr-2 h-4 w-4" /> Consultar historial</a>
-          </Button>
-        </Link>
-      </div>
-      <Card className="w-full max-w-md shadow-xl mt-16"> {/* Added mt-16 to avoid overlap with history button */}
-        <CardHeader>
-          <CardTitle className="text-3xl font-bold text-center text-primary">TechTrack</CardTitle>
-          <CardDescription className="text-center">Your smart work companion.</CardDescription>
+    <div className="flex flex-col min-h-screen items-center justify-center p-4 bg-background text-foreground">
+      <Card className="w-full max-w-md shadow-xl">
+        <CardHeader className="flex flex-row items-center justify-between">
+          <Link href="/history" passHref legacyBehavior>
+            <Button variant="outline" size="icon" className="mr-4" asChild>
+              <a><History className="h-5 w-5" /></a>
+            </Button>
+          </Link>
+          <div className="flex-grow text-center">
+            <CardTitle className="text-3xl font-bold text-primary">TechTrack</CardTitle>
+            <CardDescription>Your smart work companion.</CardDescription>
+          </div>
+           {/* Placeholder to balance the flex layout if needed, or remove if button is enough for left side */}
+          <div className="w-10"> {/* Adjust width to match history button size or use invisible content */} </div>
         </CardHeader>
         <CardContent className="space-y-6">
           <div className="p-4 border rounded-lg bg-secondary/30">
