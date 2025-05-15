@@ -2,37 +2,44 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger, DialogClose } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogClose } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { MapPin, Play, Pause, StopCircle, Briefcase, Clock, CheckCircle, AlertTriangle, Loader2, ExternalLink } from 'lucide-react';
+import { MapPin, Play, Pause, StopCircle, Briefcase, Clock, CheckCircle, AlertTriangle, Loader2, History } from 'lucide-react';
 import type { LocationPoint, Job, TrackingStatus, TrackingEvent, Workday, PauseInterval, GeolocationError, WorkdaySummaryContext } from '@/lib/techtrack/types';
-import { haversineDistance, calculateTotalDistance } from '@/lib/techtrack/geometry';
+import { haversineDistance } from '@/lib/techtrack/geometry';
 import { summarizeJobDescription } from '@/ai/flows/summarize-job-description';
 import { decidePromptForNewJob } from '@/ai/flows/decide-prompt-for-new-job';
 import { decidePromptForJobCompletion } from '@/ai/flows/decide-prompt-for-job-completion';
+import { formatTime } from '@/lib/utils';
+import { calculateWorkdaySummary } from '@/lib/techtrack/summary';
+import WorkdaySummaryDisplay from './WorkdaySummaryDisplay';
+
 
 const LOCATION_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 const STOP_DETECT_DURATION_MS = 15 * 60 * 1000; // 15 minutes
 const MOVEMENT_THRESHOLD_METERS = 100; // 100 meters
 const RECENT_PROMPT_THRESHOLD_MS = 30 * 60 * 1000; // 30 minutes
+const LOCAL_STORAGE_KEY = 'TECHTRACK_WORKDAYS_HISTORY';
 
 export default function TechTrackApp() {
   const [workday, setWorkday] = useState<Workday | null>(null);
   const [currentLocation, setCurrentLocation] = useState<LocationPoint | null>(null);
   const [geolocationError, setGeolocationError] = useState<GeolocationError | null>(null);
   
-  const [elapsedTime, setElapsedTime] = useState(0); // For current session active time display
+  const [elapsedTime, setElapsedTime] = useState(0); 
   const [isJobModalOpen, setIsJobModalOpen] = useState(false);
   const [jobModalMode, setJobModalMode] = useState<'new' | 'summary'>('new');
   const [currentJobFormData, setCurrentJobFormData] = useState({ description: '', summary: '' });
   const [jobToSummarizeId, setJobToSummarizeId] = useState<string | null>(null);
 
   const [isSummaryModalOpen, setIsSummaryModalOpen] = useState(false);
+  const [endOfDaySummary, setEndOfDaySummary] = useState<WorkdaySummaryContext | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [aiLoading, setAiLoading] = useState<Record<string, boolean>>({});
 
@@ -92,15 +99,24 @@ export default function TechTrackApp() {
         const now = Date.now();
         let activeTime = now - (workday.startTime || now);
         workday.pauseIntervals.forEach(p => {
-          if (p.endTime) {
+          if (p.endTime && p.startTime) {
             activeTime -= (p.endTime - p.startTime);
           } else if (workday.status === 'paused' && p.startTime === workday.pauseIntervals[workday.pauseIntervals.length-1]?.startTime) {
-            // This case might not be perfectly accurate if app is backgrounded, but good for active view
-            activeTime -= (now - p.startTime);
+            // If paused and it's the current pause interval, subtract time since pause started
+             if (p.startTime) activeTime -= (now - p.startTime);
           }
         });
-        setElapsedTime(activeTime);
+        setElapsedTime(activeTime < 0 ? 0 : activeTime);
       }, 1000);
+    } else if (workday?.status === 'paused') {
+        const now = Date.now();
+        let activeTime = (workday.pauseIntervals[workday.pauseIntervals.length -1]?.startTime || now) - (workday.startTime || now) ;
+         workday.pauseIntervals.slice(0,-1).forEach(p => {
+          if (p.endTime && p.startTime) {
+            activeTime -= (p.endTime - p.startTime);
+          }
+        });
+        setElapsedTime(activeTime < 0 ? 0 : activeTime);
     }
     return () => clearInterval(intervalId);
   }, [workday]);
@@ -126,10 +142,10 @@ export default function TechTrackApp() {
       if (Date.now() - (lastMovementTime || Date.now()) > STOP_DETECT_DURATION_MS) {
         const hasBeenPromptedRecently = workday.lastNewJobPromptTime && (Date.now() - workday.lastNewJobPromptTime < RECENT_PROMPT_THRESHOLD_MS);
         
-        if(isJobModalOpen) return; // Don't prompt if modal is already open
+        if(isJobModalOpen) return;
 
         setAiLoading(prev => ({...prev, newJob: true}));
-        decidePromptForNewJob({ hasBeenPromptedRecently: !!hasBeenPromptedRecently, timeStoppedInMinutes: 15 })
+        decidePromptForNewJob({ hasBeenPromptedRecently: !!hasBeenPromptedRecently, timeStoppedInMinutes: Math.round(STOP_DETECT_DURATION_MS / (60*1000)) })
           .then(res => {
             if (res.shouldPrompt) {
               toast({ title: "New Job?", description: "It looks like you've stopped. Starting a new job? AI: " + res.reason });
@@ -149,14 +165,13 @@ export default function TechTrackApp() {
   useEffect(() => {
     if (workday?.status === 'tracking' && currentJob && currentJob.status === 'active' && currentLocation) {
         const jobStartLocation = currentJob.startLocation;
-        // Ensure jobStartLocation is valid before calculating distance
         if (!jobStartLocation) return;
 
         const distance = haversineDistance(jobStartLocation, currentLocation);
         if (distance > MOVEMENT_THRESHOLD_METERS) {
           const lastPromptTime = workday.lastJobCompletionPromptTime;
           
-          if(isJobModalOpen) return; // Don't prompt if modal is already open
+          if(isJobModalOpen) return;
 
           setAiLoading(prev => ({...prev, jobCompletion: true}));
           decidePromptForJobCompletion({ distanceMovedMeters: distance, lastJobPromptedTimestamp: lastPromptTime })
@@ -184,6 +199,7 @@ export default function TechTrackApp() {
       return;
     }
     setIsLoading(true);
+    setEndOfDaySummary(null); // Reset summary for new day
     const newWorkday: Workday = {
       id: crypto.randomUUID(),
       userId: 'technician1', 
@@ -233,7 +249,7 @@ export default function TechTrackApp() {
       const updatedPauses = [...prev.pauseIntervals];
       if (updatedPauses.length > 0) {
         const currentPause = updatedPauses[updatedPauses.length - 1];
-        if (!currentPause.endTime) {
+        if (!currentPause.endTime && currentPause.startTime) { // check startTime as well
           currentPause.endTime = now;
           currentPause.endLocation = currentLocation;
         }
@@ -248,16 +264,55 @@ export default function TechTrackApp() {
   const handleEndDay = () => {
     if (!workday || !currentLocation) return;
     setIsLoading(true);
-    setWorkday(prev => prev ? ({
-      ...prev,
+    
+    const now = Date.now();
+    let finalWorkdayState = { ...workday };
+
+    // Ensure last pause interval is closed if day ends while paused
+    if (finalWorkdayState.status === 'paused' && finalWorkdayState.pauseIntervals.length > 0) {
+        const lastPause = finalWorkdayState.pauseIntervals[finalWorkdayState.pauseIntervals.length - 1];
+        if (lastPause.startTime && !lastPause.endTime) { // check startTime
+            lastPause.endTime = now;
+            lastPause.endLocation = currentLocation;
+        }
+    }
+    
+    finalWorkdayState = {
+      ...finalWorkdayState,
       status: 'ended',
-      endTime: Date.now(),
+      endTime: now,
       endLocation: currentLocation,
-    }) : null);
+    };
+
+    setWorkday(finalWorkdayState); // Update workday state first
     recordEvent('SESSION_END', currentLocation);
+
+    try {
+      const existingHistoryString = localStorage.getItem(LOCAL_STORAGE_KEY);
+      const existingHistory: Workday[] = existingHistoryString ? JSON.parse(existingHistoryString) : [];
+      if (!existingHistory.find(wd => wd.id === finalWorkdayState.id)) {
+        localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify([...existingHistory, finalWorkdayState]));
+      }
+    } catch (error) {
+      console.error("Failed to save workday to localStorage:", error);
+      toast({ title: "History Error", description: "Could not save workday to local history.", variant: "destructive" });
+    }
+
     toast({ title: "Day Ended", description: "Workday session concluded." });
-    setIsSummaryModalOpen(true);
-    setIsLoading(false);
+
+    // Calculate summary and then open modal
+    calculateWorkdaySummary(finalWorkdayState)
+      .then(summary => {
+        setEndOfDaySummary(summary);
+        setIsSummaryModalOpen(true);
+      })
+      .catch(error => {
+        console.error("Error calculating end of day summary:", error);
+        toast({ title: "Summary Error", description: "Could not calculate workday summary.", variant: "destructive" });
+      })
+      .finally(() => {
+        setIsLoading(false);
+      });
   };
 
   const handleJobFormSubmit = () => {
@@ -329,43 +384,6 @@ export default function TechTrackApp() {
     recordEvent('USER_ACTION', currentLocation, currentJob.id, "Manually opened complete job modal");
   };
 
-  const workdaySummary: WorkdaySummaryContext | null = useMemo(() => {
-    if (!workday || workday.status !== 'ended') return null;
-
-    let totalActiveTime = 0;
-    if (workday.startTime && workday.endTime) {
-        totalActiveTime = workday.endTime - workday.startTime;
-    }
-    
-    let totalPausedTimeCalc = 0;
-    workday.pauseIntervals.forEach(p => {
-      if (p.endTime) {
-        totalPausedTimeCalc += (p.endTime - p.startTime);
-      }
-    });
-    totalActiveTime -= totalPausedTimeCalc;
-
-    const totalDistanceKm = calculateTotalDistance(workday.locationHistory);
-
-    return {
-      ...workday,
-      totalActiveTime,
-      totalPausedTime: totalPausedTimeCalc,
-      totalDistanceKm,
-    };
-  }, [workday]);
-
-  const formatTime = (ms: number) => {
-    if (ms < 0) ms = 0;
-    const totalSeconds = Math.floor(ms / 1000);
-    const hours = Math.floor(totalSeconds / 3600);
-    const minutes = Math.floor((totalSeconds % 3600) / 60);
-    const seconds = totalSeconds % 60;
-    return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
-  };
-
-  const getGoogleMapsLink = (location: LocationPoint) => `https://www.google.com/maps/search/?api=1&query=${location.latitude},${location.longitude}`;
-
   const CurrentStatusDisplay = () => {
     if (!workday) return <p className="text-muted-foreground">Press "Start Tracking" to begin your day.</p>;
     let statusText = "Unknown";
@@ -416,25 +434,19 @@ export default function TechTrackApp() {
       );
     }
      if (workday.status === 'ended') {
-      return <Button onClick={() => {setWorkday(null); setElapsedTime(0);}} variant="secondary" className="w-full" size="lg">Start New Day</Button>;
+      return (
+        <div className="w-full space-y-2">
+            <Button onClick={() => {setWorkday(null); setElapsedTime(0); setEndOfDaySummary(null);}} variant="secondary" className="w-full" size="lg">Start New Day</Button>
+            <Link href="/history" passHref legacyBehavior>
+                <Button asChild variant="outline" className="w-full" size="lg">
+                    <a><History className="mr-2 h-5 w-5" /> View History</a>
+                </Button>
+            </Link>
+        </div>
+      );
     }
     return null;
   };
-
-  const LocationInfo = ({ location, label, time }: { location?: LocationPoint; label: string; time?: number }) => {
-    if (!location) return null;
-    return (
-      <div className="text-xs mt-1">
-        <span className="font-medium">{label}</span>
-        {time && ` ${new Date(time).toLocaleTimeString()}`}
-        : (Lat: {location.latitude.toFixed(4)}, Lon: {location.longitude.toFixed(4)})
-        <a href={getGoogleMapsLink(location)} target="_blank" rel="noopener noreferrer" className="text-accent hover:underline ml-1 inline-flex items-center">
-          <MapPin className="h-3 w-3 mr-0.5" />Map
-        </a>
-      </div>
-    );
-  };
-
 
   return (
     <div className="flex flex-col min-h-screen items-center justify-center p-4 bg-background text-foreground">
@@ -542,57 +554,14 @@ export default function TechTrackApp() {
       {/* End Day Summary Modal */}
       <Dialog open={isSummaryModalOpen} onOpenChange={setIsSummaryModalOpen}>
         <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Workday Summary</DialogTitle>
-            {workdaySummary?.date && <DialogDescription>Summary for {new Date(workdaySummary.date).toLocaleDateString('es-ES', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</DialogDescription>}
-          </DialogHeader>
-          {workdaySummary && (
-            <div className="max-h-[60vh] overflow-y-auto space-y-4 p-1 pr-2">
-              <div className="space-y-1">
-                <LocationInfo location={workdaySummary.startLocation} label="Workday Started:" time={workdaySummary.startTime} />
-                <LocationInfo location={workdaySummary.endLocation} label="Workday Ended:" time={workdaySummary.endTime} />
-              </div>
-              
-              <p><strong>Total Active Time:</strong> {formatTime(workdaySummary.totalActiveTime)}</p>
-              <p><strong>Total Paused Time:</strong> {formatTime(workdaySummary.totalPausedTime)}</p>
-              <p><strong>Total Distance:</strong> {workdaySummary.totalDistanceKm.toFixed(2)} km</p>
-              
-              <h4 className="font-semibold mt-2">Jobs ({workdaySummary.jobs.length}):</h4>
-              {workdaySummary.jobs.length > 0 ? (
-                <ul className="list-disc pl-5 space-y-2 text-sm">
-                  {workdaySummary.jobs.map(job => (
-                    <li key={job.id}>
-                      <div><strong>{job.description}</strong> ({job.status})</div>
-                      <LocationInfo location={job.startLocation} label="Started at" time={job.startTime}/>
-                      {job.endTime && job.endLocation && (
-                         <LocationInfo location={job.endLocation} label="Ended at" time={job.endTime}/>
-                      )}
-                      {job.summary && <p className="text-xs text-muted-foreground mt-1">Summary: {job.summary}</p>}
-                      {job.aiSummary && <p className="text-xs text-muted-foreground">AI Summary: {job.aiSummary}</p>}
-                    </li>
-                  ))}
-                </ul>
-              ) : <p className="text-sm text-muted-foreground">No jobs recorded.</p>}
-
-              <h4 className="font-semibold mt-2">Pauses ({workdaySummary.pauseIntervals.filter(p => p.endTime).length}):</h4>
-               {workdaySummary.pauseIntervals.filter(p => p.endTime).length > 0 ? (
-                <ul className="list-disc pl-5 space-y-2 text-sm">
-                  {workdaySummary.pauseIntervals.filter(p => p.endTime).map((pause,idx) => (
-                    <li key={idx}>
-                      Paused from {new Date(pause.startTime).toLocaleTimeString()} for {formatTime(pause.endTime! - pause.startTime)}
-                      <LocationInfo location={pause.startLocation} label="Paused at" />
-                      {pause.endLocation && (
-                        <LocationInfo location={pause.endLocation} label="Resumed at" />
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              ) : <p className="text-sm text-muted-foreground">No pauses recorded.</p>}
-            </div>
+          {endOfDaySummary ? (
+             <WorkdaySummaryDisplay summary={endOfDaySummary} showTitle={true} />
+          ) : (
+            <p>Loading summary...</p> // Or some loading indicator
           )}
           <DialogFooter>
             <DialogClose asChild>
-              <Button>Close</Button>
+              <Button onClick={() => setEndOfDaySummary(null)}>Close</Button>
             </DialogClose>
           </DialogFooter>
         </DialogContent>
