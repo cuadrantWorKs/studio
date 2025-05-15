@@ -110,17 +110,20 @@ export default function TechTrackApp() {
     }
   }, [toast]);
 
-  const recordEvent = useCallback((type: TrackingEvent['type'], location?: LocationPoint, jobId?: string, details?: string) => {
+  const recordEvent = useCallback((type: TrackingEvent['type'], locationParam?: LocationPoint | null, jobId?: string, details?: string) => {
     setWorkday(prev => {
       if (!prev) return null;
+      const eventLocation = locationParam === undefined ? (currentLocation || undefined) : (locationParam || undefined);
       const newEvent: TrackingEvent = {
         id: crypto.randomUUID(),
         type,
         timestamp: Date.now(),
-        location: location || currentLocation || undefined,
         jobId,
         details
       };
+      if (eventLocation) {
+        newEvent.location = eventLocation;
+      }
       return { ...prev, events: [...prev.events, newEvent] };
     });
   }, [currentLocation]);
@@ -238,11 +241,11 @@ export default function TechTrackApp() {
       userId: 'technician1', 
       date: getCurrentFormattedDate(),
       startTime: Date.now(),
-      startLocation: currentLocation,
+      startLocation: currentLocation || null,
       status: 'tracking',
-      locationHistory: [currentLocation],
+      locationHistory: currentLocation ? [currentLocation] : [],
       jobs: [],
-      events: [{ id: crypto.randomUUID(), type: 'SESSION_START', timestamp: Date.now(), location: currentLocation }],
+      events: [{ id: crypto.randomUUID(), type: 'SESSION_START', timestamp: Date.now(), location: currentLocation || undefined }],
       pauseIntervals: [],
     };
     setWorkday(newWorkday);
@@ -260,10 +263,13 @@ export default function TechTrackApp() {
   };
 
   const handlePauseTracking = () => {
-    if (!workday || !currentLocation) return;
+    if (!workday) return;
     setIsLoading(true);
     const now = Date.now();
-    const newPauseInterval: PauseInterval = { startTime: now, startLocation: currentLocation };
+    const newPauseInterval: PauseInterval = { 
+      startTime: now, 
+      startLocation: currentLocation || undefined 
+    };
     setWorkday(prev => prev ? ({
       ...prev,
       status: 'paused',
@@ -275,7 +281,7 @@ export default function TechTrackApp() {
   };
 
   const handleResumeTracking = () => {
-    if (!workday || !currentLocation) return;
+    if (!workday) return;
     setIsLoading(true);
     const now = Date.now();
     setWorkday(prev => {
@@ -285,7 +291,7 @@ export default function TechTrackApp() {
         const currentPause = updatedPauses[updatedPauses.length - 1];
         if (!currentPause.endTime && currentPause.startTime) { 
           currentPause.endTime = now;
-          currentPause.endLocation = currentLocation;
+          currentPause.endLocation = currentLocation || undefined;
         }
       }
       return { ...prev, status: 'tracking', pauseIntervals: updatedPauses };
@@ -303,13 +309,17 @@ export default function TechTrackApp() {
     const now = Date.now();
     let finalWorkdayState = { ...workdayToEnd };
 
-    const endLocationToUse = currentLocation || finalWorkdayState.endLocation || finalWorkdayState.locationHistory[finalWorkdayState.locationHistory.length -1] || undefined;
+    const endLocationToUse = currentLocation || 
+                             (finalWorkdayState.locationHistory.length > 0 ? finalWorkdayState.locationHistory[finalWorkdayState.locationHistory.length - 1] : null) || 
+                             finalWorkdayState.startLocation || 
+                             null;
+
 
     if (finalWorkdayState.status === 'paused' && finalWorkdayState.pauseIntervals.length > 0) {
         const lastPause = finalWorkdayState.pauseIntervals[finalWorkdayState.pauseIntervals.length - 1];
         if (lastPause.startTime && !lastPause.endTime) { 
             lastPause.endTime = now;
-            lastPause.endLocation = endLocationToUse;
+            lastPause.endLocation = endLocationToUse || undefined;
         }
     }
     
@@ -317,20 +327,23 @@ export default function TechTrackApp() {
       ...finalWorkdayState,
       status: 'ended',
       endTime: now,
-      endLocation: endLocationToUse,
-      events: [...finalWorkdayState.events, { id: crypto.randomUUID(), type: 'SESSION_END', timestamp: now, location: endLocationToUse }]
+      endLocation: endLocationToUse || undefined,
+      events: [...finalWorkdayState.events, { id: crypto.randomUUID(), type: 'SESSION_END', timestamp: now, location: endLocationToUse || undefined }]
     };
     
     setWorkday(finalWorkdayState); 
 
     try {
-      const workdayDocRef = doc(db, "workdays", finalWorkdayState.id);
-      await setDoc(workdayDocRef, finalWorkdayState);
+      // Sanitize the data for Firestore by removing undefined fields
+      const dataToSave = JSON.parse(JSON.stringify(finalWorkdayState));
+      const workdayDocRef = doc(db, "workdays", dataToSave.id);
+      await setDoc(workdayDocRef, dataToSave);
       toast({ title: "Day Ended & Saved", description: "Workday session concluded and saved to cloud." });
       localStorage.removeItem(LOCAL_STORAGE_CURRENT_WORKDAY_KEY); 
     } catch (error) {
       console.error("Failed to save workday to Firestore:", error);
-      toast({ title: "Save Error", description: "Could not save workday to cloud.", variant: "destructive" });
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      toast({ title: "Save Error", description: `Could not save workday to cloud. ${errorMessage}`, variant: "destructive" });
     } finally {
       setIsSavingToCloud(false);
     }
@@ -349,8 +362,8 @@ export default function TechTrackApp() {
   };
 
   const handleEndDay = async () => {
-    if (!workday || !currentLocation) {
-        toast({ title: "Error", description: "Cannot end day without active workday or current location.", variant: "destructive" });
+    if (!workday) {
+        toast({ title: "Error", description: "Cannot end day without active workday.", variant: "destructive" });
         return;
     }
 
@@ -370,14 +383,14 @@ export default function TechTrackApp() {
   };
 
   const handleJobFormSubmit = () => {
-    if (!workday || !currentLocation) return;
+    if (!workday) return;
     
     if (jobModalMode === 'new') {
       const newJob: Job = {
         id: crypto.randomUUID(),
         description: currentJobFormData.description,
         startTime: Date.now(),
-        startLocation: currentLocation,
+        startLocation: currentLocation || { latitude: 0, longitude: 0, timestamp: Date.now(), accuracy: 0 }, // Provide a default if null
         status: 'active',
       };
       setWorkday(prev => prev ? ({
@@ -393,20 +406,30 @@ export default function TechTrackApp() {
     } else if (jobModalMode === 'summary' && jobToSummarizeId) {
       setAiLoading(prev => ({...prev, summarize: true}));
       
-      const completeJobInState = (aiSummaryText?: string) => {
+      const completeJobInState = (aiSummaryValue?: string | null) => {
         let completedWorkday: Workday | null = null;
         setWorkday(prev => {
           if (!prev) return null;
           completedWorkday = {
             ...prev,
-            jobs: prev.jobs.map(j => j.id === jobToSummarizeId ? {
-              ...j,
-              summary: currentJobFormData.summary, 
-              aiSummary: aiSummaryText, 
-              status: 'completed',
-              endTime: Date.now(),
-              endLocation: currentLocation,
-            } : j),
+            jobs: prev.jobs.map(j => {
+              if (j.id === jobToSummarizeId) {
+                const jobUpdatePayload: Partial<Job> = {
+                  summary: currentJobFormData.summary,
+                  status: 'completed',
+                  endTime: Date.now(),
+                  endLocation: currentLocation || undefined,
+                };
+                if (aiSummaryValue !== undefined) { 
+                  jobUpdatePayload.aiSummary = aiSummaryValue;
+                }
+                const updatedJob = { ...j, ...jobUpdatePayload };
+                if (updatedJob.aiSummary === undefined) delete updatedJob.aiSummary; // Ensure not undefined
+                if (updatedJob.endLocation === undefined) delete updatedJob.endLocation; 
+                return updatedJob as Job;
+              }
+              return j;
+            }),
             currentJobId: null, 
           };
           return completedWorkday;
@@ -426,7 +449,7 @@ export default function TechTrackApp() {
         .catch(err => {
           toast({ title: "AI Error", description: "Could not generate AI summary. Job saved without it.", variant: "destructive" });
           recordEvent('JOB_COMPLETED', currentLocation, jobToSummarizeId, `Job completed (AI summary failed). User: ${currentJobFormData.summary}`);
-          const finalWorkdayState = completeJobInState(undefined); 
+          const finalWorkdayState = completeJobInState(null); 
           if (pendingEndDayAction && finalWorkdayState) {
             finalizeWorkdayAndSave(finalWorkdayState);
           }
@@ -455,7 +478,7 @@ export default function TechTrackApp() {
   };
 
   const handleManualCompleteJob = () => {
-    if (!currentJob || !currentLocation) return;
+    if (!currentJob) return;
     setJobToSummarizeId(currentJob.id);
     setJobModalMode('summary');
     setCurrentJobFormData({ description: currentJob.description, summary: '' });
@@ -534,14 +557,14 @@ export default function TechTrackApp() {
         <CardHeader className="flex flex-row items-center justify-between space-x-2">
             <Link href="/history" passHref legacyBehavior>
               <Button variant="outline" size="sm" asChild>
-                <a><History className="mr-1 h-4 w-4" /> Historial</a>
+                <a><History className="mr-1 h-4 w-4" /> Consultar historial</a>
               </Button>
             </Link>
           <div className="flex-grow text-center">
             <CardTitle className="text-3xl font-bold text-primary">TechTrack</CardTitle>
             <CardDescription>Your smart work companion.</CardDescription>
           </div>
-          <div className="w-[calc(theme(spacing.12)+theme(spacing.4))]"> {/* Placeholder to balance the History button, adjust width as needed */} </div>
+          <div className="w-[calc(theme(spacing.12)+theme(spacing.14))]"> {/* Placeholder to balance the History button, adjust width as needed */} </div>
         </CardHeader>
         <CardContent className="space-y-6">
           <div className="p-4 border rounded-lg bg-secondary/30">
@@ -681,3 +704,4 @@ export default function TechTrackApp() {
     </div>
   );
 }
+
