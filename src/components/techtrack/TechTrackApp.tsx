@@ -146,22 +146,19 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
           if (p.endTime && p.startTime) {
             activeTime -= (p.endTime - p.startTime);
           } 
-          // Do not subtract current pause interval if it's ongoing, status would be 'paused'
         });
         setElapsedTime(activeTime < 0 ? 0 : activeTime);
       }, 1000);
     } else if (workday?.status === 'paused' || workday?.status === 'ended') {
-        // Calculate static elapsed time for paused or ended states
-        const baseTime = (workday.endTime || workday.pauseIntervals[workday.pauseIntervals.length-1]?.startTime || Date.now());
+        const baseTime = (workday.endTime || workday.pauseIntervals.find(p => !p.endTime)?.startTime || Date.now());
         let activeTime = (baseTime) - (workday.startTime || baseTime) ;
          workday.pauseIntervals.forEach(p => {
           if (p.endTime && p.startTime) {
-            // if it's the *current* pause interval for 'paused' status, it's handled by baseTime
-            if (workday.status === 'paused' && p.startTime === workday.pauseIntervals[workday.pauseIntervals.length-1]?.startTime) {
-                // already accounted for by taking pause startTime as baseTime
-            } else {
+            // If it's the *current* pause interval for 'paused' status, it's handled by baseTime
+            // unless the pause has actually ended (which it wouldn't if status is 'paused' due to that pause)
+             if (!(workday.status === 'paused' && p.startTime === workday.pauseIntervals[workday.pauseIntervals.length-1]?.startTime && !p.endTime)) {
                  activeTime -= (p.endTime - p.startTime);
-            }
+             }
           }
         });
         setElapsedTime(activeTime < 0 ? 0 : activeTime);
@@ -172,7 +169,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
     return () => {
       if (intervalId) clearInterval(intervalId);
     };
-  }, [workday]); // Reruns when workday (and its status/times) changes
+  }, [workday]); 
   
   // Periodic location tracking
   useEffect(() => {
@@ -251,7 +248,7 @@ setCurrentJobFormData({ description: currentJob.description || '', summary: '' }
       toast({ title: "Ubicación Requerida", description: "No se puede iniciar el seguimiento sin ubicación.", variant: "destructive" });
       return;
     }
-    setIsLoading(true); // General loading for the action itself
+    setIsLoading(true); 
     setEndOfDaySummary(null); 
     const startTime = Date.now();
     const newWorkday: Workday = {
@@ -267,7 +264,6 @@ setCurrentJobFormData({ description: currentJob.description || '', summary: '' }
       pauseIntervals: [],
     };
     setWorkday(newWorkday);
-    // Elapsed time will start calculating via useEffect
     toast({ title: "Seguimiento Iniciado", description: "Tu jornada laboral ha comenzado." });
     
     setTimeout(() => { 
@@ -323,12 +319,10 @@ setCurrentJobFormData({ description: currentJob.description || '', summary: '' }
     setIsLoading(true); 
     setIsSavingToCloud(true);
 
-    // Immediately update UI to stop timer and show "ending" state
     setWorkday(prev => {
-        if (!prev) return null; // Should not happen if we have workdayDataToEnd
-        let tempWorkday = { ...workdayDataToEnd }; // Use the passed data which might have job completed
+        if (!prev) return null;
+        let tempWorkday = { ...workdayDataToEnd }; 
         
-        // If current status was paused, finalize that pause interval
         if (tempWorkday.status === 'paused' && tempWorkday.pauseIntervals.length > 0) {
             const lastPause = tempWorkday.pauseIntervals[tempWorkday.pauseIntervals.length - 1];
             if (lastPause.startTime && !lastPause.endTime) {
@@ -336,11 +330,10 @@ setCurrentJobFormData({ description: currentJob.description || '', summary: '' }
                 lastPause.endLocation = currentLocation || undefined;
             }
         }
-        // Even if it was tracking, we set to paused to stop the timer effect
         return {
             ...tempWorkday,
-            status: 'paused', // This will stop the active timer via useEffect
-            endTime: actionTime, // Tentative end time, will be finalized in finalizeWorkdayAndSave
+            status: 'paused', 
+            endTime: actionTime, 
         };
     });
 
@@ -349,8 +342,6 @@ setCurrentJobFormData({ description: currentJob.description || '', summary: '' }
 
 
   const finalizeWorkdayAndSave = async (workdayAtStartOfEnd: Workday, finalizationTimestamp: number) => {
-    // setIsLoading and setIsSavingToCloud are already true from initiateEndDayProcess
-
     const endLocationToUse: LocationPoint | null =
         currentLocation ||
         (workdayAtStartOfEnd.locationHistory.length > 0 ? workdayAtStartOfEnd.locationHistory[workdayAtStartOfEnd.locationHistory.length - 1] : null) ||
@@ -359,19 +350,18 @@ setCurrentJobFormData({ description: currentJob.description || '', summary: '' }
 
     let tempWorkdayState = { ...workdayAtStartOfEnd };
 
-    // Ensure last pause interval is correctly closed if status was 'paused'
     if (tempWorkdayState.status === 'paused' && tempWorkdayState.pauseIntervals.length > 0) {
         const lastPause = tempWorkdayState.pauseIntervals[tempWorkdayState.pauseIntervals.length - 1];
-        if (lastPause.startTime && !lastPause.endTime) { // This check might be redundant if initiateEndDayProcess did it
+        if (lastPause.startTime && !lastPause.endTime) { 
             lastPause.endTime = finalizationTimestamp;
-            lastPause.endLocation = currentLocation || undefined; // Use current location at time of finalization
+            lastPause.endLocation = currentLocation || undefined; 
         }
     }
     
     const finalizedWorkdayForSave: Workday = {
       ...tempWorkdayState,
       status: 'ended', 
-      endTime: finalizationTimestamp, // Use precise finalization time
+      endTime: finalizationTimestamp, 
       endLocation: endLocationToUse || undefined,
       events: [...tempWorkdayState.events, { 
           id: crypto.randomUUID(), 
@@ -388,7 +378,7 @@ setCurrentJobFormData({ description: currentJob.description || '', summary: '' }
       const workdayDocRef = doc(db, "workdays", dataToSave.id);
       await setDoc(workdayDocRef, dataToSave);
       
-      setWorkday(finalizedWorkdayForSave); // Update UI to "Día Finalizado" only on success
+      setWorkday(finalizedWorkdayForSave); 
       
       toast({ title: "Día Finalizado y Guardado", description: "La sesión de trabajo ha concluido y se ha guardado en la nube." });
       localStorage.removeItem(getLocalStorageKey()); 
@@ -406,10 +396,7 @@ setCurrentJobFormData({ description: currentJob.description || '', summary: '' }
       console.error("Error al guardar la jornada en Firestore:", error);
       const errorMessage = error instanceof Error ? error.message : String(error);
       toast({ title: "Error al Guardar", description: `No se pudo guardar la jornada en la nube. ${errorMessage}`, variant: "destructive" });
-      // If save failed, revert workday state to allow retry or show error more permanently?
-      // For now, it remains 'paused' (from initiateEndDayProcess), buttons will be re-enabled.
-      // User would need to press "Finalizar Día" again.
-      setWorkday(prev => prev ? ({...prev, status: workdayAtStartOfEnd.status }) : null); // Revert to original status before 'paused'
+      setWorkday(prev => prev ? ({...prev, status: workdayAtStartOfEnd.status, endTime: undefined }) : null); 
     } finally {
       setIsSavingToCloud(false);
       setIsLoading(false);
@@ -432,11 +419,8 @@ setCurrentJobFormData({ description: currentJob.description || '', summary: '' }
       setCurrentJobFormData({ description: activeJob.description || '', summary: '' });
       setIsJobModalOpen(true);
       recordEvent('JOB_COMPLETION_PROMPT', currentLocation, activeJob.id, "Prompt al finalizar el día");
-      // The actual end day process will be triggered from handleJobFormSubmit if pendingEndDayAction is true
       return; 
     }
-
-    // No active job, proceed to end day directly
     initiateEndDayProcess(workday);
   };
 
@@ -464,7 +448,7 @@ setCurrentJobFormData({ description: currentJob.description || '', summary: '' }
     } else if (jobModalMode === 'summary' && jobToSummarizeId) {
       setAiLoading(prev => ({...prev, summarize: true}));
       
-      let completedWorkdayForSave: Workday | null = null; // To pass to finalize if pending
+      let completedWorkdayForSave: Workday | null = null; 
 
       const updateLocalWorkdayStateWithCompletedJob = (aiSummaryValue?: string | null) => {
         let updatedWorkday: Workday | null = null;
@@ -493,7 +477,7 @@ setCurrentJobFormData({ description: currentJob.description || '', summary: '' }
             }),
             currentJobId: null, 
           };
-          completedWorkdayForSave = updatedWorkday; // Capture for potential end day
+          completedWorkdayForSave = updatedWorkday; 
           return updatedWorkday;
         });
       };
@@ -515,8 +499,7 @@ setCurrentJobFormData({ description: currentJob.description || '', summary: '' }
           
           if (pendingEndDayAction && completedWorkdayForSave) {
             initiateEndDayProcess(completedWorkdayForSave);
-            // pendingEndDayAction will be reset inside finalizeWorkdayAndSave's finally block
-          } else if (!pendingEndDayAction) { // Only reset form if not immediately ending day
+          } else if (!pendingEndDayAction) { 
               setCurrentJobFormData({ description: '', summary: '' });
               setJobToSummarizeId(null);
           }
@@ -548,15 +531,6 @@ setCurrentJobFormData({ description: currentJob.description || '', summary: '' }
   const CurrentStatusDisplay = () => {
     if (!workday) return <p className="text-muted-foreground">Presiona "Iniciar Seguimiento" para comenzar tu día.</p>;
     
-    if (isSavingToCloud && (isLoading || workday.status === 'paused')) { // Show finalizing message
-        return (
-          <div className="flex items-center space-x-2">
-            <Loader2 className="h-5 w-5 text-accent animate-spin" />
-            <span>Finalizando jornada...</span>
-          </div>
-        );
-    }
-
     let statusText = "Desconocido";
     let IconComponent = AlertTriangle;
 
@@ -594,7 +568,7 @@ setCurrentJobFormData({ description: currentJob.description || '', summary: '' }
         </div>
       );
     }
-    if (workday.status === 'paused') { // Also covers the 'ending' state if we make status 'paused'
+    if (workday.status === 'paused') { 
        return (
         <div className="grid grid-cols-2 gap-4">
           <Button onClick={handleResumeTracking} disabled={commonDisabled} className="w-full" size="lg">
@@ -633,7 +607,7 @@ setCurrentJobFormData({ description: currentJob.description || '', summary: '' }
                     <User className="mr-1 h-4 w-4 text-muted-foreground"/> Bienvenido, {technicianName}.
                 </CardDescription>
             </div>
-            <div className="w-auto min-w-[calc(theme(spacing.12)+theme(spacing.2)+theme(spacing.3)+1rem)]"> {/* Placeholder for balance */}
+            <div className="w-auto min-w-[calc(110px)]"> {/* Adjusted placeholder for balance */}
             </div>
           </div>
         </CardHeader>
@@ -692,24 +666,21 @@ setCurrentJobFormData({ description: currentJob.description || '', summary: '' }
       </Card>
 
       <Dialog open={isJobModalOpen} onOpenChange={(open) => {
-        if (pendingEndDayAction && jobModalMode === 'summary' && !open) {
+        if (pendingEndDayAction && jobModalMode === 'summary' && !open && !aiLoading.summarize && !isSavingToCloud) { // check if modal is being closed while action is pending and not by submission
             toast({title: "Acción Requerida", description: "Por favor, complete los detalles del trabajo antes de finalizar el día.", variant: "default"});
+            // Do not change setIsJobModalOpen(false) here, effectively preventing close
+            // Or, reset pendingEndDayAction if user truly cancels
             return; 
         }
         setIsJobModalOpen(open);
-        if (!open) { // If modal is closed for any reason (cancel or submit)
-            if (pendingEndDayAction && jobModalMode === 'summary') {
-                // If it was pending and a summary modal, the action is handled by submit or cancel.
-                // If cancelled, pendingEndDayAction is reset below.
-            }
-            // Reset form only if not actively processing end of day through this modal
-            if (!pendingEndDayAction || jobModalMode !== 'summary') {
-                setCurrentJobFormData({ description: '', summary: '' });
-                setJobToSummarizeId(null);
-            }
-            if(pendingEndDayAction && jobModalMode === 'summary' && !open && !aiLoading.summarize && !isSavingToCloud){ // if summary cancelled explicitly
+        if (!open) { 
+            if (pendingEndDayAction && jobModalMode === 'summary' && !aiLoading.summarize && !isSavingToCloud) {
+                // If cancelled while pending end day, reset the pending action
                 setPendingEndDayAction(false); 
+                toast({ title: "Finalización de Día Cancelada", description: "Se canceló la finalización del trabajo. El día no ha finalizado.", variant: "default" });
             }
+            setCurrentJobFormData({ description: '', summary: '' });
+            setJobToSummarizeId(null);
         }
       }}>
         <DialogContent>
@@ -746,13 +717,13 @@ setCurrentJobFormData({ description: currentJob.description || '', summary: '' }
           <DialogFooter>
             <DialogClose asChild>
               <Button variant="outline" onClick={() => {
-                 if (pendingEndDayAction && jobModalMode === 'summary') {
-                    setPendingEndDayAction(false); // User explicitly cancelled ending the day
-                    toast({ title: "Finalización de Día Cancelada", description: "Se canceló la finalización del trabajo. El día no ha finalizado.", variant: "default" });
+                 // This click is handled by onOpenChange logic above if pendingEndDayAction is true
+                 // If not pending, it just closes.
+                 if (!pendingEndDayAction || jobModalMode !== 'summary') {
+                    setCurrentJobFormData({ description: '', summary: '' });
+                    setJobToSummarizeId(null);
+                    setIsJobModalOpen(false); 
                  }
-                 setCurrentJobFormData({ description: '', summary: '' });
-                 setJobToSummarizeId(null);
-                 setIsJobModalOpen(false); 
               }}>Cancelar</Button>
             </DialogClose>
             <Button onClick={handleJobFormSubmit} disabled={aiLoading.summarize || isLoading || isSavingToCloud}>
