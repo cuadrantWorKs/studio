@@ -10,7 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { MapPin, Play, Pause, StopCircle, Briefcase, Clock, CheckCircle, AlertTriangle, Loader2, History, CloudUpload } from 'lucide-react';
+import { MapPin, Play, Pause, StopCircle, Briefcase, Clock, CheckCircle, AlertTriangle, Loader2, History, CloudUpload, ArrowLeft } from 'lucide-react';
 import type { LocationPoint, Job, TrackingStatus, TrackingEvent, Workday, PauseInterval, GeolocationError, WorkdaySummaryContext } from '@/lib/techtrack/types';
 import { haversineDistance } from '@/lib/techtrack/geometry';
 import { summarizeJobDescription } from '@/ai/flows/summarize-job-description';
@@ -476,11 +476,7 @@ export default function TechTrackApp() {
       return (
         <div className="w-full space-y-2">
             <Button onClick={() => {setWorkday(null); setElapsedTime(0); setEndOfDaySummary(null);}} variant="secondary" className="w-full" size="lg">Start New Day</Button>
-            <Link href="/history" passHref legacyBehavior>
-                <Button asChild variant="outline" className="w-full" size="lg">
-                    <a><History className="mr-2 h-5 w-5" /> View History</a>
-                </Button>
-            </Link>
+            {/* The history button here is now removed as per new requirement for a permanent one */}
         </div>
       );
     }
@@ -488,8 +484,15 @@ export default function TechTrackApp() {
   };
 
   return (
-    <div className="flex flex-col min-h-screen items-center justify-center p-4 bg-background text-foreground">
-      <Card className="w-full max-w-md shadow-xl">
+    <div className="flex flex-col min-h-screen items-center justify-center p-4 bg-background text-foreground relative">
+      <div className="absolute top-4 left-4">
+        <Link href="/history" passHref legacyBehavior>
+          <Button variant="outline" size="sm" asChild>
+            <a><History className="mr-2 h-4 w-4" /> Consultar historial</a>
+          </Button>
+        </Link>
+      </div>
+      <Card className="w-full max-w-md shadow-xl mt-16"> {/* Added mt-16 to avoid overlap with history button */}
         <CardHeader>
           <CardTitle className="text-3xl font-bold text-center text-primary">TechTrack</CardTitle>
           <CardDescription className="text-center">Your smart work companion.</CardDescription>
@@ -611,3 +614,5 @@ export default function TechTrackApp() {
     </div>
   );
 }
+
+    
