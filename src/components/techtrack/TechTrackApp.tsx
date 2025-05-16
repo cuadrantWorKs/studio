@@ -35,6 +35,23 @@ interface TechTrackAppProps {
   technicianName: string;
 }
 
+// Helper function to sanitize location point data for Firestore
+const sanitizeLocationPoint = (location: LocationPoint | null | undefined): LocationPoint | null => {
+  if (!location || typeof location.latitude !== 'number' || typeof location.longitude !== 'number') {
+    return null;
+  }
+  const sanitized: LocationPoint = {
+    latitude: location.latitude,
+    longitude: location.longitude,
+    timestamp: typeof location.timestamp === 'number' ? location.timestamp : Date.now(), // Ensure timestamp is a number
+  };
+  if (typeof location.accuracy === 'number') {
+    sanitized.accuracy = location.accuracy;
+  }
+  return sanitized;
+};
+
+
 export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
   const [workday, setWorkday] = useState<Workday | null>(null);
   const [currentLocation, setCurrentLocation] = useState<LocationPoint | null>(null);
@@ -97,7 +114,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
           const newLocation: LocationPoint = {
             latitude: position.coords.latitude,
             longitude: position.coords.longitude,
-            accuracy: position.coords.accuracy ?? null,
+            accuracy: position.coords.accuracy ?? undefined, // Use undefined if null
             timestamp: position.timestamp,
           };
           setCurrentLocation(newLocation);
@@ -123,7 +140,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
         timestamp: Date.now(),
         jobId,
         details,
-        location: eventLocation || undefined, // Ensure location is explicitly undefined if null for Firestore
+        location: sanitizeLocationPoint(eventLocation) || undefined, // Sanitize and ensure undefined if null
       };
       return { ...prev, events: [...prev.events, newEvent] };
     });
@@ -166,9 +183,9 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
 
   useEffect(() => {
     let intervalId: NodeJS.Timeout;
-    if (workday?.status === 'tracking') {
+    if (workday?.status === 'tracking' && currentLocation) { // ensure currentLocation exists
       intervalId = setInterval(() => {
-        if (currentLocation) {
+        if (currentLocation) { // Double check, though already in dependency
           setWorkday(prev => prev ? ({ ...prev, locationHistory: [...prev.locationHistory, currentLocation] }) : null);
           recordEvent('LOCATION_UPDATE', currentLocation, undefined, "Actualización periódica de 5 min");
         }
@@ -182,9 +199,8 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
       const lastMovementTime = workday.locationHistory[workday.locationHistory.length -1]?.timestamp || workday.startTime;
       if (Date.now() - (lastMovementTime || Date.now()) > STOP_DETECT_DURATION_MS) {
         const hasBeenPromptedRecently = workday.lastNewJobPromptTime && (Date.now() - workday.lastNewJobPromptTime < RECENT_PROMPT_THRESHOLD_MS);
-
-        if(isJobModalOpen) return;
-        if (aiLoading.newJob) return; 
+        
+        if (isJobModalOpen || aiLoading.newJob) return; 
 
         setAiLoading(prev => ({...prev, newJob: true}));
         decidePromptForNewJob({ hasBeenPromptedRecently: !!hasBeenPromptedRecently, timeStoppedInMinutes: Math.round(STOP_DETECT_DURATION_MS / (60*1000)) })
@@ -193,7 +209,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
               toast({ title: "¿Nuevo Trabajo?", description: "Parece que te has detenido. ¿Comenzando un nuevo trabajo? IA: " + res.reason });
               setJobModalMode('new');
               setIsJobModalOpen(true);
-              recordEvent('NEW_JOB_PROMPT', currentLocation || undefined, undefined, `IA: ${res.reason}`);
+              recordEvent('NEW_JOB_PROMPT', currentLocation, undefined, `IA: ${res.reason}`);
             }
             setWorkday(prev => prev ? ({...prev, lastNewJobPromptTime: Date.now()}) : null);
           })
@@ -215,8 +231,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
         if (distance > MOVEMENT_THRESHOLD_METERS) {
           const lastPromptTime = workday.lastJobCompletionPromptTime;
 
-          if(isJobModalOpen) return;
-          if (aiLoading.jobCompletion) return; 
+          if(isJobModalOpen || aiLoading.jobCompletion) return;
 
           setAiLoading(prev => ({...prev, jobCompletion: true}));
           decidePromptForJobCompletion({ distanceMovedMeters: distance, lastJobPromptedTimestamp: lastPromptTime })
@@ -227,7 +242,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
                 setJobModalMode('summary');
                 setCurrentJobFormData({ description: currentJob.description || '', summary: '' });
                 setIsJobModalOpen(true);
-                recordEvent('JOB_COMPLETION_PROMPT', currentLocation || undefined, currentJob.id, `IA: ${res.reason}`);
+                recordEvent('JOB_COMPLETION_PROMPT', currentLocation, currentJob.id, `IA: ${res.reason}`);
               }
               setWorkday(prev => prev ? ({...prev, lastJobCompletionPromptTime: Date.now()}) : null);
             })
@@ -254,11 +269,11 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
       userId: technicianName,
       date: getCurrentFormattedDate(),
       startTime: startTime,
-      startLocation: currentLocation, // currentLocation is guaranteed by the guard above
+      startLocation: sanitizeLocationPoint(currentLocation), // Sanitize on creation
       status: 'tracking',
-      locationHistory: [currentLocation], // currentLocation is guaranteed
+      locationHistory: currentLocation ? [sanitizeLocationPoint(currentLocation)!] : [], // Ensure array if currentLocation is null
       jobs: [],
-      events: [{ id: crypto.randomUUID(), type: 'SESSION_START', timestamp: startTime, location: currentLocation, details: `Sesión iniciada por ${technicianName}` }],
+      events: [{ id: crypto.randomUUID(), type: 'SESSION_START', timestamp: startTime, location: sanitizeLocationPoint(currentLocation) || undefined, details: `Sesión iniciada por ${technicianName}` }],
       pauseIntervals: [],
     };
     setWorkday(newWorkday);
@@ -268,7 +283,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
         setJobModalMode('new');
         setCurrentJobFormData({ description: '', summary: '' });
         setIsJobModalOpen(true);
-        recordEvent('NEW_JOB_PROMPT', currentLocation || undefined, undefined, "Prompt inicial después del inicio de sesión");
+        recordEvent('NEW_JOB_PROMPT', currentLocation, undefined, "Prompt inicial después del inicio de sesión");
     }, 100);
     setIsLoading(false);
   };
@@ -279,14 +294,14 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
     const now = Date.now();
     const newPauseInterval: PauseInterval = {
       startTime: now,
-      startLocation: currentLocation || undefined
+      startLocation: sanitizeLocationPoint(currentLocation) || undefined
     };
     setWorkday(prev => prev ? ({
       ...prev,
       status: 'paused',
       pauseIntervals: [...prev.pauseIntervals, newPauseInterval],
     }) : null);
-    recordEvent('SESSION_PAUSE', currentLocation || undefined);
+    recordEvent('SESSION_PAUSE', currentLocation);
     toast({ title: "Seguimiento Pausado" });
     setIsLoading(false);
   };
@@ -302,12 +317,12 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
         const currentPause = updatedPauses[updatedPauses.length - 1];
         if (!currentPause.endTime && currentPause.startTime) {
           currentPause.endTime = now;
-          currentPause.endLocation = currentLocation || undefined;
+          currentPause.endLocation = sanitizeLocationPoint(currentLocation) || undefined;
         }
       }
       return { ...prev, status: 'tracking', pauseIntervals: updatedPauses };
     });
-    recordEvent('SESSION_RESUME', currentLocation || undefined);
+    recordEvent('SESSION_RESUME', currentLocation);
     toast({ title: "Seguimiento Reanudado" });
     setIsLoading(false);
   };
@@ -316,7 +331,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
     if (!workdayDataToEnd) {
         console.error("initiateEndDayProcess called with null workdayDataToEnd");
         toast({ title: "Error Interno", description: "No se pueden finalizar los datos del día.", variant: "destructive"});
-        setIsLoading(false);
+        setIsLoading(false); // ensure loading is reset
         return; 
     }
     const actionTime = Date.now();
@@ -324,27 +339,31 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
     setIsLoading(true);
     setIsSavingToCloud(true); 
 
+    // Update local state to reflect "ending" process - timer stops here
     setWorkday(prev => {
         if (!prev) return null; 
         
         let tempWorkday = { ...prev };
 
+        // Correctly end the last pause interval if the workday is paused
         if (tempWorkday.status === 'paused' && tempWorkday.pauseIntervals.length > 0) {
             const lastPause = tempWorkday.pauseIntervals[tempWorkday.pauseIntervals.length - 1];
-            if (lastPause.startTime && !lastPause.endTime) { 
+            if (lastPause.startTime && !lastPause.endTime) { // Only if it's an active pause
                 lastPause.endTime = actionTime;
-                lastPause.endLocation = currentLocation || undefined;
+                lastPause.endLocation = sanitizeLocationPoint(currentLocation) || undefined;
             }
         }
         
         return {
             ...tempWorkday,
-            status: 'paused', 
-            endTime: actionTime, 
+            status: 'paused', // Visually stop the timer by setting to paused
+            endTime: actionTime, // Tentative end time
         };
     });
 
-    await finalizeWorkdayAndSave(workdayDataToEnd, actionTime);
+    // Proceed to finalize and save with Firestore
+    // Pass a deep copy of workdayDataToEnd to avoid mutations if finalizeWorkdayAndSave is re-entrant or has issues
+    await finalizeWorkdayAndSave(JSON.parse(JSON.stringify(workdayDataToEnd)), actionTime);
   };
 
 
@@ -363,18 +382,21 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
       setIsSavingToCloud(false);
       setIsLoading(false);
       setPendingEndDayAction(false);
+      // Attempt to revert to a more stable state if db is not available
       setWorkday(prev => prev ? {...prev, status: workdayAtStartOfEnd.status, endTime: undefined } : null);
       return;
     }
     
-    const endLocationToUse = currentLocation ||
-                             (workdayAtStartOfEnd.locationHistory.length > 0 ? workdayAtStartOfEnd.locationHistory[workdayAtStartOfEnd.locationHistory.length - 1] : null) ||
-                             workdayAtStartOfEnd.startLocation ||
-                             null;
-
+    // Create a deep copy to ensure no mutations affect other parts of the state prematurely
     let finalizedWorkdayForSave: Workday = JSON.parse(JSON.stringify(workdayAtStartOfEnd));
 
-    if (finalizedWorkdayForSave.status === 'paused' && finalizedWorkdayForSave.pauseIntervals.length > 0) {
+    const endLocationToUse = sanitizeLocationPoint(currentLocation) || 
+                             (finalizedWorkdayForSave.locationHistory.length > 0 ? sanitizeLocationPoint(finalizedWorkdayForSave.locationHistory[finalizedWorkdayForSave.locationHistory.length - 1]) : null) ||
+                             finalizedWorkdayForSave.startLocation || // Already sanitized on creation
+                             null;
+
+    // Ensure the last pause interval is correctly ended if it was active
+    if (finalizedWorkdayForSave.pauseIntervals.length > 0) {
         const lastPause = finalizedWorkdayForSave.pauseIntervals[finalizedWorkdayForSave.pauseIntervals.length - 1];
         if (lastPause.startTime && !lastPause.endTime) { 
             lastPause.endTime = finalizationTimestamp;
@@ -384,7 +406,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
     
     finalizedWorkdayForSave.status = 'ended';     
     finalizedWorkdayForSave.endTime = finalizationTimestamp; 
-    finalizedWorkdayForSave.endLocation = endLocationToUse;  
+    finalizedWorkdayForSave.endLocation = endLocationToUse;  // This can be null
     finalizedWorkdayForSave.events = [
         ...finalizedWorkdayForSave.events, 
         { 
@@ -395,19 +417,38 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
           details: `Sesión finalizada por ${technicianName}`
         }
     ];
+
+    // Sanitize all location data deeply before saving
+    finalizedWorkdayForSave.startLocation = sanitizeLocationPoint(finalizedWorkdayForSave.startLocation);
+    finalizedWorkdayForSave.endLocation = sanitizeLocationPoint(finalizedWorkdayForSave.endLocation);
+    finalizedWorkdayForSave.locationHistory = finalizedWorkdayForSave.locationHistory.map(loc => sanitizeLocationPoint(loc)!).filter(Boolean) as LocationPoint[]; // Filter out any nulls from history
+    finalizedWorkdayForSave.jobs = finalizedWorkdayForSave.jobs.map(job => ({
+      ...job,
+      startLocation: sanitizeLocationPoint(job.startLocation)!, // Job start location should ideally always exist
+      endLocation: sanitizeLocationPoint(job.endLocation) || undefined,
+    }));
+    finalizedWorkdayForSave.events = finalizedWorkdayForSave.events.map(event => ({
+      ...event,
+      location: sanitizeLocationPoint(event.location) || undefined,
+    }));
+    finalizedWorkdayForSave.pauseIntervals = finalizedWorkdayForSave.pauseIntervals.map(pause => ({
+      ...pause,
+      startLocation: sanitizeLocationPoint(pause.startLocation) || undefined,
+      endLocation: sanitizeLocationPoint(pause.endLocation) || undefined,
+    }));
     
-    const dataToSave = JSON.parse(JSON.stringify(finalizedWorkdayForSave));
+    const dataToSave = JSON.parse(JSON.stringify(finalizedWorkdayForSave)); // Final pass with stringify to remove undefined
     
     console.log("Data prepared for Firestore:", dataToSave);
-    // The console.log for isSavingToCloud here might show stale state due to closure.
-    // We rely on the ActionButton's disabled state which uses the latest isSavingToCloud.
-    console.log("Attempting to save workday to Firestore, ID:", dataToSave.id);
+    console.log("isSavingToCloud should be true BEFORE setDoc:", isSavingToCloud); // This log might show stale state due to closure
 
     try {
       const workdayDocRef = doc(db, "workdays", dataToSave.id);
+      console.log("Attempting to save workday to Firestore, ID:", dataToSave.id);
       await setDoc(workdayDocRef, dataToSave);
       console.log("Workday successfully saved to Firestore with ID:", dataToSave.id);
 
+      // Update local state *after* successful save
       setWorkday(finalizedWorkdayForSave); 
 
       toast({ title: "Día Finalizado y Guardado", description: "La sesión de trabajo ha concluido y se ha guardado en la nube." });
@@ -422,12 +463,12 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
         toast({ title: "Error de Resumen", description: "No se pudo calcular el resumen de la jornada.", variant: "destructive" });
       }
 
-    } catch (error) {
+    } catch (error: any) {
       console.error("FIRESTORE SAVE ERROR: Failed to save workday to Firestore.");
       console.error("Workday ID being saved:", finalizedWorkdayForSave.id);
       console.error("Full error object:", error);
       let errorMessage = "An unknown error occurred during save.";
-      let errorCode = "unknown";
+      let firebaseErrorCode = "unknown";
 
       if (error instanceof Error) {
         console.error("Error name:", error.name);
@@ -436,7 +477,6 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
         errorMessage = error.message;
       }
 
-      let firebaseErrorCode = "unknown";
       if (error && typeof error === 'object' && 'code' in error) {
         firebaseErrorCode = (error as {code: string}).code;
         console.error("Firebase Error Code:", firebaseErrorCode);
@@ -444,8 +484,8 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
       
       if (firebaseErrorCode === 'permission-denied') {
           errorMessage = "Permission denied by Firestore rules. Please check your security rules.";
-      } else if (firebaseErrorCode === 'invalid-argument') {
-          errorMessage = "Invalid data sent to Firestore. Please check the data structure. The data being sent has been logged to the console as 'Data prepared for Firestore:'. Review this data for issues.";
+      } else if (firebaseErrorCode === 'invalid-argument') { // This is likely for 400 Bad Request
+          errorMessage = "Invalid data sent to Firestore. Please check the data structure and console for `dataToSave` object. Error: " + (error.message || firebaseErrorCode);
       } else if (firebaseErrorCode === 'unauthenticated' || firebaseErrorCode === 'functions-framework-unauthenticated') {
           errorMessage = "Authentication failed. Please check your Firebase setup and environment credentials.";
       } else {
@@ -459,14 +499,8 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
         duration: 20000 
       });
       
-      setWorkday(prev => {
-        if (!prev) return null;
-        return {
-            ...workdayAtStartOfEnd, 
-            status: workdayAtStartOfEnd.status, 
-            endTime: undefined, 
-        };
-      });
+      // Revert to the state before attempting to finalize, allowing retry
+      setWorkday(workdayAtStartOfEnd);
 
     } finally {
       console.log("FINALLY block in finalizeWorkdayAndSave. Setting isSavingToCloud and isLoading to false.");
@@ -481,7 +515,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
         toast({ title: "Error", description: "No se puede finalizar el día sin una jornada activa.", variant: "destructive" });
         return;
     }
-
+    // If there's an active job, prompt to complete it first
     const activeJob = workday.jobs.find(j => j.id === workday.currentJobId && j.status === 'active');
 
     if (activeJob) {
@@ -490,10 +524,11 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
       setJobModalMode('summary');
       setCurrentJobFormData({ description: activeJob.description || '', summary: '' });
       setIsJobModalOpen(true);
-      recordEvent('JOB_COMPLETION_PROMPT', currentLocation || undefined, activeJob.id, "Prompt al finalizar el día");
-      return;
+      recordEvent('JOB_COMPLETION_PROMPT', currentLocation, activeJob.id, "Prompt al finalizar el día");
+      return; // Stop here, end day will be initiated after job summary
     }
-    if (workday) { 
+    // If no active job, proceed to end the day directly
+    if (workday) { // workday should exist here, but good to be safe
         await initiateEndDayProcess(workday);
     }
   };
@@ -506,7 +541,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
         id: crypto.randomUUID(),
         description: currentJobFormData.description,
         startTime: Date.now(),
-        startLocation: currentLocation || { latitude: 0, longitude: 0, timestamp: Date.now(), accuracy: null }, 
+        startLocation: sanitizeLocationPoint(currentLocation || { latitude: 0, longitude: 0, timestamp: Date.now(), accuracy: null })!, // Ensure it's a valid LocationPoint 
         status: 'active',
       };
       setWorkday(prev => prev ? ({
@@ -514,7 +549,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
         jobs: [...prev.jobs, newJob],
         currentJobId: newJob.id,
       }) : null);
-      recordEvent('JOB_START', currentLocation || undefined, newJob.id, `Nuevo trabajo iniciado: ${newJob.description}`);
+      recordEvent('JOB_START', currentLocation, newJob.id, `Nuevo trabajo iniciado: ${newJob.description}`);
       toast({ title: "Nuevo Trabajo Iniciado", description: newJob.description });
       setIsJobModalOpen(false);
       setCurrentJobFormData({ description: '', summary: '' });
@@ -535,7 +570,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
                   summary: currentJobFormData.summary,
                   status: 'completed',
                   endTime: Date.now(),
-                  endLocation: currentLocation || undefined, // Explicitly undefined if null
+                  endLocation: sanitizeLocationPoint(currentLocation) || undefined, 
                 };
                 if (aiSummaryValue !== undefined && aiSummaryValue !== null) {
                   jobUpdatePayload.aiSummary = aiSummaryValue;
@@ -557,30 +592,32 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
 
       summarizeJobDescription({ jobDescription: currentJobFormData.summary })
         .then(aiRes => {
-          recordEvent('JOB_COMPLETED', currentLocation || undefined, jobToSummarizeId, `Trabajo completado. Usuario: ${currentJobFormData.summary}, IA: ${aiRes.summary}`);
+          recordEvent('JOB_COMPLETED', currentLocation, jobToSummarizeId, `Trabajo completado. Usuario: ${currentJobFormData.summary}, IA: ${aiRes.summary}`);
           toast({ title: "Trabajo Completado", description: `Resumen guardado para el trabajo.` });
           updateLocalWorkdayStateWithCompletedJob(aiRes.summary);
         })
         .catch(err => {
           console.error("AI Error (summarizeJobDescription):", err);
           toast({ title: "Error de IA", description: "No se pudo generar el resumen de IA. Trabajo guardado sin él.", variant: "destructive" });
-          recordEvent('JOB_COMPLETED', currentLocation || undefined, jobToSummarizeId, `Trabajo completado (falló resumen IA). Usuario: ${currentJobFormData.summary}`);
+          recordEvent('JOB_COMPLETED', currentLocation, jobToSummarizeId, `Trabajo completado (falló resumen IA). Usuario: ${currentJobFormData.summary}`);
           updateLocalWorkdayStateWithCompletedJob(null); 
         })
         .finally(() => {
           setAiLoading(prev => ({...prev, summarize: false}));
           setIsJobModalOpen(false); 
 
+          // Use timeout to ensure state updates from setWorkday are processed before initiating end day
           setTimeout(() => {
             if (pendingEndDayAction && completedWorkdayForSave) {
-                initiateEndDayProcess(completedWorkdayForSave);
+                initiateEndDayProcess(completedWorkdayForSave); // Pass the updated workday
             } else if (!pendingEndDayAction) {
+                // Only reset if not immediately ending the day
                 setCurrentJobFormData({ description: '', summary: '' });
                 setJobToSummarizeId(null);
             }
           }, 0);
         });
-      return; 
+      return; // Prevent further execution in this click handler
     }
   };
 
@@ -592,7 +629,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
     setJobModalMode('new');
     setCurrentJobFormData({ description: '', summary: '' });
     setIsJobModalOpen(true);
-    recordEvent('USER_ACTION', currentLocation || undefined, undefined, "Modal de nuevo trabajo abierto manualmente");
+    recordEvent('USER_ACTION', currentLocation, undefined, "Modal de nuevo trabajo abierto manualmente");
   };
 
   const handleManualCompleteJob = () => {
@@ -601,7 +638,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
     setJobModalMode('summary');
     setCurrentJobFormData({ description: currentJob.description || '', summary: '' });
     setIsJobModalOpen(true);
-    recordEvent('USER_ACTION', currentLocation || undefined, currentJob.id, "Modal de completar trabajo abierto manualmente");
+    recordEvent('USER_ACTION', currentLocation, currentJob.id, "Modal de completar trabajo abierto manualmente");
   };
 
   const CurrentStatusDisplay = () => {
@@ -615,16 +652,17 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
       case 'tracking': statusText = "Seguimiento Activo"; IconComponent = Clock; break;
       case 'paused': 
         statusText = "Seguimiento Pausado"; IconComponent = Pause; 
-        if (isSavingToCloud) { 
+        // Show "Finalizando jornada..." only if actively saving and status is paused due to end day initiation
+        if (isSavingToCloud && workday.endTime) { // workday.endTime is tentatively set by initiateEndDayProcess
              statusText = "Finalizando jornada...";
-             IconComponent = Loader2; // Show loader icon when saving
+             IconComponent = Loader2; 
         }
         break;
       case 'ended': statusText = "Día Finalizado"; IconComponent = StopCircle; break;
     }
     return (
       <div className="flex items-center space-x-2">
-        <IconComponent className={`h-5 w-5 text-accent ${isSavingToCloud && workday.status === 'paused' ? 'animate-spin' : ''}`} />
+        <IconComponent className={`h-5 w-5 text-accent ${IconComponent === Loader2 ? 'animate-spin' : ''}`} />
         <span>{statusText}</span>
       </div>
     );
@@ -653,8 +691,8 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
     if (workday.status === 'paused') {
        return (
         <div className="grid grid-cols-2 gap-4">
-          <Button onClick={handleResumeTracking} disabled={commonDisabled} className="w-full" size="lg">
-            {isLoading && !isSavingToCloud ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Play className="mr-2 h-5 w-5" />} Reanudar
+          <Button onClick={handleResumeTracking} disabled={commonDisabled || !!workday.endTime} className="w-full" size="lg">
+            {isLoading && !isSavingToCloud && !workday.endTime ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Play className="mr-2 h-5 w-5" />} Reanudar
           </Button>
           <Button onClick={handleEndDay} variant="destructive" disabled={commonDisabled} className="w-full" size="lg">
             {isSavingToCloud ? <CloudUpload className="mr-2 h-5 w-5 animate-pulse" /> : (isLoading && !isSavingToCloud ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <StopCircle className="mr-2 h-5 w-5" />)}
@@ -754,6 +792,8 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
       <Dialog open={isJobModalOpen} onOpenChange={(open) => {
         if (pendingEndDayAction && jobModalMode === 'summary' && !open && !aiLoading.summarize && !isSavingToCloud) {
             toast({title: "Acción Requerida", description: "Por favor, complete los detalles del trabajo antes de finalizar el día.", variant: "default"});
+            // Don't close the modal if end day is pending and summary is not being processed
+            setIsJobModalOpen(true); // Force it to stay open
             return; 
         }
 
@@ -761,14 +801,14 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
 
         if (!open) { 
             if (pendingEndDayAction && jobModalMode === 'summary' && !aiLoading.summarize && !isSavingToCloud) {
-                setPendingEndDayAction(false); 
+                setPendingEndDayAction(false); // User cancelled ending the day
                 toast({ title: "Finalización de Día Cancelada", description: "Se cerró el modal de completar trabajo. El día no ha finalizado.", variant: "default" });
             }
             if (!aiLoading.summarize) { 
                  setCurrentJobFormData({ description: '', summary: '' });
                  setJobToSummarizeId(null);
             }
-             if (aiLoading.summarize && !open) { 
+             if (aiLoading.summarize && !open) { // If modal closed while AI was summarizing (e.g. ESC key)
               setAiLoading(prev => ({...prev, summarize: false}));
             }
         }
@@ -808,13 +848,13 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
             <DialogClose asChild>
               <Button variant="outline" onClick={() => {
                  if (pendingEndDayAction && jobModalMode === 'summary') {
-                    setPendingEndDayAction(false);
+                    setPendingEndDayAction(false); // User explicitly cancelled ending the day
                     toast({ title: "Finalización de Día Cancelada", description: "Se canceló la finalización del trabajo. El día no ha finalizado.", variant: "default" });
                  }
                  if (aiLoading.summarize) { 
                    setAiLoading(prev => ({...prev, summarize: false}));
                  }
-                 setIsJobModalOpen(false); 
+                 setIsJobModalOpen(false); // Ensure it closes on explicit cancel
               }}>Cancelar</Button>
             </DialogClose>
             <Button onClick={handleJobFormSubmit} disabled={aiLoading.summarize || isLoading || isSavingToCloud}>
