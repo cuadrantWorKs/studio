@@ -16,10 +16,8 @@ import { haversineDistance } from '@/lib/techtrack/geometry';
 import { summarizeJobDescription } from '@/ai/flows/summarize-job-description';
 import { decidePromptForNewJob } from '@/ai/flows/decide-prompt-for-new-job';
 import { decidePromptForJobCompletion } from '@/ai/flows/decide-prompt-for-job-completion';
-import { formatTime } from '@/lib/utils';
 import { calculateWorkdaySummary } from '@/lib/techtrack/summary';
-import WorkdaySummaryDisplay from './WorkdaySummaryDisplay';
-import { db } from '@/lib/firebase';
+import { formatTime } from '@/lib/utils';import WorkdaySummaryDisplay from './WorkdaySummaryDisplay';import { db } from '@/lib/supabase';
 import { doc, setDoc } from 'firebase/firestore';
 import LocationInfo from './LocationInfo';
 
@@ -379,9 +377,9 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
     console.log("Starting finalizeWorkdayAndSave for workday ID:", workdayAtStartOfEnd.id);
     
     if (!db) {
-      console.error("Firestore DB instance is not available. Check Firebase initialization.");
-      toast({
-        title: "Error de Configuración",
+      console.error("Database DB instance is not available. Check configuration.");
+      toast({ 
+        title: "Error de Configuración de Base de Datos",
         description: "No se puede conectar a la base de datos. Revisa la configuración de Firebase.",
         variant: "destructive",
         duration: 10000
@@ -475,16 +473,112 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
 
     const dataToSave = JSON.parse(JSON.stringify(finalizedWorkdayForSave)); 
     
-    console.log("Data prepared for Firestore:", dataToSave);
-    console.log("Attempting to save workday to Firestore, ID:", dataToSave.id);
+    console.log("Attempting to save workday to Supabase, ID:", dataToSave.id);
 
     try {
-      const workdayDocRef = doc(db, "workdays", dataToSave.id);
-      await setDoc(workdayDocRef, dataToSave);
-      console.log("Workday successfully saved to Firestore with ID:", dataToSave.id);
+        // Start a transaction or similar mechanism if Supabase supports it directly for multiple related inserts.
+        // Supabase client doesn't have a built-in transaction API like Firestore's batched writes.
+        // We'll perform inserts sequentially. If any fail, we'll log the error.
+        // A more robust solution would be to use a Supabase function (RPC) to handle the atomic insert.
 
-      setWorkday(finalizedWorkdayForSave); // Set final 'ended' state after successful save
+        // 1. Insert Workday
+        const { error: workdayError } = await db.from('workdays').insert({
+            id: dataToSave.id,
+            user_id: dataToSave.userId,
+            date: dataToSave.date,
+            start_time: dataToSave.startTime,
+            end_time: dataToSave.endTime,
+            status: dataToSave.status,
+            last_new_job_prompt_time: dataToSave.lastNewJobPromptTime,
+            last_job_completion_prompt_time: dataToSave.lastJobCompletionPromptTime,
+            current_job_id: dataToSave.currentJobId,
+            start_location_latitude: dataToSave.startLocation?.latitude,
+            start_location_longitude: dataToSave.startLocation?.longitude,
+            start_location_timestamp: dataToSave.startLocation?.timestamp,
+            start_location_accuracy: dataToSave.startLocation?.accuracy,
+            end_location_latitude: dataToSave.endLocation?.latitude,
+            end_location_longitude: dataToSave.endLocation?.longitude,
+            end_location_timestamp: dataToSave.endLocation?.timestamp,
+            end_location_accuracy: dataToSave.endLocation?.accuracy,
+        });
+        if (workdayError) throw workdayError;
 
+        // 2. Insert Jobs - Supabase insert can take an array
+        if (dataToSave.jobs?.length > 0) {
+            const jobsToInsert = dataToSave.jobs.map(job => ({
+                id: job.id,
+                workday_id: dataToSave.id,
+                description: job.description,
+                start_time: job.startTime,
+                end_time: job.endTime,
+                summary: job.summary,
+                ai_summary: job.aiSummary,
+                status: job.status,
+                start_location_latitude: job.startLocation?.latitude,
+                start_location_longitude: job.startLocation?.longitude,
+                start_location_timestamp: job.startLocation?.timestamp,
+                start_location_accuracy: job.startLocation?.accuracy,
+                end_location_latitude: job.endLocation?.latitude,
+                end_location_longitude: job.endLocation?.longitude,
+                end_location_timestamp: job.endLocation?.timestamp,
+                end_location_accuracy: job.endLocation?.accuracy,
+            }));
+            const { error: jobsError } = await db.from('jobs').insert(jobsToInsert);
+            if (jobsError) throw jobsError;
+        }
+        
+        // 3. Insert Pause Intervals - Supabase insert can take an array
+        if (dataToSave.pauseIntervals?.length > 0) {
+             const pausesToInsert = dataToSave.pauseIntervals.map(pause => ({
+                id: pause.id, // Assuming pause intervals also get UUIDs now
+                workday_id: dataToSave.id,
+                start_time: pause.startTime,
+                end_time: pause.endTime,
+                start_location_latitude: pause.startLocation?.latitude,
+                start_location_longitude: pause.startLocation?.longitude,
+                start_location_timestamp: pause.startLocation?.timestamp,
+                start_location_accuracy: pause.startLocation?.accuracy,
+                end_location_latitude: pause.endLocation?.latitude,
+                end_location_longitude: pause.endLocation?.longitude,
+                end_location_timestamp: pause.endLocation?.timestamp,
+                end_location_accuracy: pause.endLocation?.accuracy,
+            }));
+            const { error: pausesError } = await db.from('pause_intervals').insert(pausesToInsert);
+            if (pausesError) throw pausesError;
+        }
+
+         // 4. Insert Events - Supabase insert can take an array
+        if (dataToSave.events?.length > 0) {
+            const eventsToInsert = dataToSave.events.map(event => ({
+                id: event.id,
+                workday_id: dataToSave.id,
+                type: event.type,
+                timestamp: event.timestamp,
+                job_id: event.jobId,
+                details: event.details,
+                // Location data for events is directly in the `events` table per schema update
+                location_latitude: event.location?.latitude,
+                location_longitude: event.location?.longitude,
+                location_timestamp: event.location?.timestamp,
+                location_accuracy: event.location?.accuracy,
+            }));
+             const { error: eventsError } = await db.from('events').insert(eventsToInsert);
+             if (eventsError) throw eventsError;
+        }
+
+        // 5. Insert Location History - Supabase insert can take an array
+        if (dataToSave.locationHistory?.length > 0) {
+             const locationsToInsert = dataToSave.locationHistory.map(loc => ({
+                id: crypto.randomUUID(), // Generate new UUID for each location point record
+                workday_id: dataToSave.id,
+                 latitude: loc.latitude, longitude: loc.longitude, timestamp: loc.timestamp, accuracy: loc.accuracy,
+             }));
+             const { error: locationsError } = await db.from('locations').insert(locationsToInsert);
+             if (locationsError) throw locationsError;
+        }
+
+      // All inserts successful, now update local state
+      setWorkday(finalizedWorkdayForSave); 
       toast({ title: "Día Finalizado y Guardado", description: "La sesión de trabajo ha concluido y se ha guardado en la nube." });
       localStorage.removeItem(getLocalStorageKey()); 
 
@@ -498,29 +592,15 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
       }
 
     } catch (error: any) {
-      console.error("FIRESTORE SAVE ERROR: Failed to save workday to Firestore.");
+      console.error("SUPABASE SAVE ERROR: Failed to save workday to Supabase.");
       console.error("Workday ID being saved:", finalizedWorkdayForSave.id);
       console.error("Full error object:", error);
       let errorMessage = "Un error desconocido ocurrió durante el guardado.";
-      let firebaseErrorCode = "unknown";
 
       if (error instanceof Error) {
         errorMessage = error.message;
       }
-      if (error && typeof error === 'object' && 'code' in error) {
-        firebaseErrorCode = (error as {code: string}).code;
-      }
-      
-      if (firebaseErrorCode === 'permission-denied') {
-          errorMessage = "Permiso denegado por las reglas de Firestore. Por favor, revisa tus reglas de seguridad.";
-      } else if (firebaseErrorCode === 'invalid-argument') { 
-          errorMessage = "Datos inválidos enviados a Firestore. Revisa la estructura de datos. Error: " + (error.message || firebaseErrorCode);
-      } else if (firebaseErrorCode === 'unauthenticated' || firebaseErrorCode === 'functions-framework-unauthenticated') {
-          errorMessage = "Autenticación fallida. Revisa tu configuración de Firebase y credenciales de entorno.";
-      } else {
-          errorMessage = `Fallo al guardar. Error: ${firebaseErrorCode} - ${errorMessage}. Revisa la consola para detalles.`;
-      }
-      
+
       toast({
         title: "Error Crítico al Guardar en Nube",
         description: errorMessage,
