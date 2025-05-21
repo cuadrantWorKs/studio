@@ -482,6 +482,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
 
         // 1. Insert Workday
         console.log("Attempting to upsert workday in Supabase");
+        console.log("Data being sent for workday upsert:", finalizedWorkdayForSave);
         const workdayDataForDb = {
             id: finalizedWorkdayForSave.id, // Ensure ID is used for upsert
             user_id: finalizedWorkdayForSave.userId,
