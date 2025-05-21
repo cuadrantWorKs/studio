@@ -504,7 +504,10 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
             end_location_timestamp: finalizedWorkdayForSave.endLocation?.timestamp ? new Date(finalizedWorkdayForSave.endLocation.timestamp).toISOString() : null, // Convert timestamp to ISO string or null
  end_location_accuracy: finalizedWorkdayForSave.endLocation?.accuracy ?? null, // Use ?? null for number | undefined
         }; // Ensure all fields match Supabase schema and nullability
- console.log("Data being sent for workday upsert:", workdayDataForDb); // Log the specific data object HERE
+        console.log("Data being sent for workday upsert:", workdayDataForDb); // Log the specific data object HERE
+        const { data: workdayData, error: workdayError } = await db
+ .from('workdays')
+ .upsert(workdayDataForDb, { onConflict: 'id' });
  console.log("Data being sent for workday upsert:", JSON.stringify(workdayDataForDb)); // Log the specific data object HERE
 
         if (workdayError) throw workdayError;
