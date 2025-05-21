@@ -800,7 +800,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
             // A more robust solution would use a callback form of setWorkday and check the state within it.
 
             // We need to check the *current* state of the workday in the callback.
-            setWorkday(latestWorkdayState => {
+ setWorkday(latestWorkdayState => {
                 if (!latestWorkdayState) return null; // Should not happen here
                 const jobIsLocallyCompleted = latestWorkdayState.jobs.find(j => j.id === jobToSummarizeId)?.status === 'completed';
                 if (pendingEndDayAction && jobIsLocallyCompleted) {
@@ -809,14 +809,11 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
                     initiateEndDayProcess(latestWorkdayState);
                     setPendingEndDayAction(false); // Clear the flag once action is initiated
                 } else if (!pendingEndDayAction) {
- // If no pending end day action, this was just a manual job completion
+ // If no pending end day action, this was just a manual job completion, reset form
  console.log("Job completed, no pending end day action.");
+                    setCurrentJobFormData({ description: '', summary: '' });
+                    setJobToSummarizeId(null);
                  }
- // else if (pendingEndDayAction && !jobIsLocallyCompleted) {
- // Should not happen if step 1 was successful, but good for debugging
- // console.warn("Pending end day action true, but job not locally completed. Not initiating end day process.");
- // }
-                return latestWorkdayState; // Return the state unchanged after the check
             });
             } else if (!pendingEndDayAction) {
                 setCurrentJobFormData({ description: '', summary: '' });
