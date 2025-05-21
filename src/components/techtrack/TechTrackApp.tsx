@@ -140,10 +140,10 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
       const newEvent: TrackingEvent = {
         id: crypto.randomUUID(),
         type,
-        timestamp: Date.now(),
+        timestamp: Date.now(), // Timestamp will be converted to ISO string for DB
         jobId,
         details,
-        location: eventLocation || undefined, // Ensure undefined if null
+ location: eventLocation ?? undefined, // Ensure undefined if null
       };
       return { ...prev, events: [...prev.events, newEvent] };
     });
@@ -354,7 +354,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
             if (lastPause.startTime && !lastPause.endTime) { 
                 lastPause.endTime = actionTime;
                 lastPause.endLocation = sanitizeLocationPoint(currentLocation) || undefined;
-            }
+ }
         }
         
         return {
@@ -380,7 +380,6 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
     try {
         if (!db) {
             console.error("Database DB instance is not available. Check configuration.");
-            toast({
                 title: "Error de Configuración de Base de Datos",
                 description: "No se puede conectar a la base de datos. Revisa la configuración de Firebase.",
                 variant: "destructive",
@@ -391,7 +390,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
             return; // Exit the function
         }
 
-        const finalizedWorkdayForSave = {...workdayAtStartOfEnd}; // Create a mutable copy
+        const finalizedWorkdayForSave: Workday = {...workdayAtStartOfEnd}; // Create a mutable copy and ensure type
         const endLocationToUse = sanitizeLocationPoint(currentLocation) ||
                                  (finalizedWorkdayForSave.locationHistory.length > 0 ? sanitizeLocationPoint(finalizedWorkdayForSave.locationHistory[finalizedWorkdayForSave.locationHistory.length - 1]) : null) ||
                                  sanitizeLocationPoint(finalizedWorkdayForSave.startLocation) ||
@@ -407,18 +406,18 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
 
         finalizedWorkdayForSave.status = 'ended';
         finalizedWorkdayForSave.endTime = finalizationTimestamp;
-        finalizedWorkdayForSave.endLocation = endLocationToUse;
+        finalizedWorkdayForSave.endLocation = endLocationToUse ?? undefined;
         finalizedWorkdayForSave.events = [ // Correcting the syntax error here
             ...(finalizedWorkdayForSave.events || []),
-            ...(finalizedWorkdayForSave.jobs || []).map(job => { // Use map here
+            ...(finalizedWorkdayForSave.jobs || []).map((job: Job) => { // Use map here, added explicit type
                 const jobStartLoc = sanitizeLocationPoint(job.startLocation); // Ensure jobStartLoc is defined
                 return {
                     id: crypto.randomUUID(), // Give each event a unique ID
-                    type: 'JOB_COMPLETED', // Assuming this is the event type
-                    timestamp: job.endTime || Date.now(), // Use job endTime if available, otherwise current time
-                    jobId: job.id,
-                    details: `Trabajo completado: ${job.description || ''}. Resumen: ${job.summary || ''}`, // Add some details
-                    location: sanitizeLocationPoint(job.endLocation) || sanitizeLocationPoint(job.startLocation) || undefined, // Use endLocation if available, otherwise startLocation
+                    type: 'JOB_COMPLETED',
+                    timestamp: job.endTime || finalizationTimestamp, // Use job endTime if available, otherwise finalization time
+                    jobId: job.id || undefined, // Ensure jobId is undefined if null/empty
+ details: `Trabajo completado: ${job.description || ''}. Resumen: ${job.summary || ''}. AI: ${job.aiSummary || 'N/A'}`, // Add some details
+                    location: sanitizeLocationPoint(job.endLocation) ?? sanitizeLocationPoint(job.startLocation) ?? undefined, // Use endLocation if available, otherwise startLocation
                 };
             }),
         ];
@@ -440,37 +439,36 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
                 return {
                     ...job,
                     description: job.description || '',
-                    summary: job.summary || '',
-                    aiSummary: job.aiSummary || undefined,
+ summary: job.summary || '', // Ensure summary is string
+ aiSummary: job.aiSummary || null, // Ensure aiSummary is null or string
                     startLocation: { latitude: 0, longitude: 0, timestamp: job.startTime || Date.now(), accuracy: 0 }, // Dummy
                     endLocation: sanitizeLocationPoint(job.endLocation),
-                    status: job.status || 'completed', // Ensure status is valid
+ status: job.status || 'completed', // Ensure status is valid
                 };
             }
             return {
                 ...job,
                 description: job.description || '',
                 summary: job.summary || '',
-                aiSummary: job.aiSummary || undefined,
+ aiSummary: job.aiSummary || null, // Ensure aiSummary is null or string
                 startLocation: jobStartLoc,
                 endLocation: sanitizeLocationPoint(job.endLocation),
                 status: job.status || 'completed',
             };
-        });
+ });
 
         finalizedWorkdayForSave.events = (finalizedWorkdayForSave.events || []).map(event => ({
-            ...event,
-            details: event.details || '',
-            location: sanitizeLocationPoint(event.location),
+ details: event.details || null, // Ensure details is null or string
+            location: sanitizeLocationPoint(event.location) ?? undefined,
         }));
-
-        finalizedWorkdayForSave.pauseIntervals = (finalizedWorkdayForSave.pauseIntervals || []).map(pause => ({
+        
+        finalizedWorkdayForSave.pauseIntervals = (finalizedWorkdayForSave.pauseIntervals || []).map((pause: PauseInterval) => ({ // Added type for pause
             ...pause,
             startLocation: sanitizeLocationPoint(pause.startLocation),
             endLocation: sanitizeLocationPoint(pause.endLocation),
         }));
 
-        // Default potentially undefined string fields on the root Workday object if necessary
+        // Default potentially undefined/null fields on the root Workday object if necessary for Supabase
         finalizedWorkdayForSave.currentJobId = finalizedWorkdayForSave.currentJobId || null;
 
         console.log("Attempting to save workday to Supabase, ID:", finalizedWorkdayForSave.id);
@@ -487,9 +485,9 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
             id: finalizedWorkdayForSave.id, // Ensure ID is used for upsert
             user_id: finalizedWorkdayForSave.userId,
             date: finalizedWorkdayForSave.date,
-            // Convert timestamps to ISO strings for Supabase
-            start_time: new Date(finalizedWorkdayForSave.startTime).toISOString(), // Convert timestamp to ISO string
-            end_time: finalizedWorkdayForSave.endTime ? new Date(finalizedWorkdayForSave.endTime).toISOString() : null, // Convert timestamp to ISO string or null
+            // Convert timestamps to ISO strings for Supabase, handle null
+            start_time: finalizedWorkdayForSave.startTime ? new Date(finalizedWorkdayForSave.startTime).toISOString() : null, // Handle undefined
+            end_time: finalizedWorkdayForSave.endTime ? new Date(finalizedWorkdayForSave.endTime).toISOString() : null,
             status: finalizedWorkdayForSave.status,
             last_new_job_prompt_time: finalizedWorkdayForSave.lastNewJobPromptTime || null,
             last_job_completion_prompt_time: finalizedWorkdayForSave.lastJobCompletionPromptTime || null,
@@ -497,12 +495,12 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
             start_location_latitude: finalizedWorkdayForSave.startLocation?.latitude,
             start_location_longitude: finalizedWorkdayForSave.startLocation?.longitude,
             start_location_timestamp: finalizedWorkdayForSave.startLocation?.timestamp ? new Date(finalizedWorkdayForSave.startLocation.timestamp).toISOString() : null, // Convert timestamp to ISO string or null
-            start_location_accuracy: finalizedWorkdayForSave.startLocation?.accuracy ?? null, // Ensure accuracy is nullable
+            start_location_accuracy: finalizedWorkdayForSave.startLocation?.accuracy ?? null, // Use ?? null for number | undefined
             end_location_latitude: finalizedWorkdayForSave.endLocation?.latitude,
             end_location_longitude: finalizedWorkdayForSave.endLocation?.longitude,
             end_location_timestamp: finalizedWorkdayForSave.endLocation?.timestamp ? new Date(finalizedWorkdayForSave.endLocation.timestamp).toISOString() : null, // Convert timestamp to ISO string or null
-            end_location_accuracy: finalizedWorkdayForSave.endLocation?.accuracy || null,
-        };
+            end_location_accuracy: finalizedWorkdayForSave.endLocation?.accuracy ?? null, // Use ?? null for number | undefined
+        }; // Ensure all fields match Supabase schema and nullability
         const { error: workdayError } = await db.from('workdays').upsert(workdayDataForDb, { onConflict: 'id' });
         if (workdayError) throw workdayError;
         console.log("Workday upsert successful");
@@ -515,18 +513,18 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
                 id: job.id, // Use ID for upsert if jobs should be unique within a workday
                 workday_id: finalizedWorkdayForSave.id,
                 description: job.description,
-                start_time: new Date(job.startTime).toISOString(), // Convert timestamp to ISO string
-                end_time: job.endTime ? new Date(job.endTime).toISOString() : null, // Convert timestamp to ISO string or null
+                start_time: job.startTime ? new Date(job.startTime).toISOString() : null, // Ensure timestamp exists
+                end_time: job.endTime ? new Date(job.endTime).toISOString() : null, // Handle undefined
                 summary: job.summary,
-                ai_summary: job.aiSummary,
+                ai_summary: job.aiSummary || null, // Handle undefined/null
                 status: job.status,
-                start_location_latitude: job.startLocation?.latitude || null,
-                start_location_longitude: job.startLocation?.longitude || null,
+                start_location_latitude: job.startLocation?.latitude ?? null, // Use ?? null for number | undefined
+                start_location_longitude: job.startLocation?.longitude ?? null, // Use ?? null for number | undefined
                 start_location_timestamp: job.startLocation?.timestamp ? new Date(job.startLocation.timestamp).toISOString() : null, // Convert timestamp to ISO string or null
-                start_location_accuracy: job.startLocation?.accuracy || null,
-                end_location_latitude: job.endLocation?.latitude || null,
+                start_location_accuracy: job.startLocation?.accuracy ?? null, // Use ?? null for number | undefined
+                end_location_latitude: job.endLocation?.latitude ?? null, // Use ?? null for number | undefined
                 end_location_longitude: job.endLocation?.longitude || null,
-                end_location_timestamp: job.endLocation?.timestamp ? new Date(job.endLocation.timestamp).toISOString() : null, // Convert timestamp to ISO string or null
+                end_location_timestamp: job.endLocation?.timestamp ? new Date(job.endLocation.timestamp).toISOString() : null, // Handle undefined
                 end_location_accuracy: job.endLocation?.accuracy || null,
             }));
             console.log(`Attempting to insert ${jobsToInsert.length} jobs`);
@@ -541,14 +539,14 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
             const pausesToInsert = finalizedWorkdayForSave.pauseIntervals.map(pause => ({
                 id: pause.id, // Use ID for upsert
                 workday_id: finalizedWorkdayForSave.id,
-                start_time: new Date(pause.startTime).toISOString(), // Convert timestamp to ISO string
-                end_time: pause.endTime ? new Date(pause.endTime).toISOString() : null, // Convert timestamp to ISO string or null
-                start_location_latitude: pause.startLocation?.latitude || null,
-                start_location_longitude: pause.startLocation?.longitude || null,
-                start_location_timestamp: pause.startLocation?.timestamp ? new Date(pause.startLocation.timestamp).toISOString() : null, // Convert timestamp to ISO string or null
-                start_location_accuracy: pause.startLocation?.accuracy || null,
-                end_location_latitude: pause.endLocation?.latitude || null,
-                end_location_longitude: pause.endLocation?.longitude || null,
+                start_time: pause.startTime ? new Date(pause.startTime).toISOString() : null, // Handle undefined
+                end_time: pause.endTime ? new Date(pause.endTime).toISOString() : null,
+                start_location_latitude: pause.startLocation?.latitude ?? null, // Use ?? null
+                start_location_longitude: pause.startLocation?.longitude ?? null, // Use ?? null
+                start_location_timestamp: pause.startLocation?.timestamp ? new Date(pause.startLocation.timestamp).toISOString() : null, // Handle undefined
+                start_location_accuracy: pause.startLocation?.accuracy ?? null, // Use ?? null
+                end_location_latitude: pause.endLocation?.latitude ?? null, // Use ?? null
+                end_location_longitude: pause.endLocation?.longitude || null, // Fixed typo
                 end_location_timestamp: pause.endLocation?.timestamp ? new Date(pause.endLocation.timestamp).toISOString() : null, // Convert timestamp to ISO string or null
                 end_location_accuracy: pause.endLocation?.accuracy || null,
             }));
@@ -565,13 +563,13 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
                 id: event.id,
                 workday_id: finalizedWorkdayForSave.id,
                 type: event.type,
-                timestamp: event.timestamp,
-                job_id: event.jobId,
-                details: event.details,
+                timestamp: event.timestamp ? new Date(event.timestamp).toISOString() : null, // Ensure timestamp exists
+                job_id: event.jobId || null, // Handle undefined/null
+                details: event.details || null, // Handle undefined/null
                 location_latitude: event.location?.latitude ?? null,
-                location_longitude: event.location?.longitude ?? null,
+                location_longitude: event.location?.longitude ?? null, // Fixed typo
                 location_timestamp: event.location?.timestamp ? new Date(event.location.timestamp).toISOString() : null, // Convert timestamp to ISO string or null
-                location_accuracy: event.location?.accuracy || null,
+                location_accuracy: event.location?.accuracy ?? null, // Use ?? null
             }));
             console.log(`Attempting to upsert ${eventsToInsert.length} events`);
             // const { error: eventsError } = await db.from('events').insert(eventsToInsert);
@@ -588,7 +586,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
                 latitude: loc.latitude,
                 longitude: loc.longitude,
                 // Ensure timestamp is saved as an ISO string
-                timestamp: loc.timestamp ? new Date(loc.timestamp).toISOString() : null,
+                timestamp: loc.timestamp ? new Date(loc.timestamp).toISOString() : null, // Ensure timestamp exists
                 accuracy: loc.accuracy || null,
             }));
             console.log(`Attempting to upsert ${locationsToInsert.length} location history points`);
@@ -687,9 +685,11 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
  toast({ title: "Nuevo Trabajo Iniciado", description: newJob.description });
  setIsJobModalOpen(false);
  setCurrentJobFormData({ description: '', summary: '' });
- setJobToSummarizeId(null);
+ setJobToSummarizeId(null); // Reset this explicitly
     } else if (jobModalMode === 'summary' && jobToSummarizeId) {
  // --- Modified Logic for Job Completion (Non-blocking AI) ---
+        
+ console.log("Handling job completion form submit for job ID:", jobToSummarizeId);
 
  // Find the job to update
  const jobToUpdateIndex = workday.jobs.findIndex(j => j.id === jobToSummarizeId);
@@ -702,21 +702,20 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
  return;
  }
 
- // Get the job data before updating (this snapshot is primarily for the AI call input)
+ // Store the job data *before* updating its status to 'completed'
  const jobBeforeCompletion = workday.jobs[jobToUpdateIndex];
-
  // 1. Immediately update local state to mark job as completed with user summary
  setWorkday(prev => {
           if (!prev) return null;
- const updatedJobs = [...prev.jobs];
+          const updatedJobs = [...prev.jobs];
  updatedJobs[jobToUpdateIndex] = {
  ...jobBeforeCompletion, // Use data before AI call
  summary: currentJobFormData.summary || '', // Ensure user summary is saved
- status: 'completed',
+ status: 'completed' as 'completed', // Explicitly cast to literal type
  endTime: Date.now(),
  endLocation: safeCurrentLocation || undefined,
  // aiSummary will be added later if AI is successful
- } as Job; // Cast to Job to ensure type correctness
+ };
 
  return {
             ...prev,
@@ -725,21 +724,21 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
           };
         });
 
- // Record the job completion event immediately after local update
+        // Record the job completion event immediately after local update
  recordEvent('JOB_COMPLETED', safeCurrentLocation, jobToSummarizeId, `Trabajo completado. Usuario: ${currentJobFormData.summary}`);
  toast({ title: "Trabajo Completado", description: `Resumen de usuario guardado para el trabajo.` });
 
  // Close modal and reset form immediately
  setIsJobModalOpen(false);
  setCurrentJobFormData({ description: '', summary: '' });
- setJobToSummarizeId(null);
+ setJobToSummarizeId(null); // Reset this explicitly
 
  // 2. Initiate AI summarization asynchronously (fire-and-forget)
  // This call does NOT block the rest of the function execution.
  setAiLoading(prev => ({...prev, summarize: true})); // Indicate AI is working
  // Use the user's summary for the AI prompt
       summarizeJobDescription({ jobDescription: currentJobFormData.summary || 'N/A' }) // Provide default if empty
-        .then(aiRes => {
+        .then(aiRes => { // `aiRes` contains the AI summary
  console.log("AI Summarization successful:", aiRes.summary);
  // 3. Update local state with AI summary opportunistically
  setWorkday(prev => {
@@ -747,7 +746,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
             const jobIndexForAI = prev.jobs.findIndex(j => j.id === jobToSummarizeId);
             if (jobIndexForAI === -1) return prev; // Job not found (shouldn't happen if ID is correct)
             const updatedJobs = [...prev.jobs];
-            updatedJobs[jobIndexForAI] = {
+ updatedJobs[jobIndexForAI] = {
  ...updatedJobs[jobIndexForAI],
  aiSummary: aiRes.summary,
             };
@@ -756,7 +755,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
  return { ...prev, jobs: updatedJobs };
           });
  // Optionally show a toast for successful AI summary update
- // toast({ title: "Resumen de IA Disponible", description: "Se añadió el resumen de IA al trabajo." });
+ toast({ title: "Resumen de IA Disponible", description: "Se añadió el resumen de IA al trabajo." });
         })
         .catch(err => {
           console.error("AI Error (summarizeJobDescription):", err);
@@ -767,41 +766,13 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
         .finally(() => {
           setAiLoading(prev => ({...prev, summarize: false}));
           setIsJobModalOpen(false); 
-
- // The modal is already closed, form is reset.
- // The pendingEndDayAction logic should proceed independently now.
-
+          
  // 4. Check if End Day action was pending and proceed
- // This logic is moved here from the original finally block, but
- // crucially, it now fires regardless of the AI result.
- // It relies on the local state being updated in step 1.
-          setTimeout(() => {
-            // Find the most recent state of the completed job
-            // Using a temporary deep copy to try and get the state after the setWorkday call in step 1
-            const updatedWorkdayAfterJobComplete = JSON.parse(JSON.stringify(workday)); // Get latest state snapshot
-            const jobIndex = updatedWorkdayAfterJobComplete.jobs.findIndex(j => j.id === jobToSummarizeId);
-            if(jobIndex > -1) {
- updatedWorkdayAfterJobComplete.jobs[jobIndex] = {
- ...updatedWorkdayAfterJobComplete.jobs[jobIndex],
- summary: currentJobFormData.summary || '',
- status: 'completed',
- endTime: Date.now(),
- endLocation: safeCurrentLocation || undefined,
- };
-            }
-
-            // This is a bit complex due to async state updates.
-            // A cleaner way might be to pass the _immediately_ updated job state to initiateEndDayProcess
-            // or ensure initiateEndDayProcess always works with the latest available state.
-            // For now, let's rely on the state update in step 1 and let initiateEndDayProcess read the current state.
-            // If pendingEndDayAction is true, and the job was marked complete in step 1, proceed.
-            // We need to check the workday state _after_ the state update in step 1.
-            // A small timeout helps ensure React has a chance to process the state update.
-            // A more robust solution would use a callback form of setWorkday and check the state within it.
-
+ if (pendingEndDayAction) {
+ console.log("AI summarize finally block: Pending end day action detected. Checking latest state...");
             // We need to check the *current* state of the workday in the callback.
  setWorkday(latestWorkdayState => {
-                if (!latestWorkdayState) return null; // Should not happen here
+ if (!latestWorkdayState) return null; // Should not happen here
                 const jobIsLocallyCompleted = latestWorkdayState.jobs.find(j => j.id === jobToSummarizeId)?.status === 'completed';
                 if (pendingEndDayAction && jobIsLocallyCompleted) {
                     console.log("Pending end day action detected and job locally completed. Initiating end day process.");
@@ -810,16 +781,14 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
                     setPendingEndDayAction(false); // Clear the flag once action is initiated
                 } else if (!pendingEndDayAction) {
  // If no pending end day action, this was just a manual job completion, reset form
- console.log("Job completed, no pending end day action.");
+                    console.log("AI summarize finally block: Job completed, but no pending end day action.");
+                    // Form is already reset, this block is unnecessary
                     setCurrentJobFormData({ description: '', summary: '' });
                     setJobToSummarizeId(null);
                  }
-            });
-            } else if (!pendingEndDayAction) {
-                setCurrentJobFormData({ description: '', summary: '' });
-                setJobToSummarizeId(null);
-            }
-          }, 0);
+ return latestWorkdayState; // Always return state
+ });
+ }
         });
  return;
     }
