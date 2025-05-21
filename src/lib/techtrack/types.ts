@@ -53,9 +53,9 @@ export interface Workday {
   userId: string; // Future use
   date: string; // YYYY-MM-DD
   startTime?: number;
-  startLocation?: LocationPoint;
+  startLocation?: LocationPoint | null;
   endTime?: number;
-  endLocation?: LocationPoint;
+  endLocation?: LocationPoint | null;
   status: TrackingStatus;
   locationHistory: LocationPoint[];
   jobs: Job[];
