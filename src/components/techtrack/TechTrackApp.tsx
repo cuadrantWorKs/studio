@@ -505,7 +505,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
  end_location_accuracy: finalizedWorkdayForSave.endLocation?.accuracy ?? null, // Use ?? null for number | undefined
         }; // Ensure all fields match Supabase schema and nullability
  console.log("Data being sent for workday upsert:", workdayDataForDb); // Log the specific data object HERE
-        const { error: workdayError } = await db.from('workdays').upsert(workdayDataForDb, { onConflict: 'id' });
+ const { error: workdayError } = await db.from('workdays').upsert(workdayDataForDb as any, { onConflict: 'id' });
 
         if (workdayError) throw workdayError;
  console.log("Workday upsert successful"); // Keep this success log
@@ -514,7 +514,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
         // 2. Insert Jobs - Supabase insert can take an array
         console.log("Preparing jobs data for insert:", finalizedWorkdayForSave.jobs);
         if (finalizedWorkdayForSave.jobs?.length > 0) {
-            const jobsToInsert = finalizedWorkdayForSave.jobs.map(job => ({
+ const jobsToInsert = finalizedWorkdayForSave.jobs.map(job => ({
                 id: job.id, // Use ID for upsert if jobs should be unique within a workday
                 workday_id: finalizedWorkdayForSave.id,
  description: job.description,
@@ -531,7 +531,8 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
                 end_location_longitude: job.endLocation?.longitude || null,
                 end_location_timestamp: job.endLocation?.timestamp ? new Date(job.endLocation.timestamp).toISOString() : null, // Handle undefined
                 end_location_accuracy: job.endLocation?.accuracy || null,
-            }));
+ }));
+            console.log("Data being sent for jobs insert:", jobsToInsert); // Log the specific data object
             console.log(`Attempting to insert ${jobsToInsert.length} jobs`);
             const { error: jobsError } = await db.from('jobs').upsert(jobsToInsert, { onConflict: 'id' });
             if (jobsError) throw jobsError;
@@ -541,7 +542,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
         // 3. Insert Pause Intervals - Supabase insert can take an array
         console.log("Preparing pause intervals data for insert:", finalizedWorkdayForSave.pauseIntervals);
         if (finalizedWorkdayForSave.pauseIntervals?.length > 0) {
-            const pausesToInsert = finalizedWorkdayForSave.pauseIntervals.map(pause => ({
+ const pausesToInsert = finalizedWorkdayForSave.pauseIntervals.map(pause => ({
                 id: pause.id, // Use ID for upsert
                 workday_id: finalizedWorkdayForSave.id,
                 start_time: pause.startTime || null, // Send number or null
@@ -555,6 +556,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
                 end_location_timestamp: pause.endLocation?.timestamp ? new Date(pause.endLocation.timestamp).toISOString() : null, // Convert timestamp to ISO string or null
                 end_location_accuracy: pause.endLocation?.accuracy || null,
  }));
+            console.log("Data being sent for pause intervals insert:", pausesToInsert); // Log the specific data object
             console.log(`Attempting to insert ${pausesToInsert.length} pause intervals`);
             const { error: pausesError } = await db.from('pause_intervals').upsert(pausesToInsert, { onConflict: 'id' });
             if (pausesError) throw pausesError;
@@ -564,7 +566,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
         // 4. Insert Events - Supabase insert can take an array
         console.log("Preparing events data for insert:", finalizedWorkdayForSave.events);
         if (finalizedWorkdayForSave.events?.length > 0) {
-            const eventsToInsert = finalizedWorkdayForSave.events.map(event => ({
+ const eventsToInsert = finalizedWorkdayForSave.events.map(event => ({
                 id: event.id,
                 workday_id: finalizedWorkdayForSave.id,
                 type: event.type,
@@ -575,7 +577,8 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
                 location_longitude: event.location?.longitude ?? null, // Fixed typo
  location_timestamp: event.location?.timestamp || null, // Send number or null
                 location_accuracy: event.location?.accuracy ?? null, // Use ?? null
-            }));
+ }));
+            console.log("Data being sent for events insert:", eventsToInsert); // Log the specific data object
             console.log(`Attempting to upsert ${eventsToInsert.length} events`);
             // const { error: eventsError } = await db.from('events').insert(eventsToInsert);
             // if (eventsError) throw eventsError; // Keep commented out if this caused issues before
@@ -586,7 +589,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
         // Temporarily commented out for debugging
         if (finalizedWorkdayForSave.locationHistory?.length > 0) {
             const locationsToInsert = finalizedWorkdayForSave.locationHistory.map(loc => ({
-                id: crypto.randomUUID(),
+ // Let Supabase generate the ID for location history if the column is serial/identity
                 workday_id: finalizedWorkdayForSave.id, // Use finalizedWorkdayForSave.id here
                 latitude: loc.latitude,
                 longitude: loc.longitude,
@@ -594,6 +597,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
                 timestamp: loc.timestamp ? new Date(loc.timestamp).toISOString() : null, // Ensure timestamp exists
                 accuracy: loc.accuracy || null,
             }));
+            console.log("Data being sent for location history insert:", locationsToInsert); // Log the specific data object
             console.log(`Attempting to upsert ${locationsToInsert.length} location history points`);
             // Supabase insert does not support onConflict for arrays directly,
             // but location history points should be unique anyway.
