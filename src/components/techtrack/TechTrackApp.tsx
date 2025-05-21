@@ -382,11 +382,11 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
         if (!db) {
             console.error("Database DB instance is not available. Check configuration.");
                 toast({title: "Error de Configuración de Base de Datos",
-                description: "No se puede conectar a la base de datos. Revisa la configuración de Firebase.",
+                description: "No se puede conectar a la base de datos.",
                 variant: "destructive",
                 duration: 10000
             });
-            // Revert status as save didn't even start
+            // Revert status as save didn't even start, and Firebase is not used
             setWorkday(prev => prev ? {...prev, status: workdayAtStartOfEnd.status, endTime: undefined } : workdayAtStartOfEnd);
             return; // Exit the function
         }
@@ -412,7 +412,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
             ...(finalizedWorkdayForSave.events || []),
             ...(finalizedWorkdayForSave.jobs || []).map((job: Job) => { // Use map here, added explicit type
                 const jobStartLoc = sanitizeLocationPoint(job.startLocation); // Ensure jobStartLoc is defined
-                return {
+ return {
                     id: crypto.randomUUID(), // Give each event a unique ID
                     type: 'JOB_COMPLETED',
                     timestamp: job.endTime || finalizationTimestamp, // Use job endTime if available, otherwise finalization time
@@ -436,7 +436,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
             if (!jobStartLoc) {
                 console.error(`CRITICAL: Job ${job.id} being saved with invalid startLocation. Original:`, job.startLocation, "Falling back to dummy location.");
                 // This indicates a problem in job creation logic.
-                // For now, use a dummy location to prevent Firestore error, but data is compromised.
+                // For now, use a dummy location to prevent DB error, but data is compromised.
                 return {
                     ...job,
                     description: job.description || '',
@@ -459,11 +459,13 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
  });
 
         finalizedWorkdayForSave.events = (finalizedWorkdayForSave.events || []).map(event => ({
+            ...event, // Include existing event properties
+            id: event.id || crypto.randomUUID(), // Ensure ID exists or generate
  details: event.details || null, // Ensure details is null or string
             location: sanitizeLocationPoint(event.location) ?? undefined,
         }));
         
-        finalizedWorkdayForSave.pauseIntervals = (finalizedWorkdayForSave.pauseIntervals || []).map((pause: PauseInterval) => ({ // Added type for pause
+ finalizedWorkdayForSave.pauseIntervals = (finalizedWorkdayForSave.pauseIntervals || []).map((pause) => ({ // Added type for pause
             ...pause,
             startLocation: sanitizeLocationPoint(pause.startLocation),
             endLocation: sanitizeLocationPoint(pause.endLocation),
@@ -473,7 +475,6 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
         finalizedWorkdayForSave.currentJobId = finalizedWorkdayForSave.currentJobId || null;
 
         console.log("Attempting to save workday to Supabase, ID:", finalizedWorkdayForSave.id);
-        console.log("Data being sent for workday upsert:", workdayDataForDb); // Log the specific data object
         console.log("Finalized workday object before sending to Supabase:", finalizedWorkdayForSave);
 
         console.log("Supabase client available. Proceeding with save.");
@@ -503,6 +504,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
             end_location_timestamp: finalizedWorkdayForSave.endLocation?.timestamp ? new Date(finalizedWorkdayForSave.endLocation.timestamp).toISOString() : null, // Convert timestamp to ISO string or null
             end_location_accuracy: finalizedWorkdayForSave.endLocation?.accuracy ?? null, // Use ?? null for number | undefined
         }; // Ensure all fields match Supabase schema and nullability
+ console.log("Data being sent for workday upsert:", workdayDataForDb); // Log the specific data object HERE
         const { error: workdayError } = await db.from('workdays').upsert(workdayDataForDb, { onConflict: 'id' });
         if (workdayError) throw workdayError;
         console.log("Workday upsert successful");
@@ -599,10 +601,12 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
         }
 
       // All inserts successful, now update local state;
+      // We need to use a shallow copy here to avoid issues with React state updates
+      const successfullySavedWorkday = { ...finalizedWorkdayForSave }; 
       console.log("Supabase save successful for workday ID:", finalizedWorkdayForSave.id);
-      setWorkday(finalizedWorkdayForSave); 
+      setWorkday(successfullySavedWorkday); 
       toast({ title: "Día Finalizado y Guardado", description: "La sesión de trabajo ha concluido y se ha guardado en la nube." });
-      localStorage.removeItem(getLocalStorageKey()); 
+      localStorage.removeItem(getLocalStorageKey());
 
       try {
         const summary = await calculateWorkdaySummary(finalizedWorkdayForSave);
@@ -617,8 +621,8 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
       console.error("SUPABASE SAVE ERROR: Failed to save workday to Supabase.", error);
       console.error("Workday ID being saved:", finalizedWorkdayForSave.id);
       console.error("Full error object:", error);
-      let errorMessage = "Un error desconocido ocurrió durante el guardado.";
-
+      // The ReferenceError seems to be happening here or immediately after the catch block
+      let errorMessage = "Un error desconocido ocurrió durante el guardado en la nube.";
       if (error instanceof Error) {
         errorMessage = error.message;
       }
@@ -632,7 +636,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
       
       // Only revert if finalizedWorkdayForSave was successfully created before the error
  if (finalizedWorkdayForSave) {
- setWorkday(workdayAtStartOfEnd); // Revert local state to before the finalize attempt
+ setWorkday(workdayAtStartOfEnd); // Revert local state to before the finalize attempt using the initial state
  }
 
     } finally { // Always run
