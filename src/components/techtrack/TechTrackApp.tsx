@@ -506,6 +506,25 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
         }; // Ensure all fields match Supabase schema and nullability
  console.log("Data being sent for workday upsert:", workdayDataForDb); // Log the specific data object HERE
         const { error: workdayError } = await db.from('workdays').upsert(workdayDataForDb, { onConflict: 'id' });
+
+        // Defensive check for potential bigint issues (based on error message)
+        // This iterates through the object being sent for the workday upsert
+        // and checks if any value that looks like a timestamp string is being
+        // sent to a key that might correspond to a bigint column.
+        // Based on the schema visualizer, this shouldn't happen for workdays,
+        // but this is a safety measure.
+        for (const [key, value] of Object.entries(workdayDataForDb)) {
+          if (typeof value === 'string' && value.match(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/)) {
+            // It looks like an ISO timestamp string
+            // We need to check if the corresponding column in the DB is actually bigint.
+            // Since we don't have live schema access here, we'll log a warning.
+            // In a real-world scenario with this persistent error, you would manually
+            // check the database schema or use schema introspection.
+            // If we confirmed a specific key *should* be a bigint, we'd add a specific
+            // conversion here (e.g., value = new Date(value).getTime() if it's epoch).
+ console.warn(`Defensive Check: Sending timestamp string "${value}" to potential bigint column "${key}". Please verify Supabase schema for table 'workdays'.`);
+          }
+        }
         if (workdayError) throw workdayError;
         console.log("Workday upsert successful");
 
