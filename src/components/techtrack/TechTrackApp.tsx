@@ -482,27 +482,28 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
         // A more robust solution would be to use a Supabase function (RPC) to handle the atomic insert.
 
         // 1. Insert Workday
-        const { error: workdayError } = await db.from('workdays').insert({
+        const workdayDataForDb = {
             id: dataToSave.id,
             user_id: dataToSave.userId,
             date: dataToSave.date,
-            start_time: dataToSave.startTime,
-            end_time: dataToSave.endTime,
+            start_time: new Date(dataToSave.startTime).toISOString(),
+            end_time: dataToSave.endTime ? new Date(dataToSave.endTime).toISOString() : null,
             status: dataToSave.status,
-            last_new_job_prompt_time: dataToSave.lastNewJobPromptTime,
-            last_job_completion_prompt_time: dataToSave.lastJobCompletionPromptTime,
+            last_new_job_prompt_time: dataToSave.lastNewJobPromptTime ? new Date(dataToSave.lastNewJobPromptTime).toISOString() : null,
+            last_job_completion_prompt_time: dataToSave.lastJobCompletionPromptTime ? new Date(dataToSave.lastJobCompletionPromptTime).toISOString() : null,
             current_job_id: dataToSave.currentJobId,
             start_location_latitude: dataToSave.startLocation?.latitude,
             start_location_longitude: dataToSave.startLocation?.longitude,
-            start_location_timestamp: dataToSave.startLocation?.timestamp,
+            start_location_timestamp: dataToSave.startLocation?.timestamp ? new Date(dataToSave.startLocation.timestamp).toISOString() : null,
             start_location_accuracy: dataToSave.startLocation?.accuracy,
             end_location_latitude: dataToSave.endLocation?.latitude,
             end_location_longitude: dataToSave.endLocation?.longitude,
-            end_location_timestamp: dataToSave.endLocation?.timestamp,
+            end_location_timestamp: dataToSave.endLocation?.timestamp ? new Date(dataToSave.endLocation.timestamp).toISOString() : null,
             end_location_accuracy: dataToSave.endLocation?.accuracy,
-        });
+        };
+        const { error: workdayError } = await db.from('workdays').insert(workdayDataForDb).onConflict('id').update(workdayDataForDb);
         if (workdayError) throw workdayError;
-
+        
         // 2. Insert Jobs - Supabase insert can take an array
         if (dataToSave.jobs?.length > 0) {
             const jobsToInsert = dataToSave.jobs.map(job => ({
@@ -510,17 +511,17 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
                 workday_id: dataToSave.id,
                 description: job.description,
                 start_time: job.startTime,
-                end_time: job.endTime,
+                end_time: job.endTime || null,
                 summary: job.summary,
                 ai_summary: job.aiSummary,
                 status: job.status,
                 start_location_latitude: job.startLocation?.latitude,
                 start_location_longitude: job.startLocation?.longitude,
-                start_location_timestamp: job.startLocation?.timestamp,
+                start_location_timestamp: job.startLocation?.timestamp || null,
                 start_location_accuracy: job.startLocation?.accuracy,
                 end_location_latitude: job.endLocation?.latitude,
                 end_location_longitude: job.endLocation?.longitude,
-                end_location_timestamp: job.endLocation?.timestamp,
+                end_location_timestamp: job.endLocation?.timestamp || null,
                 end_location_accuracy: job.endLocation?.accuracy,
             }));
             const { error: jobsError } = await db.from('jobs').insert(jobsToInsert);
@@ -533,14 +534,14 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
                 id: pause.id, // Assuming pause intervals also get UUIDs now
                 workday_id: dataToSave.id,
                 start_time: pause.startTime,
-                end_time: pause.endTime,
+                end_time: pause.endTime || null,
                 start_location_latitude: pause.startLocation?.latitude,
                 start_location_longitude: pause.startLocation?.longitude,
-                start_location_timestamp: pause.startLocation?.timestamp,
+                start_location_timestamp: pause.startLocation?.timestamp || null,
                 start_location_accuracy: pause.startLocation?.accuracy,
                 end_location_latitude: pause.endLocation?.latitude,
                 end_location_longitude: pause.endLocation?.longitude,
-                end_location_timestamp: pause.endLocation?.timestamp,
+                end_location_timestamp: pause.endLocation?.timestamp || null,
                 end_location_accuracy: pause.endLocation?.accuracy,
             }));
             const { error: pausesError } = await db.from('pause_intervals').insert(pausesToInsert);
@@ -558,7 +559,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
                 details: event.details,
                 // Location data for events is directly in the `events` table per schema update
                 location_latitude: event.location?.latitude,
-                location_longitude: event.location?.longitude,
+                location_longitude: event.location?.longitude || null,
                 location_timestamp: event.location?.timestamp,
                 location_accuracy: event.location?.accuracy,
             }));
@@ -571,7 +572,11 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
              const locationsToInsert = dataToSave.locationHistory.map(loc => ({
                 id: crypto.randomUUID(), // Generate new UUID for each location point record
                 workday_id: dataToSave.id,
-                 latitude: loc.latitude, longitude: loc.longitude, timestamp: loc.timestamp, accuracy: loc.accuracy,
+                 latitude: loc.latitude,
+                 longitude: loc.longitude,
+                 // Ensure timestamp is saved as a Date object or ISO string
+                 timestamp: loc.timestamp ? new Date(loc.timestamp).toISOString() : null,
+                 accuracy: loc.accuracy || null,
              }));
              const { error: locationsError } = await db.from('locations').insert(locationsToInsert);
              if (locationsError) throw locationsError;
