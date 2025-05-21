@@ -394,6 +394,10 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
     
     const finalizedWorkdayForSave = {...workdayAtStartOfEnd}; // Create a mutable copy
     const endLocationToUse = sanitizeLocationPoint(currentLocation) || 
+    console.log("Type of startTime:", typeof finalizedWorkdayForSave.startTime);
+    console.log("Type of endTime:", typeof finalizedWorkdayForSave.endTime);
+    console.log("Type of startLocation timestamp:", typeof finalizedWorkdayForSave.startLocation?.timestamp);
+    console.log("Type of endLocation timestamp:", typeof finalizedWorkdayForSave.endLocation?.timestamp);
                              (finalizedWorkdayForSave.locationHistory.length > 0 ? sanitizeLocationPoint(finalizedWorkdayForSave.locationHistory[finalizedWorkdayForSave.locationHistory.length - 1]) : null) ||
                              sanitizeLocationPoint(finalizedWorkdayForSave.startLocation) || 
                              null;
@@ -474,7 +478,6 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
     console.log("Finalized workday object before sending to Supabase:", finalizedWorkdayForSave);
 
     try {
-        // Use finalizedWorkdayForSave directly
  console.log("Data being sent to Supabase for workday upsert (workdayDataForDb):", workdayDataForDb);
  console.log("Supabase client available. Proceeding with save.");
         // Start a transaction or similar mechanism if Supabase supports it directly for multiple related inserts.
@@ -497,7 +500,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
             start_location_latitude: finalizedWorkdayForSave.startLocation?.latitude,
             start_location_longitude: finalizedWorkdayForSave.startLocation?.longitude,
             start_location_timestamp: finalizedWorkdayForSave.startLocation?.timestamp ? new Date(finalizedWorkdayForSave.startLocation.timestamp).toISOString() : null,
-            start_location_accuracy: finalizedWorkdayForSave.startLocation?.accuracy,
+            start_location_accuracy: finalizedWorkdayForSave.startLocation?.accuracy || null, // Ensure accuracy is nullable
             end_location_latitude: finalizedWorkdayForSave.endLocation?.latitude,
             end_location_longitude: finalizedWorkdayForSave.endLocation?.longitude,
             end_location_timestamp: finalizedWorkdayForSave.endLocation?.timestamp || null, // Use numerical timestamp directly or null
