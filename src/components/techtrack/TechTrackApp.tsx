@@ -571,16 +571,16 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
         // 4. Insert Events - Supabase insert can take an array
         console.log("Preparing events data for insert:", finalizedWorkdayForSave.events);
  if (finalizedWorkdayForSave.events?.length > 0) {
-            let insertFailures = 0;
-            const totalEvents = finalizedWorkdayForSave.events.length;
+ let insertFailures = 0;
+ const totalEvents = finalizedWorkdayForSave.events.length;
 
  for (const event of finalizedWorkdayForSave.events) {
-                // Basic validation
+ // Basic validation
  if (!event.id || !event.type || !event.timestamp) {
  console.warn("Incomplete event, skipping:", event);
  insertFailures++;
  continue;
-                }
+ }
 
  const flatEvent = {
  id: event.id,
@@ -591,6 +591,11 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
  details: event.details ?? null,
  location_latitude: event.location?.latitude ?? null,
  location_longitude: event.location?.longitude ?? null,
+ location_timestamp: event.location?.timestamp ?? null,
+ location_accuracy: event.location?.accuracy ?? null,
+ }; // ← ← ← IMPORTANTE: esta llave cierra el objeto antes del insert
+
+ console.log("Attempting to insert individual event:", flatEvent);
  const { error: eventError } = await db.from("events").insert(flatEvent);
  if (eventError) {
  console.error("Error al guardar evento individual:", flatEvent, eventError.message);
