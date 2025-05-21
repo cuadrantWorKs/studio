@@ -490,7 +490,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
             date: finalizedWorkdayForSave.date,
             // Convert timestamps to ISO strings for Supabase, handle null
  start_time: finalizedWorkdayForSave.startTime || null, // Send number (epoch milliseconds) or null
- end_time: finalizedWorkdayForSave.endTime || null, // Send number (epoch milliseconds) or null
+            end_time: finalizedWorkdayForSave.endTime || null, // Send number (epoch milliseconds) or null
             status: finalizedWorkdayForSave.status,
  last_new_job_prompt_time: finalizedWorkdayForSave.lastNewJobPromptTime || null, // Send number or null
  last_job_completion_prompt_time: finalizedWorkdayForSave.lastJobCompletionPromptTime || null, // Send number or null
@@ -518,7 +518,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
                 id: job.id, // Use ID for upsert if jobs should be unique within a workday
                 workday_id: finalizedWorkdayForSave.id,
  description: job.description,
- start_time: job.startTime || null, // Send number or null
+                start_time: job.startTime || null, // Send number or null
  end_time: job.endTime || null, // Send number or null
  summary: job.summary,
  ai_summary: job.aiSummary || null, // Handle undefined/null
@@ -544,8 +544,8 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
             const pausesToInsert = finalizedWorkdayForSave.pauseIntervals.map(pause => ({
                 id: pause.id, // Use ID for upsert
                 workday_id: finalizedWorkdayForSave.id,
- start_time: pause.startTime || null, // Send number or null
- end_time: pause.endTime || null, // Send number or null
+                start_time: pause.startTime || null, // Send number or null
+                end_time: pause.endTime || null, // Send number or null
                 start_location_latitude: pause.startLocation?.latitude ?? null, // Use ?? null
                 start_location_longitude: pause.startLocation?.longitude ?? null, // Use ?? null
  start_location_timestamp: pause.startLocation?.timestamp || null, // Send number or null
@@ -568,7 +568,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
                 id: event.id,
                 workday_id: finalizedWorkdayForSave.id,
                 type: event.type,
- timestamp: event.timestamp || null, // Send number or null
+                timestamp: event.timestamp || null, // Send number or null
                 job_id: event.jobId || null, // Handle undefined/null
                 details: event.details || null, // Handle undefined/null
                 location_latitude: event.location?.latitude ?? null,
