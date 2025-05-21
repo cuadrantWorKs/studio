@@ -578,6 +578,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
         }
 
       // All inserts successful, now update local state
+      console.log("Supabase save successful for workday ID:", finalizedWorkdayForSave.id);
       setWorkday(finalizedWorkdayForSave); 
       toast({ title: "Día Finalizado y Guardado", description: "La sesión de trabajo ha concluido y se ha guardado en la nube." });
       localStorage.removeItem(getLocalStorageKey()); 
@@ -592,6 +593,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
       }
 
     } catch (error: any) {
+      console.log("Entering catch block in finalizeWorkdayAndSave");
       console.error("SUPABASE SAVE ERROR: Failed to save workday to Supabase.");
       console.error("Workday ID being saved:", finalizedWorkdayForSave.id);
       console.error("Full error object:", error);
