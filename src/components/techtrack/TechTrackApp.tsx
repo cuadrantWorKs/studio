@@ -488,11 +488,11 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
             id: finalizedWorkdayForSave.id, // Ensure ID is used for upsert
             user_id: finalizedWorkdayForSave.userId,
             date: finalizedWorkdayForSave.date,
-            start_time: finalizedWorkdayForSave.startTime, // Use numerical timestamp directly
+            start_time: finalizedWorkdayForSave.startTime,
             end_time: finalizedWorkdayForSave.endTime || null, // Use numerical timestamp directly or null
             status: finalizedWorkdayForSave.status,
             last_new_job_prompt_time: finalizedWorkdayForSave.lastNewJobPromptTime || null,
-            last_job_completion_prompt_time: finalizedWorkdayForSave.lastJobCompletionPromptTime ? new Date(finalizedWorkdayForSave.lastJobCompletionPromptTime).toISOString() : null,
+            last_job_completion_prompt_time: finalizedWorkdayForSave.lastJobCompletionPromptTime || null,
             current_job_id: finalizedWorkdayForSave.currentJobId,
             start_location_latitude: finalizedWorkdayForSave.startLocation?.latitude,
             start_location_longitude: finalizedWorkdayForSave.startLocation?.longitude,
@@ -501,7 +501,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
             end_location_latitude: finalizedWorkdayForSave.endLocation?.latitude,
             end_location_longitude: finalizedWorkdayForSave.endLocation?.longitude,
             end_location_timestamp: finalizedWorkdayForSave.endLocation?.timestamp || null, // Use numerical timestamp directly or null
-            end_location_accuracy: finalizedWorkdayForSave.endLocation?.accuracy,
+            end_location_accuracy: finalizedWorkdayForSave.endLocation?.accuracy || null,
         };
         const { error: workdayError } = await db.from('workdays').upsert(workdayDataForDb, { onConflict: 'id' });
         if (workdayError) throw workdayError;
