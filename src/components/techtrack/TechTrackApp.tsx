@@ -571,14 +571,28 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
         // 4. Insert Events - Supabase insert can take an array
         console.log("Preparing events data for insert:", finalizedWorkdayForSave.events);
         if (finalizedWorkdayForSave.events?.length > 0) {
- const eventsToInsert = finalizedWorkdayForSave.events.map(event => ({
-                id: event.id,
+ for (const event of finalizedWorkdayForSave.events) {
+ if (!event.id || !event.type || !event.timestamp) {
+ console.warn("Evento incompleto, se saltea:", event);
+ continue;
+ }
+ const flatEvent = {
+ id: event.id,
  workday_id: finalizedWorkdayForSave.id, // Ensure linking to workday
-                type: event.type,
+ type: event.type,
  timestamp: event.timestamp || null, // Send number or null
-                job_id: event.jobId || null, // Ensure null if undefined
-                details: event.details || null, // Ensure null if undefined
-                location_latitude: event.location?.latitude || null,
+ job_id: event.jobId || null, // Ensure null if undefined
+ details: event.details || null, // Ensure null if undefined
+ location_latitude: event.location?.latitude ?? null,
+ location_longitude: event.location?.longitude ?? null,
+ location_timestamp: event.location?.timestamp ?? null, // Send number or null
+ location_accuracy: event.location?.accuracy ?? null,
+ };
+                console.log("Attempting to insert individual event:", flatEvent);
+ const { error: eventError } = await db.from('events').insert(flatEvent);
+ if (eventError) {
+ console.error("Error al guardar evento individual:", flatEvent, eventError.message);
+ }
                 location_longitude: event.location?.longitude || null,
  location_timestamp: event.location?.timestamp ?? null, // Send number or null
                 location_accuracy: event.location?.accuracy ?? null,
@@ -586,9 +600,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
             console.log("Data being sent for events insert:", eventsToInsert); // Log the specific data object
             console.log(`Attempting to upsert ${eventsToInsert.length} events`);
             // const { error: eventsError } = await db.from('events').insert(eventsToInsert);
-            // if (eventsError) throw eventsError; // Keep commented out if this caused issues before
-            // console.log("Events insert successful");
-        }
+ }       }
 
         // 5. Insert Location History - Supabase insert can take an array (insert only, not upsert based on schema)
         // Temporarily commented out for debugging
