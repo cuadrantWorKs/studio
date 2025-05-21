@@ -408,18 +408,20 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
         finalizedWorkdayForSave.status = 'ended';
         finalizedWorkdayForSave.endTime = finalizationTimestamp;
         finalizedWorkdayForSave.endLocation = endLocationToUse;
-        finalizedWorkdayForSave.events = [
+        finalizedWorkdayForSave.events = [ // Correcting the syntax error here
             ...(finalizedWorkdayForSave.events || []),
-            return {
-                ...job,
-                description: job.description || '',
-                summary: job.summary || '',
-                aiSummary: job.aiSummary || undefined,
-                startLocation: jobStartLoc,
-                endLocation: sanitizeLocationPoint(job.endLocation),
-                status: job.status || 'completed', // Ensure status is valid
-            };
-        }
+            ...(finalizedWorkdayForSave.jobs || []).map(job => { // Use map here
+                const jobStartLoc = sanitizeLocationPoint(job.startLocation); // Ensure jobStartLoc is defined
+                return {
+                    id: crypto.randomUUID(), // Give each event a unique ID
+                    type: 'JOB_COMPLETED', // Assuming this is the event type
+                    timestamp: job.endTime || Date.now(), // Use job endTime if available, otherwise current time
+                    jobId: job.id,
+                    details: `Trabajo completado: ${job.description || ''}. Resumen: ${job.summary || ''}`, // Add some details
+                    location: sanitizeLocationPoint(job.endLocation) || sanitizeLocationPoint(job.startLocation) || undefined, // Use endLocation if available, otherwise startLocation
+                };
+            }),
+        ];
 
         // Rigorous Sanitization Pass
         finalizedWorkdayForSave.startLocation = sanitizeLocationPoint(finalizedWorkdayForSave.startLocation);
@@ -575,7 +577,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
             if (eventsError) throw eventsError;
             console.log("Events insert successful");
         } */
-
+        
         // 5. Insert Location History - Supabase insert can take an array
         // Temporarily commented out for debugging
         if (finalizedWorkdayForSave.locationHistory?.length > 0) {
