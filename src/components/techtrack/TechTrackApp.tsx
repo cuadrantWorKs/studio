@@ -394,7 +394,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
     
     const finalizedWorkdayForSave = {...workdayAtStartOfEnd}; // Create a mutable copy
     const endLocationToUse = sanitizeLocationPoint(currentLocation) || 
-    console.log("Type of startTime:", typeof finalizedWorkdayForSave.startTime); // Should be 'number'
+    console.log("Type of startTime:", typeof finalizedWorkdayForSave.startTime); // Should be 'number';
     console.log("Type of endTime:", typeof finalizedWorkdayForSave.endTime); // Should be 'number' or 'undefined'
     console.log("Type of startLocation timestamp:", typeof finalizedWorkdayForSave.startLocation?.timestamp); // Should be 'number' or 'undefined'
     console.log("Type of endLocation timestamp:", typeof finalizedWorkdayForSave.endLocation?.timestamp); // Should be 'number' or 'undefined'
@@ -478,7 +478,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
     console.log("Finalized workday object before sending to Supabase:", finalizedWorkdayForSave);
 
     try {
- console.log("Supabase client available. Proceeding with save.");
+ console.log("Supabase client available. Proceeding with save.");;
         // Start a transaction or similar mechanism if Supabase supports it directly for multiple related inserts.
         // Supabase client doesn't have a built-in transaction API like Firestore's batched writes.
         // We'll perform inserts sequentially. If any fail, we'll log the error.
@@ -486,7 +486,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
 
         // 1. Insert Workday
         console.log("Attempting to upsert workday in Supabase");
- console.log("Data being sent to Supabase for workday upsert (workdayDataForDb):", workdayDataForDb);
+ console.log("Data being sent to Supabase for workday upsert (workdayDataForDb):", workdayDataForDb);;
         const workdayDataForDb = {
             id: finalizedWorkdayForSave.id, // Ensure ID is used for upsert
             user_id: finalizedWorkdayForSave.userId,
@@ -605,7 +605,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
             console.log("Location history insert successful"); */
         }
 
-      // All inserts successful, now update local state
+      // All inserts successful, now update local state;
       console.log("Supabase save successful for workday ID:", finalizedWorkdayForSave.id);
       setWorkday(finalizedWorkdayForSave); 
       toast({ title: "Día Finalizado y Guardado", description: "La sesión de trabajo ha concluido y se ha guardado en la nube." });
@@ -620,7 +620,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
         toast({ title: "Error de Resumen", description: "No se pudo calcular el resumen de la jornada.", variant: "destructive" });
       }
 
-    } catch (error: any) {
+    } catch (error: any) {;
  console.log("Entering catch block in finalizeWorkdayAndSave");
       console.error("SUPABASE SAVE ERROR: Failed to save workday to Supabase.");
       console.error("Workday ID being saved:", finalizedWorkdayForSave.id);
@@ -641,7 +641,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
       setWorkday(workdayAtStartOfEnd); // Revert to the state before attempting to finalize
 
     } finally {
-      console.log("FINALLY block in finalizeWorkdayAndSave. Setting isSavingToCloud and isLoading to false.");
+      console.log("FINALLY block in finalizeWorkdayAndSave. Setting isSavingToCloud and isLoading to false.");;
       setIsSavingToCloud(false);
       setIsLoading(false);
       setPendingEndDayAction(false); 
