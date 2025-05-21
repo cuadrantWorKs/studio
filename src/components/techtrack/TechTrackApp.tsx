@@ -574,10 +574,10 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
                 location_accuracy: event.location?.accuracy || null,
             }));
             console.log(`Attempting to upsert ${eventsToInsert.length} events`);
-            const { error: eventsError } = await db.from('events').insert(eventsToInsert);
-            if (eventsError) throw eventsError;
-            console.log("Events insert successful");
-        } */
+            // const { error: eventsError } = await db.from('events').insert(eventsToInsert);
+            // if (eventsError) throw eventsError;
+            // console.log("Events insert successful");
+        }
 // Temporarily commenting out inserts other than location history to isolate the build issue
         // 5. Insert Location History - Supabase insert can take an array
         // Temporarily commented out for debugging
