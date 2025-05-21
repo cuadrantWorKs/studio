@@ -474,6 +474,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
 
     try {
         // Use finalizedWorkdayForSave directly
+ console.log("Supabase client available. Proceeding with save.");
         // Start a transaction or similar mechanism if Supabase supports it directly for multiple related inserts.
         // Supabase client doesn't have a built-in transaction API like Firestore's batched writes.
         // We'll perform inserts sequentially. If any fail, we'll log the error.
@@ -505,56 +506,60 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
         console.log("Workday upsert successful");
         
         // 2. Insert Jobs - Supabase insert can take an array
-        if (finalizedWorkdayForSave.jobs?.length > 0) {
-            const jobsToInsert = finalizedWorkdayForSave.jobs.map(job => ({
-                // Use ID for upsert if jobs should be unique within a workday
-                id: job.id,
-                workday_id: finalizedWorkdayForSave.id,
-                description: job.description,
-                start_time: job.startTime,
-                end_time: job.endTime || null,
-                summary: job.summary,
-                ai_summary: job.aiSummary,
-                status: job.status,
-                start_location_latitude: job.startLocation?.latitude || null,
-                start_location_longitude: job.startLocation?.longitude || null,
-                start_location_timestamp: job.startLocation?.timestamp || null, // Keep as number
-                start_location_accuracy: job.startLocation?.accuracy || null,
-                end_location_latitude: job.endLocation?.latitude || null,
-                end_location_longitude: job.endLocation?.longitude || null,
-                end_location_timestamp: job.endLocation?.timestamp || null, // Keep as number
-                end_location_accuracy: job.endLocation?.accuracy || null,
-            }));
-             console.log(`Attempting to insert ${jobsToInsert.length} jobs`);
-            const { error: jobsError } = await db.from('jobs').insert(jobsToInsert);
-            if (jobsError) throw jobsError;
-             console.log("Job insert successful");
-        }
+        // Temporarily commented out for debugging
+        // if (finalizedWorkdayForSave.jobs?.length > 0) {
+        //     const jobsToInsert = finalizedWorkdayForSave.jobs.map(job => ({
+        //         // Use ID for upsert if jobs should be unique within a workday
+        //         id: job.id,
+        //         workday_id: finalizedWorkdayForSave.id,
+        //         description: job.description,
+        //         start_time: job.startTime,
+        //         end_time: job.endTime || null,
+        //         summary: job.summary,
+        //         ai_summary: job.aiSummary,
+        //         status: job.status,
+        //         start_location_latitude: job.startLocation?.latitude || null,
+        //         start_location_longitude: job.startLocation?.longitude || null,
+        //         start_location_timestamp: job.startLocation?.timestamp || null, // Keep as number
+        //         start_location_accuracy: job.startLocation?.accuracy || null,
+        //         end_location_latitude: job.endLocation?.latitude || null,
+        //         end_location_longitude: job.endLocation?.longitude || null,
+        //         end_location_timestamp: job.endLocation?.timestamp || null, // Keep as number
+        //         end_location_accuracy: job.endLocation?.accuracy || null,
+        //     }));
+        //      console.log(`Attempting to insert ${jobsToInsert.length} jobs`);
+        //     const { error: jobsError } = await db.from('jobs').insert(jobsToInsert);
+        //     if (jobsError) throw jobsError;
+        //      console.log("Job insert successful");
+        // }
         
         // 3. Insert Pause Intervals - Supabase insert can take an array
-        if (finalizedWorkdayForSave.pauseIntervals?.length > 0) {
-            const pausesToInsert = finalizedWorkdayForSave.pauseIntervals.map(pause => ({
-                id: pause.id,
-                workday_id: finalizedWorkdayForSave.id,
-                start_time: pause.startTime,
-                end_time: pause.endTime || null,
-                start_location_latitude: pause.startLocation?.latitude || null,
-                start_location_longitude: pause.startLocation?.longitude || null,
-                start_location_timestamp: pause.startLocation?.timestamp || null, // Keep as number
-                start_location_accuracy: pause.startLocation?.accuracy || null,
-                end_location_latitude: pause.endLocation?.latitude || null,
-                end_location_longitude: pause.endLocation?.longitude || null,
-                end_location_timestamp: pause.endLocation?.timestamp || null, // Keep as number
-                end_location_accuracy: pause.endLocation?.accuracy || null,
-            }));
-             console.log(`Attempting to insert ${pausesToInsert.length} pause intervals`);
-            const { error: pausesError } = await db.from('pause_intervals').insert(pausesToInsert);
-            if (pausesError) throw pausesError;
-             console.log("Pause intervals insert successful");
-        }
+        // Temporarily commented out for debugging
+        // if (finalizedWorkdayForSave.pauseIntervals?.length > 0) {
+        //     const pausesToInsert = finalizedWorkdayForSave.pauseIntervals.map(pause => ({
+        //         id: pause.id,
+        //         workday_id: finalizedWorkdayForSave.id,
+        //         start_time: pause.startTime,
+        //         end_time: pause.endTime || null,
+        //         start_location_latitude: pause.startLocation?.latitude || null,
+        //         start_location_longitude: pause.startLocation?.longitude || null,
+        //         start_location_timestamp: pause.startLocation?.timestamp || null, // Keep as number
+        //         start_location_accuracy: pause.startLocation?.accuracy || null,
+        //         end_location_latitude: pause.endLocation?.latitude || null,
+        //         end_location_longitude: pause.endLocation?.longitude || null,
+        //         end_location_timestamp: pause.endLocation?.timestamp || null, // Keep as number
+        //         end_location_accuracy: pause.endLocation?.accuracy || null,
+        //     }));
+        //      console.log(`Attempting to insert ${pausesToInsert.length} pause intervals`);
+        //     const { error: pausesError } = await db.from('pause_intervals').insert(pausesToInsert);
+        //     if (pausesError) throw pausesError;
+        //      console.log("Pause intervals insert successful");
+        // }
 
         // 4. Insert Events - Supabase insert can take an array
-        if (dataToSave.events?.length > 0) {
+        // Temporarily commented out for debugging
+        /*
+        if (finalizedWorkdayForSave.events?.length > 0) {
             const eventsToInsert = finalizedWorkdayForSave.events.map(event => ({
                 id: event.id,
                 workday_id: finalizedWorkdayForSave.id,
@@ -571,14 +576,16 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
             const { error: eventsError } = await db.from('events').insert(eventsToInsert);
             if (eventsError) throw eventsError;
             console.log("Events insert successful");
-        }
+        } */
 
         // 5. Insert Location History - Supabase insert can take an array
+        // Temporarily commented out for debugging
+        /*
         if (finalizedWorkdayForSave.locationHistory?.length > 0) {
             const locationsToInsert = finalizedWorkdayForSave.locationHistory.map(loc => ({
                 id: crypto.randomUUID(),
-                workday_id: dataToSave.id,
-                 latitude: loc.latitude,
+                workday_id: finalizedWorkdayForSave.id, // Use finalizedWorkdayForSave.id here
+                latitude: loc.latitude,
                  longitude: loc.longitude,
                  // Ensure timestamp is saved as a Date object or ISO string
                  timestamp: loc.timestamp ? new Date(loc.timestamp).toISOString() : null,
@@ -587,7 +594,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
             console.log(`Attempting to insert ${locationsToInsert.length} location history points`);
             const { error: locationsError } = await db.from('locations').insert(locationsToInsert);
             if (locationsError) throw locationsError;
-            console.log("Location history insert successful");
+            console.log("Location history insert successful"); */
         }
 
       // All inserts successful, now update local state
@@ -606,6 +613,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
       }
 
     } catch (error: any) {
+ console.log("Entering catch block in finalizeWorkdayAndSave");
       console.error("SUPABASE SAVE ERROR: Failed to save workday to Supabase.");
       console.error("Workday ID being saved:", finalizedWorkdayForSave.id);
       console.error("Full error object:", error);
