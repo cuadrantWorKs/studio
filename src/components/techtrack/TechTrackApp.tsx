@@ -498,10 +498,10 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
             start_location_latitude: finalizedWorkdayForSave.startLocation?.latitude,
             start_location_longitude: finalizedWorkdayForSave.startLocation?.longitude,
             start_location_timestamp: finalizedWorkdayForSave.startLocation?.timestamp ? new Date(finalizedWorkdayForSave.startLocation.timestamp).toISOString() : null, // Convert timestamp to ISO string or null
-            start_location_accuracy: finalizedWorkdayForSave.startLocation?.accuracy ?? null, // Use ?? null for number | undefined
+            start_location_accuracy: finalizedWorkdayForSave.startLocation?.accuracy ?? null, // Use ?? null for number | undefined            end_location_latitude: finalizedWorkdayForSave.endLocation?.latitude,
             end_location_latitude: finalizedWorkdayForSave.endLocation?.latitude,
             end_location_longitude: finalizedWorkdayForSave.endLocation?.longitude,
-            end_location_timestamp: finalizedWorkdayForSave.endLocation?.timestamp ? new Date(finalizedWorkdayForSave.endLocation.timestamp).toISOString() : null, // Convert timestamp to ISO string or null
+            end_location_timestamp: finalizedWorkdayForSave.endLocation?.timestamp ? new Date(finalizedWorkdayForSave.endLocation.timestamp).toISOString() : null, // Convert timestamp to ISO string or null            end_location_accuracy: finalizedWorkdayForSave.endLocation?.accuracy ?? null, // Use ?? null for number | undefined
  end_location_accuracy: finalizedWorkdayForSave.endLocation?.accuracy ?? null, // Use ?? null for number | undefined
         }; // Ensure all fields match Supabase schema and nullability
         console.log("Data being sent for workday upsert:", workdayDataForDb); // Log the specific data object HERE
