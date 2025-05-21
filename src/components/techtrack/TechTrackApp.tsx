@@ -380,7 +380,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
     try {
         if (!db) {
             console.error("Database DB instance is not available. Check configuration.");
-                title: "Error de Configuración de Base de Datos",
+                toast({title: "Error de Configuración de Base de Datos",
                 description: "No se puede conectar a la base de datos. Revisa la configuración de Firebase.",
                 variant: "destructive",
                 duration: 10000
