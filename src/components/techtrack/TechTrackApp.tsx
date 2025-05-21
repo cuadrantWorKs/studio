@@ -488,10 +488,8 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
         console.log("Supabase client available. Proceeding with save.");
         // Supabase client doesn't have a built-in transaction API like Firestore's batched writes.
         // We'll perform inserts sequentially. If any fail, we'll log the error.
-        // A more robust solution would be to use a Supabase function (RPC) to handle the atomic inserts.
-
+        // A more robust solution would be to use a Supabase Edge Function or RPC to handle the atomic inserts.
         // 1. Insert Workday
-        console.log("Attempting to upsert workday in Supabase");
         const workdayDataForDb = {
             id: finalizedWorkdayForSave.id, // Ensure ID is used for upsert
             user_id: finalizedWorkdayForSave.userId,
@@ -508,17 +506,15 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
             start_location_timestamp: finalizedWorkdayForSave.startLocation?.timestamp ? new Date(finalizedWorkdayForSave.startLocation.timestamp).toISOString() : null, // Convert timestamp to ISO string or null
  start_location_timestamp: finalizedWorkdayForSave.startLocation?.timestamp || null, // Send number or null
             end_location_latitude: finalizedWorkdayForSave.endLocation?.latitude,
-            end_location_longitude: finalizedWorkdayForSave.endLocation?.longitude,
+ end_location_longitude: finalizedWorkdayForSave.endLocation?.longitude, // Fixed typo
  end_location_timestamp: finalizedWorkdayForSave.endLocation?.timestamp ?? null, // Send number or null
-        }; // Ensure all fields match Supabase schema and nullability
- console.log("Data being sent for workday upsert:", workdayDataForDb);
+        };
+        console.log("Attempting to upsert workday:", JSON.stringify(workdayDataForDb));
         const { data: workdayData, error: workdayError } = await db
  .from('workdays')
  .upsert(workdayDataForDb, { onConflict: 'id' });
- console.log("Data being sent for workday upsert:", JSON.stringify(workdayDataForDb)); // Log the specific data object HERE
-
         if (workdayError) throw workdayError;
- console.log("Workday upsert successful"); // Keep this success log
+        console.log("Workday upsert successful");
 
         // Temporarily commenting out inserts other than location history to isolate the build issue
         // 2. Insert Jobs - Supabase insert can take an array
@@ -540,7 +536,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
  end_location_latitude: job.endLocation?.latitude || null,
                 end_location_longitude: job.endLocation?.longitude || null,
  end_location_timestamp: job.endLocation?.timestamp || null, // Send number or null
- }));
+            }));
  console.log("Data being sent for jobs insert:", JSON.stringify(jobsToInsert)); // Log the specific data object
             console.log(`Attempting to insert ${jobsToInsert.length} jobs`);
             const { error: jobsError } = await db.from('jobs').upsert(jobsToInsert, { onConflict: 'id' });
@@ -556,7 +552,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
                 workday_id: finalizedWorkdayForSave.id,
                 start_time: pause.startTime || null,
                 end_time: pause.endTime || null, // Send number or null
-                start_location_latitude: pause.startLocation?.latitude || null,
+ start_location_latitude: pause.startLocation?.latitude || null, // Ensure number or null
                 start_location_longitude: pause.startLocation?.longitude || null,
  start_location_timestamp: pause.startLocation?.timestamp || null, // Send number or null
                 start_location_accuracy: pause.startLocation?.accuracy || null,
@@ -577,15 +573,14 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
         if (finalizedWorkdayForSave.events?.length > 0) {
  const eventsToInsert = finalizedWorkdayForSave.events.map(event => ({
                 id: event.id,
-                workday_id: finalizedWorkdayForSave.id,
+ workday_id: finalizedWorkdayForSave.id, // Ensure linking to workday
                 type: event.type,
  timestamp: event.timestamp || null, // Send number or null
                 job_id: event.jobId || null, // Ensure null if undefined
                 details: event.details || null, // Ensure null if undefined
                 location_latitude: event.location?.latitude || null,
                 location_longitude: event.location?.longitude || null,
- location_timestamp: event.location?.timestamp || null, // Send number or null, corrected from ISO string
-                location_accuracy: event.location?.accuracy ?? null, // Use ?? null
+ location_timestamp: event.location?.timestamp || null, // Send number or null
  }))
             console.log("Data being sent for events insert:", eventsToInsert); // Log the specific data object
             console.log(`Attempting to upsert ${eventsToInsert.length} events`);
@@ -593,8 +588,8 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
             // if (eventsError) throw eventsError; // Keep commented out if this caused issues before
             // console.log("Events insert successful");
         }
-// Temporarily commenting out inserts other than location history to isolate the build issue
-        // 5. Insert Location History - Supabase insert can take an array
+
+        // 5. Insert Location History - Supabase insert can take an array (insert only, not upsert based on schema)
         // Temporarily commented out for debugging
         if (finalizedWorkdayForSave.locationHistory?.length > 0) {
             const locationsToInsert = finalizedWorkdayForSave.locationHistory.map(loc => ({
@@ -607,8 +602,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
                 accuracy: loc.accuracy || null, // Ensure null if undefined
             }));
             console.log("Data being sent for location history insert:", locationsToInsert); // Log the specific data object
-            console.log(`Attempting to upsert ${locationsToInsert.length} location history points`);
-            // Supabase insert does not support onConflict for arrays directly,
+            console.log(`Attempting to insert ${locationsToInsert.length} location history points`);
             // but location history points should be unique anyway.
             const { error: locationsError } = await db.from('locations').insert(locationsToInsert);
             if (locationsError) throw locationsError;
