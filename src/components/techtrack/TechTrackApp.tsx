@@ -394,10 +394,10 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
     
     const finalizedWorkdayForSave = {...workdayAtStartOfEnd}; // Create a mutable copy
     const endLocationToUse = sanitizeLocationPoint(currentLocation) || 
-    console.log("Type of startTime:", typeof finalizedWorkdayForSave.startTime);
-    console.log("Type of endTime:", typeof finalizedWorkdayForSave.endTime);
-    console.log("Type of startLocation timestamp:", typeof finalizedWorkdayForSave.startLocation?.timestamp);
-    console.log("Type of endLocation timestamp:", typeof finalizedWorkdayForSave.endLocation?.timestamp);
+    console.log("Type of startTime:", typeof finalizedWorkdayForSave.startTime); // Should be 'number'
+    console.log("Type of endTime:", typeof finalizedWorkdayForSave.endTime); // Should be 'number' or 'undefined'
+    console.log("Type of startLocation timestamp:", typeof finalizedWorkdayForSave.startLocation?.timestamp); // Should be 'number' or 'undefined'
+    console.log("Type of endLocation timestamp:", typeof finalizedWorkdayForSave.endLocation?.timestamp); // Should be 'number' or 'undefined'
                              (finalizedWorkdayForSave.locationHistory.length > 0 ? sanitizeLocationPoint(finalizedWorkdayForSave.locationHistory[finalizedWorkdayForSave.locationHistory.length - 1]) : null) ||
                              sanitizeLocationPoint(finalizedWorkdayForSave.startLocation) || 
                              null;
@@ -478,7 +478,6 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
     console.log("Finalized workday object before sending to Supabase:", finalizedWorkdayForSave);
 
     try {
- console.log("Data being sent to Supabase for workday upsert (workdayDataForDb):", workdayDataForDb);
  console.log("Supabase client available. Proceeding with save.");
         // Start a transaction or similar mechanism if Supabase supports it directly for multiple related inserts.
         // Supabase client doesn't have a built-in transaction API like Firestore's batched writes.
@@ -487,6 +486,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
 
         // 1. Insert Workday
         console.log("Attempting to upsert workday in Supabase");
+ console.log("Data being sent to Supabase for workday upsert (workdayDataForDb):", workdayDataForDb);
         const workdayDataForDb = {
             id: finalizedWorkdayForSave.id, // Ensure ID is used for upsert
             user_id: finalizedWorkdayForSave.userId,
@@ -500,7 +500,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
             start_location_latitude: finalizedWorkdayForSave.startLocation?.latitude,
             start_location_longitude: finalizedWorkdayForSave.startLocation?.longitude,
             start_location_timestamp: finalizedWorkdayForSave.startLocation?.timestamp ? new Date(finalizedWorkdayForSave.startLocation.timestamp).toISOString() : null,
-            start_location_accuracy: finalizedWorkdayForSave.startLocation?.accuracy || null, // Ensure accuracy is nullable
+ start_location_accuracy: finalizedWorkdayForSave.startLocation?.accuracy ?? null, // Ensure accuracy is nullable
             end_location_latitude: finalizedWorkdayForSave.endLocation?.latitude,
             end_location_longitude: finalizedWorkdayForSave.endLocation?.longitude,
             end_location_timestamp: finalizedWorkdayForSave.endLocation?.timestamp || null, // Use numerical timestamp directly or null
