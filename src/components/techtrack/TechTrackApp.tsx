@@ -506,7 +506,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
  start_location_latitude: finalizedWorkdayForSave.startLocation?.latitude, // Ensure number or undefined/null
             start_location_longitude: finalizedWorkdayForSave.startLocation?.longitude,
             start_location_timestamp: finalizedWorkdayForSave.startLocation?.timestamp ? new Date(finalizedWorkdayForSave.startLocation.timestamp).toISOString() : null, // Convert timestamp to ISO string or null
-            start_location_accuracy: finalizedWorkdayForSave.startLocation?.accuracy ?? null, // Use ?? null
+            start_location_accuracy: finalizedWorkdayForSave.startLocation?.accuracy || null, // Send number or null
             end_location_latitude: finalizedWorkdayForSave.endLocation?.latitude,
             end_location_longitude: finalizedWorkdayForSave.endLocation?.longitude,
  end_location_timestamp: finalizedWorkdayForSave.endLocation?.timestamp ?? null, // Send number or null
@@ -584,7 +584,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
                 details: event.details || null, // Ensure null if undefined
                 location_latitude: event.location?.latitude || null,
                 location_longitude: event.location?.longitude || null,
- location_timestamp: event.location?.timestamp || null, // Send number or null
+ location_timestamp: event.location?.timestamp || null, // Send number or null, corrected from ISO string
                 location_accuracy: event.location?.accuracy ?? null, // Use ?? null
  }))
             console.log("Data being sent for events insert:", eventsToInsert); // Log the specific data object
