@@ -465,7 +465,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
                 jobId: job.id || undefined,
                 details: `Trabajo completado: ${job.description || ''}. Resumen: ${job.summary || ''}. IA: ${job.aiSummary || 'N/A'}`,
                 location: sanitizeLocationPoint(job.endLocation) ?? sanitizeLocationPoint(job.startLocation) ?? undefined,
-            };
+            }),
  }),
 
         finalizedWorkdayForSave.events = finalizedWorkdayForSave.events.map(event => ({ // Map the copied events
