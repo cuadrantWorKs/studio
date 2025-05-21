@@ -479,15 +479,15 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
         console.log("Supabase client available. Proceeding with save.");
         // Supabase client doesn't have a built-in transaction API like Firestore's batched writes.
         // We'll perform inserts sequentially. If any fail, we'll log the error.
-        // A more robust solution would be to use a Supabase function (RPC) to handle the atomic insert.
+        // A more robust solution would be to use a Supabase function (RPC) to handle the atomic inserts.
 
         // 1. Insert Workday
         console.log("Attempting to upsert workday in Supabase");
-        // Data mapping to Supabase schema (assuming column names are snake_case)
         const workdayDataForDb = {
             id: finalizedWorkdayForSave.id, // Ensure ID is used for upsert
             user_id: finalizedWorkdayForSave.userId,
             date: finalizedWorkdayForSave.date,
+            // Convert timestamps to ISO strings for Supabase
             start_time: new Date(finalizedWorkdayForSave.startTime).toISOString(), // Convert timestamp to ISO string
             end_time: finalizedWorkdayForSave.endTime ? new Date(finalizedWorkdayForSave.endTime).toISOString() : null, // Convert timestamp to ISO string or null
             status: finalizedWorkdayForSave.status,
@@ -507,6 +507,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
         if (workdayError) throw workdayError;
         console.log("Workday upsert successful");
 
+        // Temporarily commenting out inserts other than location history to isolate the build issue
         // 2. Insert Jobs - Supabase insert can take an array
         console.log("Preparing jobs data for insert:", finalizedWorkdayForSave.jobs);
         if (finalizedWorkdayForSave.jobs?.length > 0) {
@@ -577,7 +578,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
             if (eventsError) throw eventsError;
             console.log("Events insert successful");
         } */
-
+// Temporarily commenting out inserts other than location history to isolate the build issue
         // 5. Insert Location History - Supabase insert can take an array
         // Temporarily commented out for debugging
         if (finalizedWorkdayForSave.locationHistory?.length > 0) {
