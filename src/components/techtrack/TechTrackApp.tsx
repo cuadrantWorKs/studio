@@ -140,7 +140,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
       const newEvent: TrackingEvent = {
         id: crypto.randomUUID(),
         type,
-        timestamp: Date.now(), // Timestamp will be converted to ISO string for DB
+        timestamp: Date.now(), // Keep as number (epoch milliseconds)
         jobId,
         details,
  location: eventLocation ?? undefined, // Ensure undefined if null
@@ -489,11 +489,11 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
             user_id: finalizedWorkdayForSave.userId,
             date: finalizedWorkdayForSave.date,
             // Convert timestamps to ISO strings for Supabase, handle null
-            start_time: finalizedWorkdayForSave.startTime ? new Date(finalizedWorkdayForSave.startTime).toISOString() : null, // Handle undefined
-            end_time: finalizedWorkdayForSave.endTime ? new Date(finalizedWorkdayForSave.endTime).toISOString() : null,
+ start_time: finalizedWorkdayForSave.startTime || null, // Send number (epoch milliseconds) or null
+ end_time: finalizedWorkdayForSave.endTime || null, // Send number (epoch milliseconds) or null
             status: finalizedWorkdayForSave.status,
-            last_new_job_prompt_time: finalizedWorkdayForSave.lastNewJobPromptTime || null,
-            last_job_completion_prompt_time: finalizedWorkdayForSave.lastJobCompletionPromptTime || null,
+ last_new_job_prompt_time: finalizedWorkdayForSave.lastNewJobPromptTime || null, // Send number or null
+ last_job_completion_prompt_time: finalizedWorkdayForSave.lastJobCompletionPromptTime || null, // Send number or null
             current_job_id: finalizedWorkdayForSave.currentJobId,
             start_location_latitude: finalizedWorkdayForSave.startLocation?.latitude,
             start_location_longitude: finalizedWorkdayForSave.startLocation?.longitude,
@@ -502,31 +502,13 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
             end_location_latitude: finalizedWorkdayForSave.endLocation?.latitude,
             end_location_longitude: finalizedWorkdayForSave.endLocation?.longitude,
             end_location_timestamp: finalizedWorkdayForSave.endLocation?.timestamp ? new Date(finalizedWorkdayForSave.endLocation.timestamp).toISOString() : null, // Convert timestamp to ISO string or null
-            end_location_accuracy: finalizedWorkdayForSave.endLocation?.accuracy ?? null, // Use ?? null for number | undefined
+ end_location_accuracy: finalizedWorkdayForSave.endLocation?.accuracy ?? null, // Use ?? null for number | undefined
         }; // Ensure all fields match Supabase schema and nullability
  console.log("Data being sent for workday upsert:", workdayDataForDb); // Log the specific data object HERE
         const { error: workdayError } = await db.from('workdays').upsert(workdayDataForDb, { onConflict: 'id' });
 
-        // Defensive check for potential bigint issues (based on error message)
-        // This iterates through the object being sent for the workday upsert
-        // and checks if any value that looks like a timestamp string is being
-        // sent to a key that might correspond to a bigint column.
-        // Based on the schema visualizer, this shouldn't happen for workdays,
-        // but this is a safety measure.
-        for (const [key, value] of Object.entries(workdayDataForDb)) {
-          if (typeof value === 'string' && value.match(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/)) {
-            // It looks like an ISO timestamp string
-            // We need to check if the corresponding column in the DB is actually bigint.
-            // Since we don't have live schema access here, we'll log a warning.
-            // In a real-world scenario with this persistent error, you would manually
-            // check the database schema or use schema introspection.
-            // If we confirmed a specific key *should* be a bigint, we'd add a specific
-            // conversion here (e.g., value = new Date(value).getTime() if it's epoch).
- console.warn(`Defensive Check: Sending timestamp string "${value}" to potential bigint column "${key}". Please verify Supabase schema for table 'workdays'.`);
-          }
-        }
         if (workdayError) throw workdayError;
-        console.log("Workday upsert successful");
+ console.log("Workday upsert successful"); // Keep this success log
 
         // Temporarily commenting out inserts other than location history to isolate the build issue
         // 2. Insert Jobs - Supabase insert can take an array
@@ -535,17 +517,17 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
             const jobsToInsert = finalizedWorkdayForSave.jobs.map(job => ({
                 id: job.id, // Use ID for upsert if jobs should be unique within a workday
                 workday_id: finalizedWorkdayForSave.id,
-                description: job.description,
-                start_time: job.startTime ? new Date(job.startTime).toISOString() : null, // Ensure timestamp exists
-                end_time: job.endTime ? new Date(job.endTime).toISOString() : null, // Handle undefined
-                summary: job.summary,
-                ai_summary: job.aiSummary || null, // Handle undefined/null
-                status: job.status,
+ description: job.description,
+ start_time: job.startTime || null, // Send number or null
+ end_time: job.endTime || null, // Send number or null
+ summary: job.summary,
+ ai_summary: job.aiSummary || null, // Handle undefined/null
+ status: job.status,
                 start_location_latitude: job.startLocation?.latitude ?? null, // Use ?? null for number | undefined
                 start_location_longitude: job.startLocation?.longitude ?? null, // Use ?? null for number | undefined
-                start_location_timestamp: job.startLocation?.timestamp ? new Date(job.startLocation.timestamp).toISOString() : null, // Convert timestamp to ISO string or null
+ start_location_timestamp: job.startLocation?.timestamp || null, // Send number or null
                 start_location_accuracy: job.startLocation?.accuracy ?? null, // Use ?? null for number | undefined
-                end_location_latitude: job.endLocation?.latitude ?? null, // Use ?? null for number | undefined
+ end_location_latitude: job.endLocation?.latitude ?? null, // Use ?? null for number | undefined
                 end_location_longitude: job.endLocation?.longitude || null,
                 end_location_timestamp: job.endLocation?.timestamp ? new Date(job.endLocation.timestamp).toISOString() : null, // Handle undefined
                 end_location_accuracy: job.endLocation?.accuracy || null,
@@ -562,17 +544,17 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
             const pausesToInsert = finalizedWorkdayForSave.pauseIntervals.map(pause => ({
                 id: pause.id, // Use ID for upsert
                 workday_id: finalizedWorkdayForSave.id,
-                start_time: pause.startTime ? new Date(pause.startTime).toISOString() : null, // Handle undefined
-                end_time: pause.endTime ? new Date(pause.endTime).toISOString() : null,
+ start_time: pause.startTime || null, // Send number or null
+ end_time: pause.endTime || null, // Send number or null
                 start_location_latitude: pause.startLocation?.latitude ?? null, // Use ?? null
                 start_location_longitude: pause.startLocation?.longitude ?? null, // Use ?? null
-                start_location_timestamp: pause.startLocation?.timestamp ? new Date(pause.startLocation.timestamp).toISOString() : null, // Handle undefined
+ start_location_timestamp: pause.startLocation?.timestamp || null, // Send number or null
                 start_location_accuracy: pause.startLocation?.accuracy ?? null, // Use ?? null
                 end_location_latitude: pause.endLocation?.latitude ?? null, // Use ?? null
                 end_location_longitude: pause.endLocation?.longitude || null, // Fixed typo
                 end_location_timestamp: pause.endLocation?.timestamp ? new Date(pause.endLocation.timestamp).toISOString() : null, // Convert timestamp to ISO string or null
                 end_location_accuracy: pause.endLocation?.accuracy || null,
-            }));
+ }));
             console.log(`Attempting to insert ${pausesToInsert.length} pause intervals`);
             const { error: pausesError } = await db.from('pause_intervals').upsert(pausesToInsert, { onConflict: 'id' });
             if (pausesError) throw pausesError;
@@ -586,17 +568,17 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
                 id: event.id,
                 workday_id: finalizedWorkdayForSave.id,
                 type: event.type,
-                timestamp: event.timestamp ? new Date(event.timestamp).toISOString() : null, // Ensure timestamp exists
+ timestamp: event.timestamp || null, // Send number or null
                 job_id: event.jobId || null, // Handle undefined/null
                 details: event.details || null, // Handle undefined/null
                 location_latitude: event.location?.latitude ?? null,
                 location_longitude: event.location?.longitude ?? null, // Fixed typo
-                location_timestamp: event.location?.timestamp ? new Date(event.location.timestamp).toISOString() : null, // Convert timestamp to ISO string or null
+ location_timestamp: event.location?.timestamp || null, // Send number or null
                 location_accuracy: event.location?.accuracy ?? null, // Use ?? null
             }));
             console.log(`Attempting to upsert ${eventsToInsert.length} events`);
             // const { error: eventsError } = await db.from('events').insert(eventsToInsert);
-            // if (eventsError) throw eventsError;
+            // if (eventsError) throw eventsError; // Keep commented out if this caused issues before
             // console.log("Events insert successful");
         }
 // Temporarily commenting out inserts other than location history to isolate the build issue
@@ -608,7 +590,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
                 workday_id: finalizedWorkdayForSave.id, // Use finalizedWorkdayForSave.id here
                 latitude: loc.latitude,
                 longitude: loc.longitude,
-                // Ensure timestamp is saved as an ISO string
+                // Keep location history timestamp as ISO string if that column is timestampz
                 timestamp: loc.timestamp ? new Date(loc.timestamp).toISOString() : null, // Ensure timestamp exists
                 accuracy: loc.accuracy || null,
             }));
@@ -700,7 +682,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
  const newJob: Job = {
  id: crypto.randomUUID(),
  description: currentJobFormData.description,
- startTime: Date.now(),
+ startTime: Date.now(), // Keep as number (epoch milliseconds)
  startLocation: safeCurrentLocation, // Already sanitized
  status: 'active',
  };
