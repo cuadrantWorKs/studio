@@ -421,18 +421,18 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
         finalizedWorkdayForSave.jobs = (finalizedWorkdayForSave.jobs || []).map(job => {
  // Ensure jobs that were active at the end of the day are marked completed and have end times/locations
             const jobStartLoc = sanitizeLocationPoint(job.startLocation);
-            if (!jobStartLoc) {
+ if (!jobStartLoc) {
                 console.error(`CRITICAL: Job ${job.id} being saved with invalid startLocation. Original:`, job.startLocation, "Falling back to dummy location.");
                 // This indicates a problem in job creation logic.
                 // For now, use a dummy location to prevent DB error, but data is compromised.
                 return {
                     ...job,
                     description: job.description || '',
- summary: job.summary || '', // Ensure summary is string
- aiSummary: job.aiSummary || null, // Ensure aiSummary is null or string
+ summary: job.summary || '',
+ aiSummary: job.aiSummary || null,
                     startLocation: { latitude: 0, longitude: 0, timestamp: job.startTime || Date.now(), accuracy: 0 }, // Dummy
                     endLocation: sanitizeLocationPoint(job.endLocation),
- status: job.status || 'completed', // Ensure status is valid
+ status: job.status || 'completed',
  startTime: job.startTime,
  endTime: job.endTime,
                 };
@@ -441,45 +441,46 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
                 ...job,
                 description: job.description || '',
  // If a job was still active when the workday ended, mark it completed
- status: job.status === 'active' ? 'completed' : (job.status || 'completed'),
+ status: job.status === 'active' ? 'completed' : (job.status || 'completed'), // Ensure status is valid
  // If a job was still active when the workday ended, set its end time to the workday's end time
  endTime: job.status === 'active' && !job.endTime ? finalizationTimestamp : (job.endTime || null),
  // If a job was still active, use the workday's end location if the job doesn't have one
  endLocation: job.status === 'active' && !job.endLocation ? (finalEndLocationCandidate || undefined) : (sanitizeLocationPoint(job.endLocation) || undefined),
 
                 // Ensure other fields are correctly formatted or defaulted
-                summary: job.summary || '',
- aiSummary: job.aiSummary || null, // Ensure aiSummary is null or string
+ summary: job.summary || '', // Ensure summary is string
+ aiSummary: job.aiSummary || null,
                 startLocation: jobStartLoc,
- startTime: job.startTime || null,
+ startTime: job.startTime || null, // Ensure start time is number or null
             };
  });
 
         // Add a JOB_COMPLETED event for each job at its completion time or workday end time
- finalizedWorkdayForSave.events = [
+        finalizedWorkdayForSave.events = [
             ...finalizedWorkdayForSave.events, // Keep existing events
-            ...(finalizedWorkdayForSave.jobs || []).map((job: Job) => ({ // Add a completion event for each job
-                id: crypto.randomUUID(),
-                type: 'JOB_COMPLETED',
-                timestamp: job.endTime || finalizationTimestamp, // Use job's end time or workday end time
-                jobId: job.id || undefined,
+            ...(finalizedWorkdayForSave.jobs || []).map((job: Job) => ({
+ id: crypto.randomUUID(),
+ type: 'JOB_COMPLETED',
+ timestamp: job.endTime || finalizationTimestamp, // Use job's end time or workday end time
+ jobId: job.id || undefined, // Ensure jobId is undefined or string
                 details: `Trabajo completado: ${job.description || ''}. Resumen: ${job.summary || ''}. IA: ${job.aiSummary || 'N/A'}`,
                 location: sanitizeLocationPoint(job.endLocation) ?? sanitizeLocationPoint(job.startLocation) ?? undefined,
-            }),
- )),
-
+            })),
+ ];
+ 
         finalizedWorkdayForSave.events = finalizedWorkdayForSave.events.map(event => ({ // Map the copied events
             ...event, // Include existing event properties
             id: event.id || crypto.randomUUID(), // Ensure ID exists or generate
- details: event.details || null, // Ensure details is null or string
+ details: event.details || null, // Ensure details is null or string or undefined
             location: sanitizeLocationPoint(event.location) ?? undefined,
-        }));
-        
- finalizedWorkdayForSave.pauseIntervals = (finalizedWorkdayForSave.pauseIntervals || []).map((pause) => ({ // Added type for pause
- ...pause,
-            startLocation: sanitizeLocationPoint(pause.startLocation),
-            endLocation: sanitizeLocationPoint(pause.endLocation),
-        }));
+ }));
+ 
+ finalizedWorkdayForSave.pauseIntervals = (finalizedWorkdayForSave.pauseIntervals || []).map((pause) => {
+ return {
+ ...pause, // Include existing pause properties
+ endLocation: sanitizeLocationPoint(pause.endLocation),
+ };
+ });
 
         console.log("Attempting to save workday to Supabase, ID:", finalizedWorkdayForSave.id);
         console.log("Finalized workday object before sending to Supabase:", finalizedWorkdayForSave);
@@ -496,13 +497,13 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
             user_id: finalizedWorkdayForSave.userId,
             date: finalizedWorkdayForSave.date,
             // Timestamps for Workday and Job/Pause intervals are int8 (bigint) in Supabase
- start_time: finalizedWorkdayForSave.startTime || null, // Send number (epoch milliseconds) or null
-            end_time: finalizedWorkdayForSave.endTime || null, // Send number (epoch milliseconds) or null
+ start_time: finalizedWorkdayForSave.startTime || null, // Ensure number or null
+            end_time: finalizedWorkdayForSave.endTime || null, // Ensure number or null
             status: finalizedWorkdayForSave.status,
- last_new_job_prompt_time: finalizedWorkdayForSave.lastNewJobPromptTime || null, // Send number or null
-            last_job_completion_prompt_time: finalizedWorkdayForSave.lastJobCompletionPromptTime || null, // Send number or null
+ last_new_job_prompt_time: finalizedWorkdayForSave.lastNewJobPromptTime || null, // Ensure number or null
+            last_job_completion_prompt_time: finalizedWorkdayForSave.lastJobCompletionPromptTime || null, // Ensure number or null
             current_job_id: finalizedWorkdayForSave.currentJobId || null, // Ensure null if undefined
-            start_location_latitude: finalizedWorkdayForSave.startLocation?.latitude,
+ start_location_latitude: finalizedWorkdayForSave.startLocation?.latitude, // Ensure number or undefined/null
             start_location_longitude: finalizedWorkdayForSave.startLocation?.longitude,
             start_location_timestamp: finalizedWorkdayForSave.startLocation?.timestamp ? new Date(finalizedWorkdayForSave.startLocation.timestamp).toISOString() : null, // Convert timestamp to ISO string or null
             start_location_accuracy: finalizedWorkdayForSave.startLocation?.accuracy ?? null, // Use ?? null
@@ -510,7 +511,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
             end_location_longitude: finalizedWorkdayForSave.endLocation?.longitude,
  end_location_timestamp: finalizedWorkdayForSave.endLocation?.timestamp ?? null, // Send number or null
         }; // Ensure all fields match Supabase schema and nullability
-        console.log("Data being sent for workday upsert:", workdayDataForDb);
+ console.log("Data being sent for workday upsert:", workdayDataForDb);
         const { data: workdayData, error: workdayError } = await db
  .from('workdays')
  .upsert(workdayDataForDb, { onConflict: 'id' });
@@ -584,8 +585,9 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
                 location_latitude: event.location?.latitude || null,
                 location_longitude: event.location?.longitude || null,
  location_timestamp: event.location?.timestamp || null, // Send number or null
-                location_accuracy: event.location?.accuracy ?? null, // Use ?? null                }));
+                location_accuracy: event.location?.accuracy ?? null, // Use ?? null
  }));
+ });
             console.log("Data being sent for events insert:", eventsToInsert); // Log the specific data object
             console.log(`Attempting to upsert ${eventsToInsert.length} events`);
             // const { error: eventsError } = await db.from('events').insert(eventsToInsert);
