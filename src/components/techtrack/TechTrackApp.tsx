@@ -506,7 +506,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
  start_location_latitude: finalizedWorkdayForSave.startLocation?.latitude, // Ensure number or undefined/null
             start_location_longitude: finalizedWorkdayForSave.startLocation?.longitude,
             start_location_timestamp: finalizedWorkdayForSave.startLocation?.timestamp ? new Date(finalizedWorkdayForSave.startLocation.timestamp).toISOString() : null, // Convert timestamp to ISO string or null
-            start_location_accuracy: finalizedWorkdayForSave.startLocation?.accuracy || null, // Send number or null
+ start_location_timestamp: finalizedWorkdayForSave.startLocation?.timestamp || null, // Send number or null
             end_location_latitude: finalizedWorkdayForSave.endLocation?.latitude,
             end_location_longitude: finalizedWorkdayForSave.endLocation?.longitude,
  end_location_timestamp: finalizedWorkdayForSave.endLocation?.timestamp ?? null, // Send number or null
