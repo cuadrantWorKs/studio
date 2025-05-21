@@ -570,7 +570,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
 
         // 4. Insert Events - Supabase insert can take an array
         console.log("Preparing events data for insert:", finalizedWorkdayForSave.events);
-        if (finalizedWorkdayForSave.events?.length > 0) {
+       if (finalizedWorkdayForSave.events?.length > 0) {
  for (const event of finalizedWorkdayForSave.events) {
  if (!event.id || !event.type || !event.timestamp) {
  console.warn("Evento incompleto, se saltea:", event);
@@ -595,12 +595,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
  }
                 location_longitude: event.location?.longitude || null,
  location_timestamp: event.location?.timestamp ?? null, // Send number or null
-                location_accuracy: event.location?.accuracy ?? null,
-            }));
-            console.log("Data being sent for events insert:", eventsToInsert); // Log the specific data object
-            console.log(`Attempting to upsert ${eventsToInsert.length} events`);
-            // const { error: eventsError } = await db.from('events').insert(eventsToInsert);
- }       }
+ } } }
 
         // 5. Insert Location History - Supabase insert can take an array (insert only, not upsert based on schema)
         // Temporarily commented out for debugging
