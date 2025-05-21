@@ -577,7 +577,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
             if (eventsError) throw eventsError;
             console.log("Events insert successful");
         } */
-        
+
         // 5. Insert Location History - Supabase insert can take an array
         // Temporarily commented out for debugging
         if (finalizedWorkdayForSave.locationHistory?.length > 0) {
