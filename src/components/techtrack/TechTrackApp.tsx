@@ -374,6 +374,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
 
   const finalizeWorkdayAndSave = async (workdayAtStartOfEnd: Workday, finalizationTimestamp: number) => {
     setIsSavingToCloud(true); // Ensure this is true at the start of the async operation
+    console.log("Starting finalizeWorkdayAndSave");
     console.log("Starting finalizeWorkdayAndSave for workday ID:", workdayAtStartOfEnd.id);
     
     if (!db) {
@@ -391,6 +392,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
       return;
     }
     
+    const finalizedWorkdayForSave = {...workdayAtStartOfEnd}; // Create a mutable copy
     const endLocationToUse = sanitizeLocationPoint(currentLocation) || 
                              (finalizedWorkdayForSave.locationHistory.length > 0 ? sanitizeLocationPoint(finalizedWorkdayForSave.locationHistory[finalizedWorkdayForSave.locationHistory.length - 1]) : null) ||
                              sanitizeLocationPoint(finalizedWorkdayForSave.startLocation) || 
@@ -478,8 +480,9 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
         // A more robust solution would be to use a Supabase function (RPC) to handle the atomic insert.
 
         // 1. Insert Workday
+        console.log("Attempting to upsert workday in Supabase");
         const workdayDataForDb = {
-            id: finalizedWorkdayForSave.id,
+            id: finalizedWorkdayForSave.id, // Ensure ID is used for upsert
             user_id: finalizedWorkdayForSave.userId,
             date: finalizedWorkdayForSave.date,
             start_time: new Date(finalizedWorkdayForSave.startTime).toISOString(),
@@ -499,10 +502,12 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
         };
         const { error: workdayError } = await db.from('workdays').upsert(workdayDataForDb, { onConflict: 'id' });
         if (workdayError) throw workdayError;
+        console.log("Workday upsert successful");
         
         // 2. Insert Jobs - Supabase insert can take an array
-        if (dataToSave.jobs?.length > 0) {
+        if (finalizedWorkdayForSave.jobs?.length > 0) {
             const jobsToInsert = finalizedWorkdayForSave.jobs.map(job => ({
+                // Use ID for upsert if jobs should be unique within a workday
                 id: job.id,
                 workday_id: finalizedWorkdayForSave.id,
                 description: job.description,
@@ -520,13 +525,15 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
                 end_location_timestamp: job.endLocation?.timestamp || null, // Keep as number
                 end_location_accuracy: job.endLocation?.accuracy || null,
             }));
+             console.log(`Attempting to insert ${jobsToInsert.length} jobs`);
             const { error: jobsError } = await db.from('jobs').insert(jobsToInsert);
             if (jobsError) throw jobsError;
+             console.log("Job insert successful");
         }
         
         // 3. Insert Pause Intervals - Supabase insert can take an array
         if (finalizedWorkdayForSave.pauseIntervals?.length > 0) {
-             const pausesToInsert = finalizedWorkdayForSave.pauseIntervals.map(pause => ({
+            const pausesToInsert = finalizedWorkdayForSave.pauseIntervals.map(pause => ({
                 id: pause.id,
                 workday_id: finalizedWorkdayForSave.id,
                 start_time: pause.startTime,
@@ -540,11 +547,13 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
                 end_location_timestamp: pause.endLocation?.timestamp || null, // Keep as number
                 end_location_accuracy: pause.endLocation?.accuracy || null,
             }));
+             console.log(`Attempting to insert ${pausesToInsert.length} pause intervals`);
             const { error: pausesError } = await db.from('pause_intervals').insert(pausesToInsert);
             if (pausesError) throw pausesError;
+             console.log("Pause intervals insert successful");
         }
 
-         // 4. Insert Events - Supabase insert can take an array
+        // 4. Insert Events - Supabase insert can take an array
         if (dataToSave.events?.length > 0) {
             const eventsToInsert = finalizedWorkdayForSave.events.map(event => ({
                 id: event.id,
@@ -558,13 +567,15 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
                 location_timestamp: event.location?.timestamp || null, // Keep as number
                 location_accuracy: event.location?.accuracy || null,
             }));
-             const { error: eventsError } = await db.from('events').insert(eventsToInsert);
-             if (eventsError) throw eventsError;
+            console.log(`Attempting to insert ${eventsToInsert.length} events`);
+            const { error: eventsError } = await db.from('events').insert(eventsToInsert);
+            if (eventsError) throw eventsError;
+            console.log("Events insert successful");
         }
 
         // 5. Insert Location History - Supabase insert can take an array
         if (finalizedWorkdayForSave.locationHistory?.length > 0) {
-             const locationsToInsert = finalizedWorkdayForSave.locationHistory.map(loc => ({
+            const locationsToInsert = finalizedWorkdayForSave.locationHistory.map(loc => ({
                 id: crypto.randomUUID(),
                 workday_id: dataToSave.id,
                  latitude: loc.latitude,
@@ -573,8 +584,10 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
                  timestamp: loc.timestamp ? new Date(loc.timestamp).toISOString() : null,
                  accuracy: loc.accuracy || null,
              }));
-             const { error: locationsError } = await db.from('locations').insert(locationsToInsert);
-             if (locationsError) throw locationsError;
+            console.log(`Attempting to insert ${locationsToInsert.length} location history points`);
+            const { error: locationsError } = await db.from('locations').insert(locationsToInsert);
+            if (locationsError) throw locationsError;
+            console.log("Location history insert successful");
         }
 
       // All inserts successful, now update local state
@@ -593,7 +606,6 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
       }
 
     } catch (error: any) {
-      console.log("Entering catch block in finalizeWorkdayAndSave");
       console.error("SUPABASE SAVE ERROR: Failed to save workday to Supabase.");
       console.error("Workday ID being saved:", finalizedWorkdayForSave.id);
       console.error("Full error object:", error);
