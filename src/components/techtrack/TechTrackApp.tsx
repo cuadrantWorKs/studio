@@ -471,6 +471,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
     finalizedWorkdayForSave.currentJobId = finalizedWorkdayForSave.currentJobId || null;
 
     console.log("Attempting to save workday to Supabase, ID:", finalizedWorkdayForSave.id);
+    console.log("Finalized workday object before sending to Supabase:", finalizedWorkdayForSave);
 
     try {
         // Use finalizedWorkdayForSave directly
@@ -482,15 +483,14 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
 
         // 1. Insert Workday
         console.log("Attempting to upsert workday in Supabase");
-        console.log("Data being sent for workday upsert:", finalizedWorkdayForSave);
         const workdayDataForDb = {
             id: finalizedWorkdayForSave.id, // Ensure ID is used for upsert
             user_id: finalizedWorkdayForSave.userId,
             date: finalizedWorkdayForSave.date,
-            start_time: new Date(finalizedWorkdayForSave.startTime).toISOString(),
-            end_time: finalizedWorkdayForSave.endTime ? new Date(finalizedWorkdayForSave.endTime).toISOString() : null,
+            start_time: finalizedWorkdayForSave.startTime, // Use numerical timestamp directly
+            end_time: finalizedWorkdayForSave.endTime || null, // Use numerical timestamp directly or null
             status: finalizedWorkdayForSave.status,
-            last_new_job_prompt_time: finalizedWorkdayForSave.lastNewJobPromptTime ? new Date(finalizedWorkdayForSave.lastNewJobPromptTime).toISOString() : null,
+            last_new_job_prompt_time: finalizedWorkdayForSave.lastNewJobPromptTime || null,
             last_job_completion_prompt_time: finalizedWorkdayForSave.lastJobCompletionPromptTime ? new Date(finalizedWorkdayForSave.lastJobCompletionPromptTime).toISOString() : null,
             current_job_id: finalizedWorkdayForSave.currentJobId,
             start_location_latitude: finalizedWorkdayForSave.startLocation?.latitude,
@@ -499,7 +499,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
             start_location_accuracy: finalizedWorkdayForSave.startLocation?.accuracy,
             end_location_latitude: finalizedWorkdayForSave.endLocation?.latitude,
             end_location_longitude: finalizedWorkdayForSave.endLocation?.longitude,
-            end_location_timestamp: finalizedWorkdayForSave.endLocation?.timestamp ? new Date(finalizedWorkdayForSave.endLocation.timestamp).toISOString() : null,
+            end_location_timestamp: finalizedWorkdayForSave.endLocation?.timestamp || null, // Use numerical timestamp directly or null
             end_location_accuracy: finalizedWorkdayForSave.endLocation?.accuracy,
         };
         const { error: workdayError } = await db.from('workdays').upsert(workdayDataForDb, { onConflict: 'id' });
@@ -508,6 +508,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
         
         // 2. Insert Jobs - Supabase insert can take an array
         // Temporarily commented out for debugging
+        // console.log("Preparing jobs data for insert:", finalizedWorkdayForSave.jobs);
         // if (finalizedWorkdayForSave.jobs?.length > 0) {
         //     const jobsToInsert = finalizedWorkdayForSave.jobs.map(job => ({
         //         // Use ID for upsert if jobs should be unique within a workday
@@ -536,6 +537,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
         
         // 3. Insert Pause Intervals - Supabase insert can take an array
         // Temporarily commented out for debugging
+        // console.log("Preparing pause intervals data for insert:", finalizedWorkdayForSave.pauseIntervals);
         // if (finalizedWorkdayForSave.pauseIntervals?.length > 0) {
         //     const pausesToInsert = finalizedWorkdayForSave.pauseIntervals.map(pause => ({
         //         id: pause.id,
@@ -560,6 +562,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
         // 4. Insert Events - Supabase insert can take an array
         // Temporarily commented out for debugging
         /*
+        console.log("Preparing events data for insert:", finalizedWorkdayForSave.events);
         if (finalizedWorkdayForSave.events?.length > 0) {
             const eventsToInsert = finalizedWorkdayForSave.events.map(event => ({
                 id: event.id,
