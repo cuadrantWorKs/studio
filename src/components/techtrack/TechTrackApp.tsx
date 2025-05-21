@@ -586,8 +586,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
                 location_longitude: event.location?.longitude || null,
  location_timestamp: event.location?.timestamp || null, // Send number or null
                 location_accuracy: event.location?.accuracy ?? null, // Use ?? null
- }));
- });
+ }))
             console.log("Data being sent for events insert:", eventsToInsert); // Log the specific data object
             console.log(`Attempting to upsert ${eventsToInsert.length} events`);
             // const { error: eventsError } = await db.from('events').insert(eventsToInsert);
