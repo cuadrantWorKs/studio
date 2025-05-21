@@ -572,30 +572,24 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
         console.log("Preparing events data for insert:", finalizedWorkdayForSave.events);
        if (finalizedWorkdayForSave.events?.length > 0) {
  for (const event of finalizedWorkdayForSave.events) {
- if (!event.id || !event.type || !event.timestamp) {
- console.warn("Evento incompleto, se saltea:", event);
- continue;
- }
  const flatEvent = {
  id: event.id,
- workday_id: finalizedWorkdayForSave.id, // Ensure linking to workday
+ workday_id: finalizedWorkdayForSave.id,
+ job_id: event.jobId ?? null,
  type: event.type,
- timestamp: event.timestamp || null, // Send number or null
- job_id: event.jobId || null, // Ensure null if undefined
- details: event.details || null, // Ensure null if undefined
+ timestamp: event.timestamp,
+ details: event.details ?? null,
  location_latitude: event.location?.latitude ?? null,
  location_longitude: event.location?.longitude ?? null,
- location_timestamp: event.location?.timestamp ?? null, // Send number or null
+ location_timestamp: event.location?.timestamp ?? null,
  location_accuracy: event.location?.accuracy ?? null,
  };
-                console.log("Attempting to insert individual event:", flatEvent);
- const { error: eventError } = await db.from('events').insert(flatEvent);
+ const { error: eventError } = await db.from("events").insert(flatEvent);
  if (eventError) {
  console.error("Error al guardar evento individual:", flatEvent, eventError.message);
  }
-                location_longitude: event.location?.longitude || null,
- location_timestamp: event.location?.timestamp ?? null, // Send number or null
- } } }
+ }
+ }
 
         // 5. Insert Location History - Supabase insert can take an array (insert only, not upsert based on schema)
         // Temporarily commented out for debugging
