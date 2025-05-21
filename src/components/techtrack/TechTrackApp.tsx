@@ -375,6 +375,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
   const finalizeWorkdayAndSave = async (workdayAtStartOfEnd: Workday, finalizationTimestamp: number) => {
     setIsSavingToCloud(true); // Ensure this is true at the start of the async operation
     console.log("Starting finalizeWorkdayAndSave");
+    let finalizedWorkdayForSave: Workday | null = null; // Declare outside try block
     console.log("Starting finalizeWorkdayAndSave for workday ID:", workdayAtStartOfEnd.id);
     
     try {
@@ -390,7 +391,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
             return; // Exit the function
         }
 
-        const finalizedWorkdayForSave: Workday = {...workdayAtStartOfEnd}; // Create a mutable copy and ensure type
+        finalizedWorkdayForSave = {...workdayAtStartOfEnd}; // Assign to the variable declared outside
         const endLocationToUse = sanitizeLocationPoint(currentLocation) ||
                                  (finalizedWorkdayForSave.locationHistory.length > 0 ? sanitizeLocationPoint(finalizedWorkdayForSave.locationHistory[finalizedWorkdayForSave.locationHistory.length - 1]) : null) ||
                                  sanitizeLocationPoint(finalizedWorkdayForSave.startLocation) ||
@@ -472,6 +473,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
         finalizedWorkdayForSave.currentJobId = finalizedWorkdayForSave.currentJobId || null;
 
         console.log("Attempting to save workday to Supabase, ID:", finalizedWorkdayForSave.id);
+        console.log("Data being sent for workday upsert:", workdayDataForDb); // Log the specific data object
         console.log("Finalized workday object before sending to Supabase:", finalizedWorkdayForSave);
 
         console.log("Supabase client available. Proceeding with save.");
@@ -612,7 +614,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
       }
 
     } catch (error: any) {
-      console.error("SUPABASE SAVE ERROR: Failed to save workday to Supabase.");
+      console.error("SUPABASE SAVE ERROR: Failed to save workday to Supabase.", error);
       console.error("Workday ID being saved:", finalizedWorkdayForSave.id);
       console.error("Full error object:", error);
       let errorMessage = "Un error desconocido ocurrió durante el guardado.";
@@ -628,7 +630,10 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
         duration: 20000 
       });
       
-      setWorkday(workdayAtStartOfEnd); // Revert local state to before the finalize attempt
+      // Only revert if finalizedWorkdayForSave was successfully created before the error
+ if (finalizedWorkdayForSave) {
+ setWorkday(workdayAtStartOfEnd); // Revert local state to before the finalize attempt
+ }
 
     } finally { // Always run
       console.log("FINALLY block in finalizeWorkdayAndSave. Setting isSavingToCloud and isLoading to false.");
