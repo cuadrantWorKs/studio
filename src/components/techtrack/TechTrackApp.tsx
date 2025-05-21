@@ -475,6 +475,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
 
     try {
         // Use finalizedWorkdayForSave directly
+ console.log("Data being sent to Supabase for workday upsert (workdayDataForDb):", workdayDataForDb);
  console.log("Supabase client available. Proceeding with save.");
         // Start a transaction or similar mechanism if Supabase supports it directly for multiple related inserts.
         // Supabase client doesn't have a built-in transaction API like Firestore's batched writes.
