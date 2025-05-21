@@ -669,90 +669,169 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
     }
   };
 
-  const handleJobFormSubmit = () => {
+  const handleJobFormSubmit = async () => {
     if (!workday) return;
     const safeCurrentLocation = sanitizeLocationPoint(currentLocation);
 
     if (jobModalMode === 'new') {
-      if (!safeCurrentLocation) {
-        toast({ title: "Ubicación Requerida", description: "No se puede iniciar un nuevo trabajo sin ubicación.", variant: "destructive" });
-        return;
-      }
-      const newJob: Job = {
-        id: crypto.randomUUID(),
-        description: currentJobFormData.description,
-        startTime: Date.now(),
-        startLocation: safeCurrentLocation, // Already sanitized
-        status: 'active',
-      };
-      setWorkday(prev => prev ? ({
-        ...prev,
-        jobs: [...prev.jobs, newJob],
-        currentJobId: newJob.id,
-      }) : null);
-      recordEvent('JOB_START', safeCurrentLocation, newJob.id, `Nuevo trabajo iniciado: ${newJob.description}`);
-      toast({ title: "Nuevo Trabajo Iniciado", description: newJob.description });
-      setIsJobModalOpen(false);
-      setCurrentJobFormData({ description: '', summary: '' });
-      setJobToSummarizeId(null);
+ // ... existing new job logic
+ if (!safeCurrentLocation) {
+ toast({ title: "Ubicación Requerida", description: "No se puede iniciar un nuevo trabajo sin ubicación.", variant: "destructive" });
+ return;
+ }
+ const newJob: Job = {
+ id: crypto.randomUUID(),
+ description: currentJobFormData.description,
+ startTime: Date.now(),
+ startLocation: safeCurrentLocation, // Already sanitized
+ status: 'active',
+ };
+ setWorkday(prev => prev ? ({
+ ...prev,
+ jobs: [...prev.jobs, newJob],
+ currentJobId: newJob.id,
+ }) : null);
+ recordEvent('JOB_START', safeCurrentLocation, newJob.id, `Nuevo trabajo iniciado: ${newJob.description}`);
+ toast({ title: "Nuevo Trabajo Iniciado", description: newJob.description });
+ setIsJobModalOpen(false);
+ setCurrentJobFormData({ description: '', summary: '' });
+ setJobToSummarizeId(null);
     } else if (jobModalMode === 'summary' && jobToSummarizeId) {
-      setAiLoading(prev => ({...prev, summarize: true}));
+ // --- Modified Logic for Job Completion (Non-blocking AI) ---
 
-      let completedWorkdayForSave: Workday | null = null; 
+ // Find the job to update
+ const jobToUpdateIndex = workday.jobs.findIndex(j => j.id === jobToSummarizeId);
+ if (jobToUpdateIndex === -1) {
+ console.error(`Attempted to complete non-existent job with ID: ${jobToSummarizeId}`);
+ toast({ title: "Error Interno", description: "No se encontró el trabajo para completar.", variant: "destructive" });
+ setIsJobModalOpen(false); // Close modal on error
+ setCurrentJobFormData({ description: '', summary: '' });
+ setJobToSummarizeId(null);
+ return;
+ }
 
-      const updateLocalWorkdayStateWithCompletedJob = (aiSummaryValue?: string | null) => {
-        setWorkday(prev => {
+ // Get the job data before updating (this snapshot is primarily for the AI call input)
+ const jobBeforeCompletion = workday.jobs[jobToUpdateIndex];
+
+ // 1. Immediately update local state to mark job as completed with user summary
+ setWorkday(prev => {
           if (!prev) return null;
-          const updatedWorkday = { 
-            ...prev,
-            jobs: prev.jobs.map(j => {
-              if (j.id === jobToSummarizeId) {
-                const jobUpdatePayload: Partial<Job> = {
-                  summary: currentJobFormData.summary || '', // Ensure summary is not undefined
-                  status: 'completed',
-                  endTime: Date.now(),
-                  endLocation: safeCurrentLocation || undefined, 
-                };
-                if (aiSummaryValue) { // Only add aiSummary if it has a value
-                  jobUpdatePayload.aiSummary = aiSummaryValue;
-                }
-                return { ...j, ...jobUpdatePayload } as Job;
-              }
-              return j;
-            }),
-            currentJobId: null, 
-          };
-          completedWorkdayForSave = updatedWorkday; 
-          return updatedWorkday; 
-        });
-      };
+ const updatedJobs = [...prev.jobs];
+ updatedJobs[jobToUpdateIndex] = {
+ ...jobBeforeCompletion, // Use data before AI call
+ summary: currentJobFormData.summary || '', // Ensure user summary is saved
+ status: 'completed',
+ endTime: Date.now(),
+ endLocation: safeCurrentLocation || undefined,
+ // aiSummary will be added later if AI is successful
+ } as Job; // Cast to Job to ensure type correctness
 
+ return {
+            ...prev,
+ jobs: updatedJobs,
+ currentJobId: null, // No current job after completion
+          };
+        });
+
+ // Record the job completion event immediately after local update
+ recordEvent('JOB_COMPLETED', safeCurrentLocation, jobToSummarizeId, `Trabajo completado. Usuario: ${currentJobFormData.summary}`);
+ toast({ title: "Trabajo Completado", description: `Resumen de usuario guardado para el trabajo.` });
+
+ // Close modal and reset form immediately
+ setIsJobModalOpen(false);
+ setCurrentJobFormData({ description: '', summary: '' });
+ setJobToSummarizeId(null);
+
+ // 2. Initiate AI summarization asynchronously (fire-and-forget)
+ // This call does NOT block the rest of the function execution.
+ setAiLoading(prev => ({...prev, summarize: true})); // Indicate AI is working
+ // Use the user's summary for the AI prompt
       summarizeJobDescription({ jobDescription: currentJobFormData.summary || 'N/A' }) // Provide default if empty
         .then(aiRes => {
-          recordEvent('JOB_COMPLETED', safeCurrentLocation, jobToSummarizeId, `Trabajo completado. Usuario: ${currentJobFormData.summary}, IA: ${aiRes.summary}`);
-          toast({ title: "Trabajo Completado", description: `Resumen guardado para el trabajo.` });
-          updateLocalWorkdayStateWithCompletedJob(aiRes.summary);
+ console.log("AI Summarization successful:", aiRes.summary);
+ // 3. Update local state with AI summary opportunistically
+ setWorkday(prev => {
+            if (!prev) return null;
+            const jobIndexForAI = prev.jobs.findIndex(j => j.id === jobToSummarizeId);
+            if (jobIndexForAI === -1) return prev; // Job not found (shouldn't happen if ID is correct)
+            const updatedJobs = [...prev.jobs];
+            updatedJobs[jobIndexForAI] = {
+ ...updatedJobs[jobIndexForAI],
+ aiSummary: aiRes.summary,
+            };
+ // We could also potentially update localStorage here if desired,
+ // but for now, keep it simple and rely on the next cloud sync.
+ return { ...prev, jobs: updatedJobs };
+          });
+ // Optionally show a toast for successful AI summary update
+ // toast({ title: "Resumen de IA Disponible", description: "Se añadió el resumen de IA al trabajo." });
         })
         .catch(err => {
           console.error("AI Error (summarizeJobDescription):", err);
-          toast({ title: "Error de IA", description: "No se pudo generar el resumen de IA. Trabajo guardado sin él.", variant: "destructive" });
-          recordEvent('JOB_COMPLETED', safeCurrentLocation, jobToSummarizeId, `Trabajo completado (falló resumen IA). Usuario: ${currentJobFormData.summary}`);
-          updateLocalWorkdayStateWithCompletedJob(null); 
+ // 3. Handle AI failure - log error, show toast, but don't revert job status
+ toast({ title: "Error de IA", description: "No se pudo generar el resumen de IA para este trabajo.", variant: "destructive" });
+ // The local state already has the user's summary, so no change needed there.
         })
         .finally(() => {
           setAiLoading(prev => ({...prev, summarize: false}));
           setIsJobModalOpen(false); 
 
+ // The modal is already closed, form is reset.
+ // The pendingEndDayAction logic should proceed independently now.
+
+ // 4. Check if End Day action was pending and proceed
+ // This logic is moved here from the original finally block, but
+ // crucially, it now fires regardless of the AI result.
+ // It relies on the local state being updated in step 1.
           setTimeout(() => {
-            if (pendingEndDayAction && completedWorkdayForSave) {
-                initiateEndDayProcess(completedWorkdayForSave); 
+            // Find the most recent state of the completed job
+            // Using a temporary deep copy to try and get the state after the setWorkday call in step 1
+            const updatedWorkdayAfterJobComplete = JSON.parse(JSON.stringify(workday)); // Get latest state snapshot
+            const jobIndex = updatedWorkdayAfterJobComplete.jobs.findIndex(j => j.id === jobToSummarizeId);
+            if(jobIndex > -1) {
+ updatedWorkdayAfterJobComplete.jobs[jobIndex] = {
+ ...updatedWorkdayAfterJobComplete.jobs[jobIndex],
+ summary: currentJobFormData.summary || '',
+ status: 'completed',
+ endTime: Date.now(),
+ endLocation: safeCurrentLocation || undefined,
+ };
+            }
+
+            // This is a bit complex due to async state updates.
+            // A cleaner way might be to pass the _immediately_ updated job state to initiateEndDayProcess
+            // or ensure initiateEndDayProcess always works with the latest available state.
+            // For now, let's rely on the state update in step 1 and let initiateEndDayProcess read the current state.
+            // If pendingEndDayAction is true, and the job was marked complete in step 1, proceed.
+            // We need to check the workday state _after_ the state update in step 1.
+            // A small timeout helps ensure React has a chance to process the state update.
+            // A more robust solution would use a callback form of setWorkday and check the state within it.
+
+            // We need to check the *current* state of the workday in the callback.
+            setWorkday(latestWorkdayState => {
+                if (!latestWorkdayState) return null; // Should not happen here
+                 const jobIsLocallyCompleted = latestWorkdayState.jobs.find(j => j.id === jobToSummarizeId)?.status === 'completed';
+                 if (pendingEndDayAction && jobIsLocallyCompleted) {
+                     console.log("Pending end day action detected and job locally completed. Initiating end day process.");
+                     // Pass the latest state to initiateEndDayProcess
+                     initiateEndDayProcess(latestWorkdayState);
+                     setPendingEndDayAction(false); // Clear the flag once action is initiated
+                 } else if (pendingEndDayAction && !jobIsLocallyCompleted) {
+ // Should not happen if step 1 was successful, but good for debugging
+ console.warn("Pending end day action true, but job not locally completed. Not initiating end day process.");
+                 } else if (!pendingEndDayAction) {
+ // If no pending end day action, this was just a manual job completion
+ console.log("Job completed, no pending end day action.");
+                 }
+                return latestWorkdayState; // Return the state unchanged after the check
+            });
             } else if (!pendingEndDayAction) {
                 setCurrentJobFormData({ description: '', summary: '' });
                 setJobToSummarizeId(null);
             }
           }, 0);
         });
-      return; 
+ return;
     }
   };
 
