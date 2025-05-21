@@ -621,7 +621,12 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
     } catch (error: any) {
       console.error("SUPABASE SAVE ERROR: Failed to save workday to Supabase.", error);
       console.error("Workday ID being saved:", finalizedWorkdayForSave.id);
-      console.error("Full error object:", error);
+      console.error("Full error object:", {
+ code: error.code,
+ details: error.details,
+ hint: error.hint,
+ message: error.message,
+      });
       // The ReferenceError seems to be happening here or immediately after the catch block
       let errorMessage = "Un error desconocido ocurrió durante el guardado en la nube.";
       if (error instanceof Error) {
