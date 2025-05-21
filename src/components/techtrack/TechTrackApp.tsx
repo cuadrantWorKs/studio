@@ -501,7 +501,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
             end_location_timestamp: dataToSave.endLocation?.timestamp ? new Date(dataToSave.endLocation.timestamp).toISOString() : null,
             end_location_accuracy: dataToSave.endLocation?.accuracy,
         };
-        const { error: workdayError } = await db.from('workdays').insert(workdayDataForDb).onConflict('id').update(workdayDataForDb);
+        const { error: workdayError } = await db.from('workdays').upsert(workdayDataForDb, { onConflict: 'id' });
         if (workdayError) throw workdayError;
         
         // 2. Insert Jobs - Supabase insert can take an array
