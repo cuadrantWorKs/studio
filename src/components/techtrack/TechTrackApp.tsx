@@ -570,8 +570,18 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
 
         // 4. Insert Events - Supabase insert can take an array
         console.log("Preparing events data for insert:", finalizedWorkdayForSave.events);
-       if (finalizedWorkdayForSave.events?.length > 0) {
+ if (finalizedWorkdayForSave.events?.length > 0) {
+            let insertFailures = 0;
+            const totalEvents = finalizedWorkdayForSave.events.length;
+
  for (const event of finalizedWorkdayForSave.events) {
+                // Basic validation
+ if (!event.id || !event.type || !event.timestamp) {
+ console.warn("Incomplete event, skipping:", event);
+ insertFailures++;
+ continue;
+                }
+
  const flatEvent = {
  id: event.id,
  workday_id: finalizedWorkdayForSave.id,
@@ -581,9 +591,6 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
  details: event.details ?? null,
  location_latitude: event.location?.latitude ?? null,
  location_longitude: event.location?.longitude ?? null,
- location_timestamp: event.location?.timestamp ?? null,
- location_accuracy: event.location?.accuracy ?? null,
- };
  const { error: eventError } = await db.from("events").insert(flatEvent);
  if (eventError) {
  console.error("Error al guardar evento individual:", flatEvent, eventError.message);
@@ -650,7 +657,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
       });
       
       // Revert local state to the state before the finalization attempt
- if (finalizedWorkdayForSave) {
+ if (finalizedWorkdayForSave && error && error.message) { // Only revert if there was a concrete error
  setWorkday(workdayAtStartOfEnd); // Revert local state to before the finalize attempt using the initial state
  }
 
