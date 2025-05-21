@@ -478,7 +478,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
     console.log("Finalized workday object before sending to Supabase:", finalizedWorkdayForSave);
 
     try {
- console.log("Supabase client available. Proceeding with save.");;
+ console.log("Supabase client available. Proceeding with save.");
         // Start a transaction or similar mechanism if Supabase supports it directly for multiple related inserts.
         // Supabase client doesn't have a built-in transaction API like Firestore's batched writes.
         // We'll perform inserts sequentially. If any fail, we'll log the error.
@@ -486,7 +486,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
 
         // 1. Insert Workday
         console.log("Attempting to upsert workday in Supabase");
- console.log("Data being sent to Supabase for workday upsert (workdayDataForDb):", workdayDataForDb);;
+ console.log("Data being sent to Supabase for workday upsert (workdayDataForDb):", workdayDataForDb);
         const workdayDataForDb = {
             id: finalizedWorkdayForSave.id, // Ensure ID is used for upsert
             user_id: finalizedWorkdayForSave.userId,
@@ -621,7 +621,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
       }
 
     } catch (error: any) {;
- console.log("Entering catch block in finalizeWorkdayAndSave");
+ console.log("Entering catch block in finalizeWorkdayAndSave");;
       console.error("SUPABASE SAVE ERROR: Failed to save workday to Supabase.");
       console.error("Workday ID being saved:", finalizedWorkdayForSave.id);
       console.error("Full error object:", error);
@@ -641,7 +641,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
       setWorkday(workdayAtStartOfEnd); // Revert to the state before attempting to finalize
 
     } finally {
-      console.log("FINALLY block in finalizeWorkdayAndSave. Setting isSavingToCloud and isLoading to false.");;
+      console.log("FINALLY block in finalizeWorkdayAndSave. Setting isSavingToCloud and isLoading to false.");
       setIsSavingToCloud(false);
       setIsLoading(false);
       setPendingEndDayAction(false); 
