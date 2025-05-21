@@ -505,7 +505,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
  end_location_accuracy: finalizedWorkdayForSave.endLocation?.accuracy ?? null, // Use ?? null for number | undefined
         }; // Ensure all fields match Supabase schema and nullability
  console.log("Data being sent for workday upsert:", workdayDataForDb); // Log the specific data object HERE
- const { error: workdayError } = await db.from('workdays').upsert(workdayDataForDb as any, { onConflict: 'id' });
+ console.log("Data being sent for workday upsert:", JSON.stringify(workdayDataForDb)); // Log the specific data object HERE
 
         if (workdayError) throw workdayError;
  console.log("Workday upsert successful"); // Keep this success log
@@ -532,7 +532,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
                 end_location_timestamp: job.endLocation?.timestamp ? new Date(job.endLocation.timestamp).toISOString() : null, // Handle undefined
                 end_location_accuracy: job.endLocation?.accuracy || null,
  }));
-            console.log("Data being sent for jobs insert:", jobsToInsert); // Log the specific data object
+ console.log("Data being sent for jobs insert:", JSON.stringify(jobsToInsert)); // Log the specific data object
             console.log(`Attempting to insert ${jobsToInsert.length} jobs`);
             const { error: jobsError } = await db.from('jobs').upsert(jobsToInsert, { onConflict: 'id' });
             if (jobsError) throw jobsError;
