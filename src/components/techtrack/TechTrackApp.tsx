@@ -367,7 +367,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
     
     try {
         if (!db) {
-            console.error("Database DB instance is not available. Check configuration.");
+            console.error("Database DB instance is not available. Check configuration.", new Error().stack); // Log stack trace
                 toast({title: "Error de Configuración de Base de Datos",
                 description: "No se puede conectar a la base de datos.",
                 variant: "destructive",
@@ -594,16 +594,16 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
  location_timestamp: event.location?.timestamp ?? null,
  location_accuracy: event.location?.accuracy ?? null,
  }; // ← ← ← IMPORTANTE: esta llave cierra el objeto antes del insert
-
+ 
  console.log("Attempting to insert individual event:", flatEvent);
- const { error: eventError } = await db.from("events").insert(flatEvent);
+ // Changed insert to upsert with onConflict: 'id'
  const { error: eventError } = await db.from("events").upsert(flatEvent, { onConflict: 'id' });
  console.error("Error al guardar evento individual:", flatEvent, eventError.message);
  }
  }
  }
 
-        // 5. Insert Location History - Supabase insert can take an array (insert only, not upsert based on schema)
+ // 5. Insert Location History - Supabase insert can take an array
         // Temporarily commented out for debugging
         if (finalizedWorkdayForSave.locationHistory?.length > 0) {
             const locationsToInsert = finalizedWorkdayForSave.locationHistory.map(loc => ({
@@ -617,7 +617,8 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
             }));
             console.log("Data being sent for location history insert:", locationsToInsert); // Log the specific data object
             console.log(`Attempting to insert ${locationsToInsert.length} location history points`);
-            // but location history points should be unique anyway.
+            // Using insert for location history assuming client-side ID generation is not used
+            // and the database is configured with gen_random_uuid() as default for the 'id' column.
             const { error: locationsError } = await db.from('locations').insert(locationsToInsert);
             if (locationsError) throw locationsError;
         }
@@ -639,7 +640,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
         toast({ title: "Error de Resumen", description: "No se pudo calcular el resumen de la jornada.", variant: "destructive" });
       }
 
-    } catch (error: any) {
+    } catch (error) { // Removed type annotation ': any'
       console.error("SUPABASE SAVE ERROR: Failed to save workday to Supabase.", error);
       console.error("Workday ID being saved:", finalizedWorkdayForSave.id);
       console.error("Full error object:", {
@@ -647,7 +648,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
  details: error.details,
  hint: error.hint,
  message: error.message,
-      });
+ });
       // The ReferenceError seems to be happening here or immediately after the catch block
       let errorMessage = "Un error desconocido ocurrió durante el guardado en la nube.";
       if (error instanceof Error) {
@@ -662,7 +663,8 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
       });
       
       // Revert local state to the state before the finalization attempt
- if (finalizedWorkdayForSave && error && error.message) { // Only revert if there was a concrete error
+ // Check if error is an object with a message before attempting to access it
+ if (finalizedWorkdayForSave && typeof error === 'object' && error !== null && 'message' in error) { // Only revert if there was a concrete error
  setWorkday(workdayAtStartOfEnd); // Revert local state to before the finalize attempt using the initial state
  }
 
