@@ -42,8 +42,9 @@ export interface TrackingEvent {
 }
 
 export interface PauseInterval {
-  startTime: number;
-  endTime?: number;
+  id: any;
+  startTime: number | null;
+  endTime?: number | null;
   startLocation?: LocationPoint;
   endLocation?: LocationPoint;
 }
