@@ -673,7 +673,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
         toast({ title: "Error de Resumen", description: "No se pudo calcular el resumen de la jornada.", variant: "destructive" });
       }
 
-    } catch (error: any) {
+    } catch (error: any) {;
       console.error("SUPABASE SAVE ERROR: Failed to save workday to Supabase.", error);
       console.error("Workday ID being saved:", finalizedWorkdayForSave?.id); // Access ID safely
       console.error("Full error object:", {
@@ -705,7 +705,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
       setIsSavingToCloud(false);
       setIsLoading(false); // Ensure loading state is off
       setPendingEndDayAction(false); 
-    }
+    };
   };
 
   const handleEndDay = async () => {
