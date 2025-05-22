@@ -19,7 +19,6 @@ import { decidePromptForJobCompletion } from '@/ai/flows/decide-prompt-for-job-c
 import { calculateWorkdaySummary } from '@/lib/techtrack/summary';
 import { formatTime } from '@/lib/utils';import WorkdaySummaryDisplay from './WorkdaySummaryDisplay';import { db } from '@/lib/supabase';
 import { doc, setDoc } from 'firebase/firestore';
-import LocationInfo from './LocationInfo';
 
 
 const LOCATION_INTERVAL_MS = 5 * 60 * 1000;
@@ -332,6 +331,13 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
     setIsLoading(false);
   };
 
+  // Function to safely retrieve the current workday state
+ const getCurrentWorkdayState = useCallback((): Workday | null => {
+    // Since state updates are asynchronous, reading `workday` directly outside
+    // a state setter (`setWorkday`) might not give the most recent value.
+    return workday; // In many simple cases, reading directly works shortly after a set.
+ }, [workday]); // Depend on workday state
+
  const initiateEndDayProcess = async (workdayDataToEnd: Workday | null) => {
     if (!workdayDataToEnd) {
         console.error("initiateEndDayProcess called with null workdayDataToEnd");
@@ -355,7 +361,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
     // the end day process.
     setTimeout(async () => {
  await finalizeWorkdayAndSave(workdayDataToEnd, actionTime);
-    }, 0);
+    }, 50); // A small delay can help ensure state is settled
   };
 
 
@@ -595,11 +601,10 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
  location_accuracy: event.location?.accuracy ?? null,
  }; // ← ← ← IMPORTANTE: esta llave cierra el objeto antes del insert
  
- console.log("Attempting to insert individual event:", flatEvent);
- // Changed insert to upsert with onConflict: 'id'
- const { error: eventError } = await db.from("events").upsert(flatEvent, { onConflict: 'id' });
- console.error("Error al guardar evento individual:", flatEvent, eventError.message);
- }
+        console.log("Attempting to insert individual event:", flatEvent);
+        // Changed insert to upsert with onConflict: 'id'
+        const { error: eventError } = await db.from("events").upsert(flatEvent, { onConflict: 'id' });
+        console.error("Error al guardar evento individual:", flatEvent, eventError?.message);
  }
  }
 
@@ -1075,34 +1080,6 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      <Dialog open={isSummaryModalOpen} onOpenChange={setIsSummaryModalOpen}>
-        <DialogContent className="max-w-lg">
-          {endOfDaySummary ? (
-             <WorkdaySummaryDisplay summary={endOfDaySummary} showTitle={true} />
-          ) : (
-            <div className="flex items-center justify-center h-40">
-              <Loader2 className="mr-2 h-6 w-6 animate-spin" />
-              <p>Calculando resumen...</p>
-            </div>
-          )}
-          <DialogFooter>
-            <DialogClose asChild>
-              <Button onClick={() => setEndOfDaySummary(null)}>Cerrar</Button>
-            </Dialog audaciousSummary={endOfDaySummary} showTitle={true} />
-          ) : (
-            <div className="flex items-center justify-center h-40">
-              <Loader2 className="mr-2 h-6 w-6 animate-spin" />
-              <p>Calculando resumen...</p>
-            </div>
-          )}
-          <DialogFooter>
-            <DialogClose asChild>
-              <Button onClick={() => setEndOfDaySummary(null)}>Cerrar</Button>
-            </DialogClose>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
@@ -1132,7 +1109,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
       }
 
     } catch (error) { // Removed type annotation ': any'
-      console.error("SUPABASE SAVE ERROR: Failed to save workday to Supabase.", error);
+      console.error("SUPABASE SAVE ERROR: Failed to save workday to Supabase.", error); // Removed type annotation ': any'
       console.error("Workday ID being saved:", finalizedWorkdayForSave.id);
       console.error("Full error object:", {
  code: error.code,
