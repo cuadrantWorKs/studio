@@ -1,6 +1,6 @@
 'use client';
 
-import type { WorkdaySummaryContext, LocationPoint } from '@/lib/techtrack/types';
+import type { WorkdaySummaryContext, LocationPoint, PauseInterval } from '@/lib/techtrack/types';
 import { formatTime } from '@/lib/utils';
 import LocationInfo from './LocationInfo';
 import { CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -21,10 +21,10 @@ export default function WorkdaySummaryDisplay({ summary, showTitle = true }: Wor
           {summary.date && <CardDescription>Summary for {new Date(summary.date).toLocaleDateString('es-ES', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</CardDescription>}
         </CardHeader>
       )}
-      <div className="space-y-1">
-        <LocationInfo location={summary.startLocation} label="Workday Started:" time={summary.startTime} getGoogleMapsLink={getGoogleMapsLink} />
+      <div className="space-y-1 text-sm">        
+        {summary.startLocation && <LocationInfo location={summary.startLocation} label="Workday Started:" time={summary.startTime} getGoogleMapsLink={getGoogleMapsLink} />}
         <LocationInfo location={summary.endLocation} label="Workday Ended:" time={summary.endTime} getGoogleMapsLink={getGoogleMapsLink} />
-      </div>
+</div>
       
       <p><strong>Total Active Time:</strong> {formatTime(summary.totalActiveTime)}</p>
       <p><strong>Total Paused Time:</strong> {formatTime(summary.totalPausedTime)}</p>
@@ -37,8 +37,8 @@ export default function WorkdaySummaryDisplay({ summary, showTitle = true }: Wor
             <li key={job.id}>
               <div><strong>{job.description}</strong> ({job.status})</div>
               <LocationInfo location={job.startLocation} label="Started at" time={job.startTime} getGoogleMapsLink={getGoogleMapsLink}/>
-              {job.endTime && job.endLocation && (
-                 <LocationInfo location={job.endLocation} label="Ended at" time={job.endTime} getGoogleMapsLink={getGoogleMapsLink}/>
+              {(job.endTime !== undefined && job.endLocation !== undefined && job.endLocation !== null) && (
+                 <LocationInfo location={job.endLocation} label="Ended at" time={job.endTime} getGoogleMapsLink={getGoogleMapsLink} />
               )}
               {job.summary && <p className="text-xs text-muted-foreground mt-1">Summary: {job.summary}</p>}
               {job.aiSummary && <p className="text-xs text-muted-foreground">AI Summary: {job.aiSummary}</p>}
@@ -48,12 +48,12 @@ export default function WorkdaySummaryDisplay({ summary, showTitle = true }: Wor
       ) : <p className="text-sm text-muted-foreground">No jobs recorded.</p>}
 
       <h4 className="font-semibold mt-2">Pauses ({summary.pauseIntervals.filter(p => p.endTime).length}):</h4>
-       {summary.pauseIntervals.filter(p => p.endTime).length > 0 ? (
+       {summary.pauseIntervals.filter((p: PauseInterval) => p.endTime !== undefined && p.startTime !== undefined).length > 0 ? (
         <ul className="list-disc pl-5 space-y-2 text-sm">
-          {summary.pauseIntervals.filter(p => p.endTime && p.startTime).map((pause,idx) => (
+          {summary.pauseIntervals.filter((p: PauseInterval) => p.endTime !== undefined && p.startTime !== undefined).map((pause,idx) => (
             <li key={idx}>
-              Paused from {new Date(pause.startTime!).toLocaleTimeString()} for {formatTime(pause.endTime! - pause.startTime!)}
-              <LocationInfo location={pause.startLocation} label="Paused at" getGoogleMapsLink={getGoogleMapsLink} />
+              Paused from {new Date(pause.startTime!).toLocaleTimeString()} for {formatTime(pause.endTime! - pause.startTime!)}              
+              {pause.startLocation !== undefined && pause.startLocation !== null && <LocationInfo location={pause.startLocation} label="Paused at" getGoogleMapsLink={getGoogleMapsLink} />}
               {pause.endLocation && (
                 <LocationInfo location={pause.endLocation} label="Resumed at" getGoogleMapsLink={getGoogleMapsLink}/>
               )}

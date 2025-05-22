@@ -52,8 +52,7 @@ const prompt = ai.definePrompt({
   name: 'decidePromptForJobCompletionPrompt',
   input: {schema: DecidePromptForJobCompletionInputSchema},
   output: {schema: DecidePromptForJobCompletionOutputSchema},
-  prompt: `You are an AI assistant helping to determine if a technician should be prompted to complete their current job, considering how far they have moved and when they were last prompted.
-
+  template: `
   Here's the available information:
   - Distance moved: {{distanceMovedMeters}} meters
   - Last prompted time: {{#if lastJobPromptedTimestamp}}{{{lastJobPromptedTimestamp}}} ({{formatEpoch lastJobPromptedTimestamp}}){{else}}Never{{/if}}
@@ -73,7 +72,7 @@ const prompt = ai.definePrompt({
 
   Here's how the current date/time looks (it's only for display):
   {{formatNow}}
-`,
+  `,
   templateHelpers: {
     formatEpoch: (time: number) => new Date(time).toLocaleString(),
     formatNow: () => new Date().toLocaleString(),
