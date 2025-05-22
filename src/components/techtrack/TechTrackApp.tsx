@@ -615,7 +615,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
                 timestamp: loc.timestamp || null, // Send number or null
                 accuracy: loc.accuracy || null, // Ensure null if undefined
             }));
-            console.log("Data being sent for location history insert:", locationsToInsert); // Log the specific data object            console.log(`Attempting to insert ${locationsToInsert.length} location history points`);
+                console.log("Data being sent for location history insert:", locationsToInsert); // Log the specific data object console.log(`Attempting to insert ${locationsToInsert.length} location history points`);
             // Using insert for location history assuming client-side ID generation is not used
             // and the database is configured with gen_random_uuid() as default for the 'id' column.
             const { error: locationsError } = await db.from('locations').insert(locationsToInsert);
@@ -639,7 +639,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
         toast({ title: "Error de Resumen", description: "No se pudo calcular el resumen de la jornada.", variant: "destructive" });
       }
 
-    } catch (error) { // Removed type annotation ': any'
+    } catch (error) {
       console.error("SUPABASE SAVE ERROR: Failed to save workday to Supabase.", error);
       console.error("Workday ID being saved:", finalizedWorkdayForSave.id);
       console.error("Full error object:", {
@@ -673,7 +673,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
       setIsLoading(false);
       setPendingEndDayAction(false); 
     }
-  };
+  }; // <-- Ensure this is the end of the function declaration
 
   const handleEndDay = async () => {
     if (!workday) {
