@@ -597,7 +597,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
 
  console.log("Attempting to insert individual event:", flatEvent);
  const { error: eventError } = await db.from("events").insert(flatEvent);
- if (eventError) {
+ const { error: eventError } = await db.from("events").upsert(flatEvent, { onConflict: 'id' });
  console.error("Error al guardar evento individual:", flatEvent, eventError.message);
  }
  }
