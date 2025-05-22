@@ -16,8 +16,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 
 import {
-  MapPin, Play, Pause, StopCircle, Briefcase, Clock, CheckCircle,
-  AlertTriangle, Loader2, History, CloudUpload, User, MessageSquareText,
+  MapPin, Play, Pause, StopCircle, Briefcase, Clock, CheckCircle, 
+  AlertTriangle, Loader2, History, CloudUpload, User, MessageSquareText, 
   Ban, MapPinned, Label as LabelIcon
 } from 'lucide-react';
 
@@ -707,9 +707,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
       setIsLoading(false); // Ensure loading state is off
       setPendingEndDayAction(false);
     }
-  }
 
-  const handleEndDay = async () => {
     if (!workday) {
         toast({ title: "Error", description: "No se puede finalizar el día sin una jornada activa.", variant: "destructive" });
         return;
