@@ -3,7 +3,7 @@
 import type { WorkdaySummaryContext, LocationPoint } from '@/lib/techtrack/types';
 import { formatTime } from '@/lib/utils';
 import LocationInfo from './LocationInfo';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 
 interface WorkdaySummaryDisplayProps {
   summary: WorkdaySummaryContext;
