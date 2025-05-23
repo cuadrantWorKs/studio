@@ -1,5 +1,5 @@
-import HistoryView from '@/components/techtrack/HistoryView';
+// import HistoryView from '@/components/techtrack/HistoryView';
 
 export default function HistoryPage() {
-  return <HistoryView />;
+  return (<div>History view is not yet implemented.</div>);
 }
