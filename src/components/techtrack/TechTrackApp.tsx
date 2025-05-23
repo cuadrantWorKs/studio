@@ -146,7 +146,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
           setGeolocationError({ code: error.code, message: error.message });
           toast({ title: "Error de Geolocalización", description: error.message, variant: "destructive" });
         },
-        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+ { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 }
       );
       return () => navigator.geolocation.clearWatch(watchId);
     }
