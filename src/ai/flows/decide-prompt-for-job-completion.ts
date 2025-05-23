@@ -86,7 +86,9 @@ const decidePromptForJobCompletionFlow = ai.defineFlow(
     outputSchema: DecidePromptForJobCompletionOutputSchema,
   },
   async input => {
+    console.log('decidePromptForJobCompletionFlow input:', input);
     const {output} = await prompt(input);
+    console.log('decidePromptForJobCompletionFlow output:', output);
     return output!;
   }
 );

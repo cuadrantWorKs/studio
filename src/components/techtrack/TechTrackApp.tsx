@@ -246,7 +246,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
   }, [workday, currentLocation, toast, recordEvent, currentJob, isJobModalOpen, aiLoading.newJob]);
 
   useEffect(() => {
-    if (workday?.status === 'tracking' && currentJob && currentJob.status === 'active' && currentLocation) {
+    if (!isSavingToCloud && workday?.status === 'tracking' && currentJob && currentJob.status === 'active' && currentLocation) {
         if(aiLoading.jobCompletion || isJobModalOpen) return;
  
         const jobStartLocation = currentJob.startLocation; // Already sanitized LocationPoint
