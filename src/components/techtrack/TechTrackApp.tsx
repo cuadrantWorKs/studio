@@ -717,6 +717,7 @@ finalizedWorkdayForSave.pauseIntervals = (finalizedWorkdayForSave.pauseIntervals
       setPendingEndDayAction(false);
     }
     if (!workday) {
+
         toast({ title: "Error", description: "No se puede finalizar el día sin una jornada activa.", variant: "destructive" });
         return;
     }
@@ -747,6 +748,7 @@ finalizedWorkdayForSave.pauseIntervals = (finalizedWorkdayForSave.pauseIntervals
     setIsJobModalOpen(true);
  setJobToSummarizeId(null); // Ensure jobToSummarizeId is null when starting a new job action
     recordEvent('USER_ACTION', safeCurrentLocation, undefined, "Modal de nuevo trabajo abierto manualmente");
+  
   };
 
   const handleManualCompleteJob = () => {
@@ -762,12 +764,13 @@ finalizedWorkdayForSave.pauseIntervals = (finalizedWorkdayForSave.pauseIntervals
   const handleJobFormSubmit = async (jobId?: string | null) => {
  if (!workday || (jobModalMode === 'summary' && !jobToSummarizeId)) return;
     const safeCurrentLocation = sanitizeLocationPoint(currentLocation);
-
+  
     if (jobModalMode === 'new') {
  if (!safeCurrentLocation) {
  toast({ title: "Ubicación Requerida", description: "No se puede iniciar un nuevo trabajo sin una ubicación válida.", variant: "destructive" });
  return;
  }
+ 
 
  const newJob: Job = { // Define the newJob object here
  id: crypto.randomUUID(),
@@ -791,6 +794,7 @@ finalizedWorkdayForSave.pauseIntervals = (finalizedWorkdayForSave.pauseIntervals
  toast({ title: "Ubicación Requerida", description: "No se puede completar el trabajo sin una ubicación válida.", variant: "destructive" });;
  return;
  }
+
  // This block is for job completion, not new job creation. The newJob object definition was misplaced.
 
  // --- Modified Logic for Job Completion (Non-blocking AI) ---
@@ -1068,24 +1072,22 @@ finalizedWorkdayForSave.pauseIntervals = (finalizedWorkdayForSave.pauseIntervals
     );
   };
 
-  // Final render
-  return (
-    <>
-      <Card className="w-full max-w-md shadow-xl">
-        {/* …el resto de tu JSX… */}
-        <CardFooter className="flex-col space-y-4">
-          <ActionButton />
-          {workday?.status !== 'ended' && (
-            <div className="text-sm text-muted-foreground">
-              Nota: La geolocalización es crucial para el registro. Asegúrate de tener permisos activos en tu dispositivo.
-            </div>
-          )}
-          
-         </CardFooter>
-       </Card>
-
-         {/* …tus <Dialog>… aquí… */}
-
-     </>
-   );
- }
+// Final render
+return (
+  <>
+    <Card className="w-full max-w-md shadow-xl">
+      {/* …el resto de tu JSX… */}
+      <CardFooter className="flex-col space-y-4">
+        <ActionButton />
+        {workday?.status !== 'ended' && (
+          <div className="text-sm text-muted-foreground">
+            Nota: La geolocalización es crucial para el registro. Asegúrate de tener permisos activos en tu dispositivo.
+          </div>
+        )}
+      </CardFooter>
+      </Card>
+  </>
+);
+}   // cierra el return del final render
+}   // cierra el return del handleJobFormSubmit
+}   // cierra export default function TechTrackApp
