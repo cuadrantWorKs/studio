@@ -49,35 +49,38 @@ export async function decidePromptForJobCompletion(
 }
 
 const prompt = ai.definePrompt({
-  name: 'decidePromptForJobCompletionPrompt',
-  input: {schema: DecidePromptForJobCompletionInputSchema},
-  output: {schema: DecidePromptForJobCompletionOutputSchema},
-  template: `
-  Here's the available information:
-  - Distance moved: {{distanceMovedMeters}} meters
-  - Last prompted time: {{#if lastJobPromptedTimestamp}}{{{lastJobPromptedTimestamp}}} ({{formatEpoch lastJobPromptedTimestamp}}){{else}}Never{{/if}}
+  name: 'decidePromptForJobCompletionPrompt', // Keep name at the top level
+  input: { schema: DecidePromptForJobCompletionInputSchema }, // Keep input at the top level
+  output: { schema: DecidePromptForJobCompletionOutputSchema }, // Keep output at the top level
+  config: { // Add the config object
+    template: `
+    Here's the available information:
+    - Distance moved: {{distanceMovedMeters}} meters
+    - Last prompted time: {{#if lastJobPromptedTimestamp}}{{{lastJobPromptedTimestamp}}} ({{formatEpoch lastJobPromptedTimestamp}}){{else}}Never{{/if}}
 
-  Consider these factors:
-  - Prompt if the technician has moved a significant distance (more than 100 meters) since their last known location.
-  - Avoid prompting too frequently. If the technician was prompted recently (e.g., within the last 30 minutes), it might be disruptive to prompt again.
+    Consider these factors:
+    - Prompt if the technician has moved a significant distance (more than 100 meters) since their last known location.
+    - Avoid prompting too frequently. If the technician was prompted recently (e.g., within the last 30 minutes), it might be disruptive to prompt again.
 
-  Reason your decision step by step, and return the answer in JSON format.
+    Reason your decision step by step, and return the answer in JSON format.
 
-  Output:
-  - shouldPrompt: true or false
-  - reason: the explanation for the decision
+    Output:
+    - shouldPrompt: true or false
+    - reason: the explanation for the decision
 
-  You must output a JSON object that conforms to this schema:
-  {{outputSchemaDescription}}
+    You must output a JSON object that conforms to this schema:
+    {{outputSchemaDescription}}
 
-  Here's how the current date/time looks (it's only for display):
-  {{formatNow}}
-  `,
-  templateHelpers: {
-    formatEpoch: (time: number) => new Date(time).toLocaleString(),
-    formatNow: () => new Date().toLocaleString(),
+    Here's how the current date/time looks (it's only for display):
+    {{formatNow}}
+    `, // Move template inside config
+    templateHelpers: { // Move templateHelpers inside config
+      formatEpoch: (time: number) => new Date(time).toLocaleString(),
+      formatNow: () => new Date().toLocaleString(),
+    },
   },
 });
+
 
 const decidePromptForJobCompletionFlow = ai.defineFlow(
   {
@@ -86,6 +89,7 @@ const decidePromptForJobCompletionFlow = ai.defineFlow(
     outputSchema: DecidePromptForJobCompletionOutputSchema,
   },
   async input => {
+    console.log('Entering decidePromptForJobCompletionFlow');
     console.log('decidePromptForJobCompletionFlow input:', input);
     const {output} = await prompt(input);
     console.log('decidePromptForJobCompletionFlow output:', output);

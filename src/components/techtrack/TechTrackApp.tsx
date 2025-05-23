@@ -270,7 +270,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
               setWorkday(prev => prev ? ({ ...prev, lastJobCompletionPromptTime: Date.now() }) : null);
             })
             .catch(err => {
-              console.error("AI Error (decidePromptForJobCompletion):", err);
+            console.error("Client-side AI Error (decidePromptForNewJob):", err);
               toast({ title: "Error de IA", description: "No se pudo verificar la finalización del trabajo.", variant: "destructive" });
             })
             .finally(() => setAiLoading(prev => ({...prev, jobCompletion: false})));
