@@ -18,7 +18,7 @@ import { useToast } from '@/hooks/use-toast';
 import {
   MapPin, Play, Pause, StopCircle, Briefcase, Clock, CheckCircle, 
   AlertTriangle, Loader2, History, CloudUpload, User, MessageSquareText, 
-  Ban, MapPinned, Label as LabelIcon
+  Ban, MapPinned
 } from 'lucide-react';
 
 import { haversineDistance } from '@/lib/techtrack/geometry';
@@ -383,10 +383,9 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
     setIsSavingToCloud(true); // Ensure this is true at the start of the async operation
     console.log("Starting finalizeWorkdayAndSave for workday ID:", workdayAtStartOfEnd?.id);
 
-    let finalizedWorkdayForSave: Workday | null = null; // Declare outside try block and initialize to null
+let finalizedWorkdayForSave!: Workday;
     
     try {
- if (finalizedWorkdayForSave) { // Add null check before accessing properties
         if (!db) {
             console.error("Database DB instance is not available. Check configuration.");
                 toast({title: "Error de Configuración de Base de Datos",
@@ -452,73 +451,87 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
             .map(loc => sanitizeLocationPoint(loc)) // Sanitize each location point
  .filter(loc => loc !== null) as LocationPoint[];
         
-        finalizedWorkdayForSave.jobs = (finalizedWorkdayForSave.jobs || []).map(job => {
- // Ensure jobs that were active at the end of the day are marked completed and have end times/locations
- const jobStartLoc = sanitizeLocationPoint(job.startLocation);
- if (!jobStartLoc) {
- console.error(`CRITICAL: Job ${job.id} being saved with invalid startLocation. Original:`, job.startLocation, "Falling back to dummy location.");
-                // This indicates a problem in job creation logic.
-                // For now, use a dummy location to prevent DB error, but data is compromised.
-                return {
- id: job.id,
-                    description: job.description || '',
- summary: job.summary || '', // Ensure summary is string
- aiSummary: job.aiSummary || null, // Ensure null or string
-                    startLocation: { latitude: 0, longitude: 0, timestamp: job.startTime || Date.now() } as LocationPoint, // Dummy, ensure type compatibility
- endLocation: sanitizeLocationPoint(job.endLocation) ?? null, // Ensure nullability and type
- // If a job was still active when the workday ended, mark it completed
- status: job.status === 'active' ? 'completed' : (job.status || 'completed'), // Ensure status is valid
- // Ensure startTime is always a number
- startTime: job.startTime || Date.now(), // Ensure number
- // If a job was still active when the workday ended, set its end time to the workday's end time
- endTime: job.status === 'active' && !job.endTime ? finalizationTimestamp : (job.endTime || null),
-                };
-            }
- return {
- id: job.id, // Explicitly include id
-                description: job.description || '', // Ensure description is string
- // If a job was still active when the workday ended, mark it completed
- status: job.status === 'active' ? 'completed' : (job.status || 'completed'), // Ensure status is valid
- // Ensure startTime is always a number
- startTime: job.startTime || Date.now(), // Ensure number
- // If a job was still active when the workday ended, set its end time to the workday's end time
- endTime: job.status === 'active' && !job.endTime ? finalizationTimestamp : (job.endTime || null),
- // If a job was still active, use the workday's end location if the job doesn't have one, ensure nullability
- endLocation: job.status === 'active' && !job.endLocation ? (finalEndLocationCandidate || null) : (sanitizeLocationPoint(job.endLocation) || null), // Use the determined final end location or null
-                // Ensure other fields are correctly formatted or defaulted and nullability is handled
- summary: job.summary || '', // Ensure summary is string
- aiSummary: job.aiSummary || null,
- startLocation: jobStartLoc || null, // Ensure nullability
- startTime: job.startTime || null, // Ensure nullability
- };
- });
+// >>> REEMPLAZA DE 453 A 493 ESTE BLOQUE >>> 
+finalizedWorkdayForSave.jobs = (workdayAtStartOfEnd.jobs || []).map((job): Job => {
+  // 1) Sanitizamos el startLocation y forzamos no-null
+  const jobStartLoc = sanitizeLocationPoint(job.startLocation);
+  if (!jobStartLoc) {
+    console.error(`Job ${job.id} tiene startLocation inválido.`, job.startLocation);
+    throw new Error(`Invalid startLocation for job ${job.id}`);
+  }
 
-        // Add a JOB_COMPLETED event for each job at its completion time or workday end time using the finalization timestamp
-        finalizedWorkdayForSave.events = [
-            ...finalizedWorkdayForSave.events, // Keep existing events
-            ...(finalizedWorkdayForSave.jobs || []).map((job: Job) => ({
- id: crypto.randomUUID(),
- type: 'JOB_COMPLETED',
- timestamp: job.endTime || finalizationTimestamp, // Use job's end time or workday end time
- jobId: job.id || null, // Job ID should be string or null
- details: `Trabajo completado: ${job.description || ''}. Resumen: ${job.summary || ''}. IA: ${job.aiSummary || 'N/A'}`, // Fixed unescaped entities
-                location: sanitizeLocationPoint(job.endLocation) || sanitizeLocationPoint(job.startLocation) || null, // Ensure nullability
-            })), // Add new events for completed jobs
- ];
- 
- finalizedWorkdayForSave.events = finalizedWorkdayForSave.events.map(event => ({ // Map the copied events
- ...event, // Include existing event properties (already shallow copied)
-            id: event.id || crypto.randomUUID(), // Ensure ID exists or generate
- details: event.details || null, // Ensure details is string or null
-            location: sanitizeLocationPoint(event.location) || null, // Ensure nullability
- })); // Map the copied events
- 
- finalizedWorkdayForSave.pauseIntervals = (finalizedWorkdayForSave.pauseIntervals || []).map((pause) => {
- return {
- ...pause, // Include existing pause properties (already shallow copied)
- endLocation: sanitizeLocationPoint(pause.endLocation),
- };
- });
+  // 2) Construimos el objeto Job, garantizando startTime/endTime como números
+  return {
+    id: job.id,
+    description: job.description || '',
+    summary: job.summary || '',
+    aiSummary: job.aiSummary ?? undefined,
+    startLocation: jobStartLoc,
+    endLocation: job.endLocation
+      ? sanitizeLocationPoint(job.endLocation)!
+      : finalEndLocationCandidate!,
+    status: job.status === 'active' ? 'completed' : job.status,
+    startTime: job.startTime!,                                // asumo non-null
+    endTime: job.status === 'active' && !job.endTime
+      ? finalizationTimestamp
+      : job.endTime!,                                         // asumo non-null
+  };
+});
+// <<< HASTA AQUÍ (lín. 493) <<<
+
+
+// >>> REEMPLAZA DE 484 A 500 ESTE BLOQUE >>>
+finalizedWorkdayForSave.events = [
+  // Conserva los eventos que ya estaban
+  ...(finalizedWorkdayForSave.events as TrackingEvent[]),
+
+  // Añade un evento JOB_COMPLETED por cada job finalizado
+  ...(finalizedWorkdayForSave.jobs || []).map((job): TrackingEvent => ({
+    id: crypto.randomUUID(),
+    type: 'JOB_COMPLETED',
+    timestamp: job.endTime!, // job.endTime es number garantizado
+    jobId: job.id,
+    details: `Trabajo completado: ${job.description}. Resumen: ${job.summary}`,
+    location: sanitizeLocationPoint(job.endLocation)!,
+  })),
+];
+// <<< HASTA AQUÍ (línea ~500) <<<
+
+// <<< REEMPLAZA TODO ESTO >>>
+//
+// 1) Map your existing events into a proper TrackingEvent[]
+const existingEvents: TrackingEvent[] = (finalizedWorkdayForSave.events || []).map((e) => ({
+  id:       e.id || crypto.randomUUID(),
+  type:     e.type,
+  timestamp:e.timestamp,
+  jobId:    e.jobId ?? undefined,
+  details:  e.details ?? undefined,
+  location: e.location ?? undefined,
+}));
+
+// 2) Build your JOB_COMPLETED events
+const completedEvents: TrackingEvent[] = (finalizedWorkdayForSave.jobs || []).map((job) => ({
+  id:       crypto.randomUUID(),
+  type:     'JOB_COMPLETED',
+  timestamp: job.endTime ?? finalizationTimestamp,
+  jobId:    job.id,
+  details:  `Trabajo completado: ${job.description}. Resumen: ${job.summary}. IA: ${job.aiSummary ?? 'N/A'}`,
+  location: job.endLocation ?? job.startLocation ?? undefined,
+}));
+
+// 3) Overwrite events once, combining both lists
+finalizedWorkdayForSave.events = [
+  ...existingEvents,
+  ...completedEvents,
+];
+// HASTA AQUÍ >>>
+// ─── REPLACE the old pauseIntervals block with this ───
+finalizedWorkdayForSave.pauseIntervals = (finalizedWorkdayForSave.pauseIntervals || []).map((pause) => ({
+  ...pause,  // keep id, startTime, endTime, etc.
+  startLocation: sanitizeLocationPoint(pause.startLocation) ?? undefined,
+  endLocation:   sanitizeLocationPoint(pause.endLocation)   ?? undefined,
+}));
+// ───────────────────────────────────────────────────────
 
         console.log("Attempting to save workday to Supabase, ID:", finalizedWorkdayForSave.id);
         console.log("Finalized workday object before sending to Supabase:", finalizedWorkdayForSave);
@@ -587,7 +600,6 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
 
         // 3. Insert Pause Intervals - Supabase insert can take an array
         console.log("Preparing pause intervals data for insert:", finalizedWorkdayForSave.pauseIntervals);
- if (finalizedWorkdayForSave) { // Add null check
         if (finalizedWorkdayForSave.pauseIntervals?.length > 0) {
  const pausesToInsert = finalizedWorkdayForSave.pauseIntervals.map(pause => ({
                 id: pause.id, // Use ID for upsert
@@ -611,7 +623,6 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
             if (pausesError) throw pausesError;
             console.log("Pause intervals upsert successful");
  }
-        }
 
         // 4. Insert Events - Supabase insert can take an array
         console.log("Preparing events data for insert:", finalizedWorkdayForSave.events);
@@ -638,7 +649,6 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
         // 5. Insert Location History - Supabase insert can take an array
         // Temporarily commented out for debugging
         if (finalizedWorkdayForSave.locationHistory?.length > 0) {
- if (finalizedWorkdayForSave) { // Add null check for finalizedWorkdayForSave
  const locationsToInsert = finalizedWorkdayForSave.locationHistory.map(loc => ({
  // Let Supabase generate the ID for location history if the column is serial/identity or rely on composite primary key
  workday_id: finalizedWorkdayForSave.id, // Use finalizedWorkdayForSave.id here
@@ -655,7 +665,6 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
             const { error: locationsError } = await db.from('locations').insert(locationsToInsert);
             if (locationsError) throw locationsError;
         }
- } // Close null check for finalizedWorkdayForSave
 
       // All inserts successful, now update local state;
       // Use a shallow copy here to avoid issues with React state updates
@@ -675,7 +684,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
       }
 
     } catch (error: any) {
-      console.error("SUPABASE SAVE ERROR: Failed to save workday to Supabase.", error);
+ console.error("SUPABASE SAVE ERROR: Failed to save workday to Supabase.", error);
       console.error("Workday ID being saved:", finalizedWorkdayForSave?.id); // Access ID safely
       console.error("Full error object:", {
  code: (error as any).code, // Cast to any to access code property
@@ -707,7 +716,6 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
       setIsLoading(false); // Ensure loading state is off
       setPendingEndDayAction(false);
     }
-
     if (!workday) {
         toast({ title: "Error", description: "No se puede finalizar el día sin una jornada activa.", variant: "destructive" });
         return;
@@ -728,8 +736,31 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
     }
   };
 
-  const handleJobFormSubmit = async () => {
-    if (!workday || !jobToSummarizeId) return;
+  const handleManualStartNewJob = () => {
+    const safeCurrentLocation = sanitizeLocationPoint(currentLocation);
+    if (!safeCurrentLocation) {
+      toast({ title: "Ubicación Requerida", description: "No se puede iniciar un nuevo trabajo sin una ubicación válida.", variant: "destructive" });
+      return;
+    }
+    setJobModalMode('new');
+    setCurrentJobFormData({ description: '', summary: '' });
+    setIsJobModalOpen(true);
+ setJobToSummarizeId(null); // Ensure jobToSummarizeId is null when starting a new job action
+    recordEvent('USER_ACTION', safeCurrentLocation, undefined, "Modal de nuevo trabajo abierto manualmente");
+  };
+
+  const handleManualCompleteJob = () => {
+    if (!currentJob) return;
+    setJobModalMode('summary');
+    setCurrentJobFormData({ description: currentJob.description || '', summary: '' });
+    setIsJobModalOpen(true);
+ recordEvent('USER_ACTION', sanitizeLocationPoint(currentLocation), currentJob.id, "Modal de completar trabajo abierto manualmente"); // Ensure location is sanitized
+  };
+
+
+
+  const handleJobFormSubmit = async (jobId?: string | null) => {
+ if (!workday || (jobModalMode === 'summary' && !jobToSummarizeId)) return;
     const safeCurrentLocation = sanitizeLocationPoint(currentLocation);
 
     if (jobModalMode === 'new') {
@@ -737,6 +768,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
  toast({ title: "Ubicación Requerida", description: "No se puede iniciar un nuevo trabajo sin una ubicación válida.", variant: "destructive" });
  return;
  }
+
  const newJob: Job = { // Define the newJob object here
  id: crypto.randomUUID(),
  description: currentJobFormData.description,
@@ -756,13 +788,12 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
  setJobToSummarizeId(null); // Reset jobToSummarizeId
     } else if (jobModalMode === 'summary' && jobToSummarizeId) {
  if (!safeCurrentLocation) {
- toast({ title: "Ubicación Requerida", description: "No se puede completar el trabajo sin una ubicación válida.", variant: "destructive" });
+ toast({ title: "Ubicación Requerida", description: "No se puede completar el trabajo sin una ubicación válida.", variant: "destructive" });;
  return;
  }
  // This block is for job completion, not new job creation. The newJob object definition was misplaced.
 
  // --- Modified Logic for Job Completion (Non-blocking AI) ---
-        
  console.log("Handling job completion form submit for job ID:", jobToSummarizeId);
 
  // Find the job to update
@@ -837,9 +868,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
  // The local state already has the user's summary, so no change needed there.
         })
         .finally(() => {
-          setAiLoading(prev => ({...prev, summarize: false}));
 
-          
  // 4. Check if End Day action was pending and proceed
  if (pendingEndDayAction) { // Ensure we only proceed if the flag is still true
  console.log("AI summarize finally block: Pending end day action detected. Checking latest state...");
@@ -862,255 +891,201 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
  return latestWorkdayState; // Always return state
  });
  }
-        });
- return;
+    });
+
+
+
+  const handleEndDay = async () => {
+    if (!workday) {
+        toast({ title: "Error", description: "No se puede finalizar el día sin una jornada activa.", variant: "destructive" });
+        return;
+    }
+    const activeJob = workday.jobs.find(j => j.id === workday.currentJobId && j.status === 'active');
+
+    if (activeJob) {
+ setPendingEndDayAction(true);
+ setJobToSummarizeId(activeJob.id);
+ setJobModalMode('summary');
+ setCurrentJobFormData({ description: activeJob.description || '', summary: '' });
+ setIsJobModalOpen(true);
+ recordEvent('JOB_COMPLETION_PROMPT', currentLocation, activeJob.id, "Prompt al finalizar el día");
+      return; // Stop here, the process will continue after the job form submit
     }
 
-  const handleManualStartNewJob = () => {
-    const safeCurrentLocation = sanitizeLocationPoint(currentLocation);
-    if (!safeCurrentLocation) {
-      toast({ title: "Ubicación Requerida", description: "No se puede iniciar un nuevo trabajo sin una ubicación válida.", variant: "destructive" });
-      return;
+    // If no active job, proceed directly to finalizing the workday
+    if (workday) { // Ensure workday is not null
+ await initiateEndDayProcess(workday);
     }
-    setJobModalMode('new');
-    setCurrentJobFormData({ description: '', summary: '' });
-    setIsJobModalOpen(true);
- setJobToSummarizeId(null); // Ensure jobToSummarizeId is null when starting a new job action
-    recordEvent('USER_ACTION', safeCurrentLocation, undefined, "Modal de nuevo trabajo abierto manualmente");
   };
 
-  const handleManualCompleteJob = () => {
-    if (!currentJob) return;
-    setJobModalMode('summary');
-    setCurrentJobFormData({ description: currentJob.description || '', summary: '' });
-    setIsJobModalOpen(true);
- recordEvent('USER_ACTION', sanitizeLocationPoint(currentLocation), currentJob.id, "Modal de completar trabajo abierto manualmente"); // Ensure location is sanitized
+
+  const LabelIcon: React.FC<{ htmlFor?: string; className?: string; children: React.ReactNode }> = ({ htmlFor, className, children }) => {
+ return (
+ <Label htmlFor={htmlFor} className={`flex items-center ${className}`}>
+ {children === 'Descripción' && <MessageSquareText className="mr-1 h-4 w-4" />}
+ {children === 'Resumen' && <MessageSquareText className="mr-1 h-4 w-4" />}
+ {children}
+ </Label>
+ );
   };
 
-  const CurrentStatusDisplay = () => {
-    if (!workday) return <p className="text-muted-foreground">Presiona "Iniciar Seguimiento" para comenzar tu día.</p>;
-
-    let statusText = "Desconocido";
-    let IconComponent = AlertTriangle;
-
-    switch (workday.status) {
-      case 'idle': statusText = "Listo para Empezar"; IconComponent = Play; break; // Keep as Play icon
-      case 'tracking': statusText = "Seguimiento Activo"; IconComponent = Clock; break;
-      case 'paused': 
-        if (isSavingToCloud && workday.endTime) { 
-             statusText = "Finalizando jornada...";
-             IconComponent = Loader2; 
-        } else {
-            statusText = "Seguimiento Pausado"; IconComponent = Pause; 
-        }
-        break;
-      case 'ended': statusText = "Día Finalizado"; IconComponent = StopCircle; break;
-    }
-    return (
-      <div className="flex items-center space-x-2">
-        <IconComponent className={`h-5 w-5 text-accent ${IconComponent === Loader2 ? 'animate-spin' : ''}`} />
-        <span>{statusText}</span> {/* Use statusText variable */}
-      </div>
-    );
-  };
-
+  // Define ActionButton outside of handleJobFormSubmit
+  // Define ActionButton
   const ActionButton = () => {
     const commonDisabled = isLoading || isSavingToCloud;
     if (!workday || workday.status === 'idle') {
-      return <Button onClick={handleStartTracking} disabled={!currentLocation || commonDisabled || !workday?.status} className="w-full" size="lg"> {/* Add !workday?.status for initial state */}
-        {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Play className="mr-2 h-5 w-5" />} Iniciar Seguimiento
-      </Button>;
+      return (
+        <Button
+          onClick={handleStartTracking}
+          disabled={!currentLocation || commonDisabled}
+          className="w-full"
+          size="lg"
+        >
+          {isLoading
+            ? <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            : <Play className="mr-2 h-5 w-5" />}
+          Iniciar Seguimiento
+        </Button>
+      );
     }
     if (workday.status === 'tracking') {
       return (
         <div className="grid grid-cols-2 gap-4">
-          <Button onClick={handlePauseTracking} variant="outline" disabled={commonDisabled} className="w-full" size="lg">
-            {isLoading && !isSavingToCloud ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Pause className="mr-2 h-5 w-5" />} Pausar
+          <Button
+            onClick={handlePauseTracking}
+            variant="outline"
+            disabled={commonDisabled}
+            className="w-full"
+            size="lg"
+          >
+            {isLoading
+              ? <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              : <Pause className="mr-2 h-5 w-5" />}
+            Pausar
           </Button>
-          <Button onClick={handleEndDay} variant="destructive" disabled={commonDisabled} className="w-full" size="lg">
-             {isSavingToCloud ? <CloudUpload className="mr-2 h-5 w-5 animate-pulse" /> : (isLoading && !isSavingToCloud ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> :<StopCircle className="mr-2 h-5 w-5" />)}
-              Finalizar Día
+          <Button
+            onClick={handleEndDay}
+            variant="destructive"
+            disabled={commonDisabled}
+            className="w-full"
+            size="lg"
+          >
+            {isSavingToCloud
+              ? <CloudUpload className="mr-2 h-5 w-5 animate-pulse" />
+              : <StopCircle className="mr-2 h-5 w-5" />}
+            Finalizar Día
           </Button>
         </div>
       );
     }
     if (workday.status === 'paused') {
-       return (
+      return (
         <div className="grid grid-cols-2 gap-4">
-          <Button onClick={handleResumeTracking} disabled={commonDisabled || !!workday.endTime} className="w-full" size="lg">
-            {isLoading && !isSavingToCloud && !workday.endTime ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Play className="mr-2 h-5 w-5" />} Reanudar
+          <Button
+            onClick={handleResumeTracking}
+            disabled={commonDisabled}
+            className="w-full"
+            size="lg"
+          >
+            {isLoading
+              ? <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              : <Play className="mr-2 h-5 w-5" />}
+            Reanudar
           </Button>
-          <Button onClick={handleEndDay} variant="destructive" disabled={commonDisabled} className="w-full" size="lg">
-            {isSavingToCloud ? <CloudUpload className="mr-2 h-5 w-5 animate-pulse" /> : (isLoading && !isSavingToCloud ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <StopCircle className="mr-2 h-5 w-5" />)}
-             Finalizar Día
+          <Button
+            onClick={handleEndDay}
+            variant="destructive"
+            disabled={commonDisabled}
+            className="w-full"
+            size="lg"
+          >
+            {isSavingToCloud
+              ? <CloudUpload className="mr-2 h-5 w-5 animate-pulse" />
+              : <StopCircle className="mr-2 h-5 w-5" />}
+            Finalizar Día
           </Button>
         </div>
       );
     }
-     if (workday.status === 'ended') {
+    if (workday.status === 'ended') {
       return (
-        <div className="w-full space-y-2">
-            <Button onClick={() => {setWorkday(null); setElapsedTime(0); setEndOfDaySummary(null); setPendingEndDayAction(false);}} variant="secondary" className="w-full" size="lg">Iniciar Nuevo Día</Button>
-        </div>
+        <Button
+          onClick={() => {
+            setWorkday(null);
+            setElapsedTime(0);
+            setEndOfDaySummary(null);
+            setPendingEndDayAction(false);
+          }}
+          variant="secondary"
+          className="w-full"
+          size="lg"
+        >
+          Iniciar Nuevo Día
+        </Button>
       );
     }
     return null;
   };
 
+  // Define CurrentStatusDisplay
+  const CurrentStatusDisplay = () => {
+    if (!workday) {
+      return <p className="text-muted-foreground">Presiona "Iniciar Seguimiento" para comenzar tu día.</p>;
+    }
 
+    let statusText = "Desconocido";
+    let IconComponent = AlertTriangle;
+
+    switch (workday.status) {
+      case 'idle':
+        statusText = "Listo para Empezar";
+        IconComponent = Play;
+        break;
+      case 'tracking':
+        statusText = "Seguimiento Activo";
+        IconComponent = Clock;
+        break;
+      case 'paused':
+        if (isSavingToCloud && workday.endTime) {
+          statusText = "Finalizando jornada...";
+          IconComponent = Loader2;
+        } else {
+          statusText = "Seguimiento Pausado";
+          IconComponent = Pause;
+        }
+        break;
+      case 'ended':
+        statusText = "Día Finalizado";
+        IconComponent = StopCircle;
+        break;
+    }
+
+    return (
+      <div className="flex items-center space-x-2">
+        <IconComponent className={`h-5 w-5 text-accent ${IconComponent === Loader2 ? 'animate-spin' : ''}`} />
+        <span>{statusText}</span>
+      </div>
+    );
+  };
+
+  // Final render
   return (
     <>
       <Card className="w-full max-w-md shadow-xl">
- <CardHeader>
- <div className="flex justify-between items-center space-x-2">
- <div className="flex items-center">
- <Link href="/history" passHref legacyBehavior>
- <Button variant="outline" size="sm" asChild>
- <a href="/history"><History className="mr-1 h-4 w-4" /> Historial Empresa</a>
- </Button>
- </Link>
- <CardDescription className="flex items-center justify-center">
- <User className="mr-1 h-4 w-4 text-muted-foreground"/> Bienvenido, {technicianName}.
- </CardDescription>
- </div>
- <div className="w-auto min-w-[calc(110px+0.5rem)]">
- </div>
- </div>
-        </CardHeader>
- <CardContent className="space-y-6">
- <div className="p-4 border rounded-lg bg-secondary/30">
- <CurrentStatusDisplay />
- {workday && (workday.status === 'tracking' || workday.status === 'paused' || (workday.status === 'ended' && !endOfDaySummary)) && (
- <p className="text-4xl font-mono font-bold text-center mt-2">{formatTime(elapsedTime)}</p> // Corrected formatTime
- )}
- {workday?.status === 'ended' && endOfDaySummary && ( // Check for both status and summary
- <p className="text-sm text-muted-foreground text-center mt-2">Tiempo total activo: {formatTime(endOfDaySummary.totalActiveTime)}</p>
- )}
- </div>
+        {/* …el resto de tu JSX… */}
+        <CardFooter className="flex-col space-y-4">
+          <ActionButton />
+          {workday?.status !== 'ended' && (
+            <div className="text-sm text-muted-foreground">
+              Nota: La geolocalización es crucial para el registro. Asegúrate de tener permisos activos en tu dispositivo.
+            </div>
+          )}
+          
+         </CardFooter>
+       </Card>
 
- {currentLocation && (
- <div className="text-xs text-muted-foreground flex items-center space-x-1">
- <MapPinned className="h-3 w-3" />
- <span>Lat: {currentLocation.latitude.toFixed(4)}, Lon: {currentLocation.longitude.toFixed(4)} (Acc: {(currentLocation.accuracy ?? 0).toFixed(0)}m)</span>
- </div>
- )}
- {geolocationError && <p className="text-xs text-destructive">Error de Geolocalización: {geolocationError.message}</p>}
+         {/* …tus <Dialog>… aquí… */}
 
- {currentJob && currentJob.status === 'active' && (
- <Card className="bg-accent/10">
- <CardHeader className="p-3">
- <CardTitle className="text-sm flex items-center"><Briefcase className="mr-2 h-4 w-4 text-accent"/>Trabajo Actual</CardTitle> {/* Corrected typo in spanish */}
- </CardHeader>
- <CardContent className="p-3 pt-0">
- <p className="text-sm">{currentJob.description}</p>
- {currentJob.startLocation && <LocationInfo location={currentJob.startLocation} label="Iniciado en" time={currentJob.startTime} getGoogleMapsLink={function (location: LocationPoint): string {
-                  throw new Error('Function not implemented.');
-                } } />}
- </CardContent>
- <CardFooter className="p-3">
- <Button onClick={handleManualCompleteJob} size="sm" className="w-full" disabled={isLoading || isSavingToCloud || aiLoading.summarize}>
- <CheckCircle className="mr-2 h-4 w-4" /> Completar Este Trabajo {/* Corrected typo in spanish */}
- </Button>
- </CardFooter>
- </Card>
- )}
-
- {workday?.status === 'tracking' && !currentJob && (
- <Button onClick={handleManualStartNewJob} variant="outline" className="w-full mt-2" disabled={isLoading || isSavingToCloud}>
- <Briefcase className="mr-2 h-4 w-4" /> Iniciar Nuevo Trabajo {/* Corrected typo in spanish */}
- </Button>
- )}
-
- {(aiLoading.newJob || aiLoading.jobCompletion || aiLoading.summarize) && (
- <div className="flex items-center justify-center text-sm text-muted-foreground pt-2">
- <Loader2 className="mr-2 h-4 w-4 animate-spin" />
- <span>IA está pensando...</span>
- </div>
- )}
-
- </CardContent>
- <CardFooter className="flex-col space-y-4">
- <ActionButton />
- {workday?.status !== 'ended' && (
- <div className="text-sm text-muted-foreground">
- <p>
- Nota: La geolocalización es crucial para el registro. Asegúrate de tener permisos activos en tu dispositivo.
- </p>
- </div>
- )}
- </CardFooter>
- </Card>
-
- 
- <Dialog open={isJobModalOpen} onOpenChange={setIsJobModalOpen}>
- <DialogContent>
- <DialogHeader>
- <DialogTitle>{jobModalMode === 'new' ? 'Iniciar Nuevo Trabajo' : 'Completar Trabajo'}</DialogTitle>
- <DialogDescription>
- {jobModalMode === 'new'
- ? 'Ingrese los detalles para el nuevo trabajo.'
- : `Proporcione un resumen para: ${currentJobFormData.description}`}
- </DialogDescription>
- </DialogHeader>
- <div className="space-y-4 py-4">
- {jobModalMode === 'new' ? (
- <div className="grid grid-cols-4 items-center gap-4">
- <LabelIcon htmlFor="jobDescription" className="text-right">Descripción</LabelIcon>
- <Textarea
- id="jobDescription"
- className="col-span-3"
- value={currentJobFormData.description}
- onChange={e => setCurrentJobFormData(prev => ({ ...prev, description: e.target.value }))}
- placeholder="Ej: Reparación de A/C en Calle Falsa 123"
- />
- </div>
- ) : (
- <div className="grid grid-cols-4 items-center gap-4">
- <LabelIcon htmlFor="jobSummary" className="text-right">Resumen</LabelIcon>
- <Textarea // Change this to use the imported Label component
- id="jobSummary"
- className="col-span-3"
- value={currentJobFormData.summary}
- onChange={e => setCurrentJobFormData(prev => ({ ...prev, summary: e.target.value }))}
- placeholder="Ej: Se reemplazó el capacitor y se limpiaron las bobinas."
- />
- </div>
- )}
- </div>
- <DialogFooter>
- <DialogClose asChild>
- <Button variant="outline" onClick={() => { setIsJobModalOpen(false); setJobToSummarizeId(null); }}>
- Cancelar
- </Button>
- </DialogClose>
- <Button onClick={() => handleJobFormSubmit(jobToSummarizeId)} disabled={aiLoading.summarize || isLoading || isSavingToCloud}>
- {jobModalMode === 'new' ? 'Iniciar Trabajo' : 'Completar Trabajo'}
- </Button>
- </DialogFooter>
- </DialogContent>
- </Dialog>
-
- <Dialog open={isSummaryModalOpen} onOpenChange={setIsSummaryModalOpen}>
- <DialogContent className="max-w-lg">
- {endOfDaySummary ? (
- <WorkdaySummaryDisplay summary={endOfDaySummary} showTitle />
- ) : (
- <div className="flex items-center justify-center h-40">
- <Loader2 className="mr-2 h-6 w-6 animate-spin" />
- <p>Calculando resumen...</p>
- </div>
- )}
- <DialogFooter>
- <DialogClose asChild>
- <Button onClick={() => setEndOfDaySummary(null)}>Cerrar</Button>
- </DialogClose>
- </DialogFooter>
- </DialogContent>
- </Dialog>
-
+     </>
+   );
  }
-  </> // Closing the fragment that wraps the entire component's JSX
-  );
- }
-}
-}
