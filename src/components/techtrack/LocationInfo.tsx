@@ -1,16 +1,17 @@
 'use client';
 
-import type { LocationPoint } from '@/lib/techtrack/types';
+import type { LocationPoint, GeolocationError } from '@/lib/techtrack/types';
 import { MapPin } from 'lucide-react';
 
 interface LocationInfoProps {
   location?: LocationPoint;
   label: string;
   time?: number;
+  error?: GeolocationError | null;
   getGoogleMapsLink: (location: LocationPoint) => string;
 }
 
-export default function LocationInfo({ location, label, time, getGoogleMapsLink }: LocationInfoProps) {
+export default function LocationInfo({ location, label, time, error, getGoogleMapsLink }: LocationInfoProps) {
   if (!location) return null;
   return (
     <div className="text-xs mt-1">

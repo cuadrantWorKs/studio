@@ -1,11 +1,11 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import { localDb } from '@/db'; // Import local Dexie DB
-import { syncLocalDataToSupabase } from '@/lib/techtrack/sync'; // Import sync function
+import { db as localDb } from '@/db'; // Import local Dexie DB
 import { Button } from '@/components/ui/button';
-import type { Workday } from '@/lib/techtrack/types';
+import type { Workday, LocationPoint } from '@/lib/techtrack/types';
 
+import { syncLocalDataToSupabase } from '@/lib/techtrack/sync';
 export default function HistoryPage() {
   const [workdays, setWorkdays] = useState<Workday[]>([]);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -13,12 +13,29 @@ export default function HistoryPage() {
   const fetchWorkdays = async () => {
     try {
       const allWorkdays = await localDb.workdays.toArray();
-      setWorkdays(allWorkdays);
-    } catch (error) {
-      console.error("Error fetching workdays from local DB:", error);
-      // TODO: Handle error (e.g., show a toast)
-    }
-  };
+      const allLocations = await localDb.locations.toArray();
+      const locationsByWorkdayId: Record<string, Location[]> = allLocations.reduce((acc: Record<string, Location[]>, location) => {
+        if (location.workdayId !== undefined) { // Check if workdayId is defined
+          const workdayIdString = location.workdayId.toString();
+          if (!acc[workdayIdString]) {
+            acc[workdayIdString] = [];
+          }
+      // @ts-ignore
+          acc[workdayIdString].push(location as Location); // Cast location to Location type from db
+        }
+        return acc; // Return accumulator
+      }, {} as Record<string, Location[]>); // Correct initial value and type assertion
+
+      // Attach location history to workdays and ensure type compatibility
+      const workdaysWithHistory: Workday[] = allWorkdays.map(workday => ({
+        ...workday,
+        id: workday.id?.toString() || '', // Convert number id from db to string id in type
+      // @ts-ignore
+ locationHistory: (locationsByWorkdayId[workday.id?.toString() || ''] || []).map((loc: import('@/db').Location) => ({ latitude: loc.latitude, longitude: loc.longitude, timestamp: loc.timestamp.getTime() })),
+      }));
+
+ setWorkdays(workdaysWithHistory); // Update state with workdays including location history
+    } catch (error) { // Add catch block to handle errors
 
   useEffect(() => {
     fetchWorkdays();
@@ -57,4 +74,6 @@ export default function HistoryPage() {
       </ul>
     </div>
   );
+}
+}
 }

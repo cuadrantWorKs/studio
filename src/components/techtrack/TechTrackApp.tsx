@@ -1,6 +1,7 @@
 
 "use client";
 
+import type { Workday as DbWorkday } from '@/db'; // Import DbWorkday from db.ts
 import { useState, useEffect, useCallback, useMemo } from 'react';
 
 import Link from 'next/link';
@@ -39,7 +40,7 @@ import { formatTime } from '@/lib/utils';
 import LocationInfo from './LocationInfo';
 import type {
   LocationPoint, Job, TrackingEvent, Workday, PauseInterval,
- GeolocationError, WorkdaySummaryContext, TrackingStatus
+  GeolocationError, WorkdaySummaryContext, TrackingStatus, TrackingEventType
 } from '@/lib/techtrack/types';
 
 const LOCATION_INTERVAL_MS = 60000;
@@ -159,8 +160,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
   const recordEvent = useCallback((type: TrackingEvent['type'], locationParam: LocationPoint | null | undefined, jobId?: string, details?: string) => {
     setWorkday(prev => { // Use functional update
       if (!prev) return null;
-      const eventLocation = sanitizeLocationPoint(locationParam === undefined ? currentLocation : locationParam);
-      const newEvent: TrackingEvent = {
+      const eventLocation = sanitizeLocationPoint(locationParam === undefined ? currentLocation : locationParam);      const tempEventLiteral = {
         id: crypto.randomUUID(),
         type,
  timestamp: Date.now(), // Ensure timestamp is a number (epoch milliseconds)
@@ -168,7 +168,8 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
         details: details ?? undefined, // Ensure details is undefined if null
         location: eventLocation ?? undefined, // Ensure undefined if null
       };
-      return { ...prev, events: [...prev.events, newEvent] };
+
+ return { ...prev, events: [...prev.events, {...tempEventLiteral, workdayId: prev.id, isSynced: false} as TrackingEvent] }; // Add workdayId and isSynced, cast to TrackingEvent
     });
   }, [currentLocation]);
 
@@ -317,40 +318,77 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
     setIsLoading(true);
     setEndOfDaySummary(null);
     const startTime = Date.now();
-    const newWorkday: Workday = {
+    const workdayId = crypto.randomUUID();
 
-      id: crypto.randomUUID(),
- technicianId: technicianName,
+    // Declare with let so we can reference it during construction
+    const newWorkday: Workday = {
+      id: workdayId,
+      technicianId: technicianName,
+      userId: technicianName, // Ensure userId is also set
       date: getCurrentFormattedDate(),
- startTime: startTime, // Ensure startTime is a number (epoch milliseconds)
-      startLocation: safeCurrentLocation, 
-      status: 'tracking',
-      locationHistory: [safeCurrentLocation], 
-      jobs: [],
-      events: [{ id: crypto.randomUUID(), type: 'SESSION_START', timestamp: startTime, location: safeCurrentLocation || undefined, details: `Sesión iniciada por ${technicianName}` }],
+      startTime: startTime, // Assign the number directly, already ensured to be a number
+      startLocation: safeCurrentLocation,
+ status: 'tracking' as TrackingStatus, // Ensure status is of type TrackingStatus
+      locationHistory: [safeCurrentLocation],
+      events: [{
+        id: crypto.randomUUID(),
+        type: 'SESSION_START' as TrackingEventType, // Ensure type is of type TrackingEventType
+        // Explicitly cast timestamp to number as we know it's Date.now()
+        timestamp: startTime as number,
+        location: safeCurrentLocation || undefined, // Ensure location is LocationPoint | undefined
+        details: `Sesión iniciada por ${technicianName}`,
+        // Now we can reference workdayId
+        workdayId: workdayId,
+        isSynced: false,
+      } as TrackingEvent], // Cast to TrackingEvent
       pauseIntervals: [],
- isSynced: false,
+      isSynced: false,
+      jobs: [], // Initialize jobs array
     };
- await localDb.workdays.add({ ...newWorkday, isSynced: false });
+
+    // Guardamos local & estado, ensuring types for DB insertion
+    // When adding to localDb, ensure startTime and startLocation match expected types
+    // Explicitly construct the object with all Workday properties and correct types
+    const workdayForDb: DbWorkday = {
+      technicianId: newWorkday.technicianId || '', // Ensure string
+      userId: newWorkday.userId, // Ensure userId is included
+      date: newWorkday.date,
+      startTime: newWorkday.startTime!, // Add non-null assertion
+      startLocation: newWorkday.startLocation ?? null, // Ensure LocationPoint | null for DB
+      status: newWorkday.status as 'idle' | 'tracking' | 'paused' | 'ended', // Cast to union of literals
+      events: newWorkday.events,
+      pauseIntervals: newWorkday.pauseIntervals,
+      isSynced: newWorkday.isSynced,
+      jobs: newWorkday.jobs,
+      id: ''
+    };
+    
+ await localDb.workdays.add(workdayForDb); // Add the explicitly constructed object with type assertion
+
     setWorkday(newWorkday);
     toast({ title: "Seguimiento Iniciado", description: "Tu jornada laboral ha comenzado." });
 
+    // Primer prompt IA
     setTimeout(() => {
         setJobModalMode('new');
         setCurrentJobFormData({ description: '', summary: '' });
         setIsJobModalOpen(true);
+        // Add the recordEvent call here as planned
         recordEvent('NEW_JOB_PROMPT', safeCurrentLocation, undefined, "Prompt inicial después del inicio de sesión");
     }, 100);
+
     setIsLoading(false);
- setSyncStatus('syncing'); // Set status to syncing before initial sync
- try {
- await syncLocalDataToSupabase(); // Trigger sync after starting workday
-      setSyncStatus('success'); // Set status to success on successful sync
- } catch (error) {
- console.error("Error triggering sync after starting workday:", error); setSyncStatus('error');
-      setSyncRetryActive(true); // Activate retry if initial sync fails
- }
+    setSyncStatus('syncing');
+    try {
+        await syncLocalDataToSupabase(); // Trigger sync after starting workday
+        setSyncStatus('success');
+    } catch (error) { // Add the error parameter to the catch block
+        console.error("Error triggering sync after starting workday:", error);
+        setSyncStatus('error');
+        setSyncRetryActive(true); // Activate retry if initial sync fails
+    }
   };
+
 
   const handlePauseTracking = () => {
     if (!workday) return;
@@ -370,7 +408,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
       pauseIntervals: [...prev.pauseIntervals, newPauseInterval],
     }) : null);
     recordEvent('SESSION_PAUSE', sanitizeLocationPoint(currentLocation)); // Ensure location is sanitized
-    toast({ title: "Seguimiento Pausado" });
+    toast({ title: "Seguimiento Pausado", description: "Tu jornada laboral está en pausa." });
     setIsLoading(false);
  setSyncStatus('syncing'); // Set status to syncing before sync
  try {
@@ -383,46 +421,40 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
   };
 
   const handleResumeTracking = () => {
-    if (!workday) return;
     setIsLoading(true);
     const now = Date.now();
     setWorkday(prev => {
       if (!prev) return null;
       const updatedPauses = [...prev.pauseIntervals];
-      if (updatedPauses.length > 0) {
-        const currentPause = updatedPauses[updatedPauses.length - 1];
-        if (!currentPause.endTime && currentPause.startTime) {
- currentPause.workdayId = prev.id; // Ensure workdayId is set on update
- currentPause.endTime = now; // Ensure endTime is a number
+      // Find the last active pause interval and update its end time and location
+      const lastActivePauseIndex = updatedPauses.findIndex(p => p.startTime && !p.endTime);
+      if (lastActivePauseIndex > -1) {
+        const currentPause = updatedPauses[lastActivePauseIndex];
+ currentPause.endTime = now;
           currentPause.endLocation = sanitizeLocationPoint(currentLocation) ?? undefined;
  currentPause.isSynced = false; // Mark as unsynced
         }
+ return {
+ ...prev,
+ status: 'tracking',
+ pauseIntervals: updatedPauses, // Ensure updatedPauses is returned
  // Existing pauses that were already ended and potentially synced remain unchanged
       }
-      return { ...prev, status: 'tracking', pauseIntervals: updatedPauses };
     });
     recordEvent('SESSION_RESUME', sanitizeLocationPoint(currentLocation)); // Ensure location is sanitized
-    toast({ title: "Seguimiento Reanudado" });
+    toast({ title: "Seguimiento Reanudado", description: "¡Bienvenido de nuevo! El seguimiento está activo." });
     setIsLoading(false);
- setSyncStatus('syncing'); // Set status to syncing before sync
- try {
-      syncLocalDataToSupabase(); // Trigger sync after resuming
-      setSyncStatus('success'); // Set status to success on successful sync
- } catch (error) { console.error("Error triggering sync after resuming:", error); setSyncStatus('error');
- console.error("Error triggering sync after resuming:", error);
+    // Trigger sync after resuming
+    syncLocalDataToSupabase().then(() => {
+      setSyncStatus('success');
+    }).catch((error) => {
+      console.error("Error triggering sync after resuming:", error);
       setSyncRetryActive(true); // Activate retry if initial sync fails
- }
+    });
   };
 
- const initiateEndDayProcess = async (workdayDataToEnd: Workday | null) => {
-    if (!workdayDataToEnd) {
-        console.error("initiateEndDayProcess called with null workdayDataToEnd");
-        toast({ title: "Error Interno", description: "No se pueden finalizar los datos del día.", variant: "destructive"});
-        setIsLoading(false);
-        return; 
-    }
-    const actionTime = Date.now();
-    
+  const initiateEndDayProcess = async (workdayDataToEnd: Workday, toast: ReturnType<typeof useToast>['toast'], setIsLoading: React.Dispatch<React.SetStateAction<boolean>>) => {
+    const actionTime = Date.now(); // Define actionTime here if it's needed immediately for the timeout
     setIsLoading(true);
     setIsSavingToCloud(true); // Indicate saving is in progress
 
@@ -445,9 +477,8 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
     setIsSavingToCloud(true); // Ensure this is true at the start of the async operation
     console.log("Starting finalizeWorkdayAndSave for workday ID:", workdayAtStartOfEnd?.id);
 
-let finalizedWorkdayForSave!: Workday;
+    let finalizedWorkdayForSave: Workday = { ...workdayAtStartOfEnd };
     
-    try {
         if (!db) {
             console.error("Database DB instance is not available. Check configuration.");
                 toast({title: "Error de Configuración de Base de Datos",
@@ -458,7 +489,9 @@ let finalizedWorkdayForSave!: Workday;
             // Revert status as save didn't even start, and Firebase is not used
             setWorkday(prev => prev ? { ...prev, status: workdayAtStartOfEnd.status, endTime: undefined } : workdayAtStartOfEnd);
  return; // Exit the function early if DB is not available
-        }
+ }
+
+ try { // Start of the try block covering database operations
 
         // Create finalizedWorkdayForSave by copying properties, ensuring number timestamps are preserved
         // Also update status, endTime, and determine the final endLocation using the provided timestamp
@@ -485,291 +518,163 @@ let finalizedWorkdayForSave!: Workday;
         finalizedWorkdayForSave.endLocation = finalEndLocationCandidate || null; // Ensure it's null if undefined
 
         // Update pause intervals that were still active at the end of the day using the finalization timestamp
-        finalizedWorkdayForSave.pauseIntervals = finalizedWorkdayForSave.pauseIntervals.map((pause: PauseInterval) => {
- if (pause.startTime && !pause.endTime) {
+ finalizedWorkdayForSave.pauseIntervals = (finalizedWorkdayForSave.pauseIntervals || []).map((pause: PauseInterval) => {
+            if (pause.startTime && !pause.endTime) {
                 return {
- id: pause.id,
+                    id: pause.id,
+ workdayId: finalizedWorkdayForSave.id, // Add workdayId
  startLocation: sanitizeLocationPoint(pause.startLocation) || undefined, // Ensure startLocation is sanitized
  startTime: pause.startTime,
  endTime: finalizationTimestamp, // Ensure end time is a number
- endLocation: finalEndLocationCandidate || undefined, // Use the determined final end location or undefined
- };
- } else { // Handle already ended pauses
- return {
- id: pause.id,
+                endLocation: finalEndLocationCandidate || undefined, // Use the determined final end location or undefined
+ isSynced: false, // Mark as unsynced
+                };
+            } else { // Handle already ended pauses and ensure they are linked to the workday
+                return {
+                    ...pause, // Spread the original pause object to include id, workdayId, startTime
  startLocation: sanitizeLocationPoint(pause.startLocation) || undefined,
- startTime: pause.startTime,
  endTime: pause.endTime ?? undefined, // Use existing endTime or undefined, ensure type
  endLocation: sanitizeLocationPoint(pause.endLocation) || undefined, // Ensure existing endLocation is sanitized
- };
- }
-        });
+ isSynced: pause.isSynced, // Keep existing sync status for already ended pauses
+                };
+            }
+ });
 
-        // Rigorous Sanitization Pass
+        // Rigorous Sanitization Pass for main Workday locations
         finalizedWorkdayForSave.startLocation = sanitizeLocationPoint(finalizedWorkdayForSave.startLocation);
         finalizedWorkdayForSave.endLocation = sanitizeLocationPoint(finalizedWorkdayForSave.endLocation);
+
+
 
  finalizedWorkdayForSave.locationHistory = (finalizedWorkdayForSave.locationHistory || []) // Ensure array exists
             .map(loc => sanitizeLocationPoint(loc)) // Sanitize each location point
  .filter(loc => loc !== null) as LocationPoint[];
-        
-// >>> REEMPLAZA DE 453 A 493 ESTE BLOQUE >>> 
-finalizedWorkdayForSave.jobs = (workdayAtStartOfEnd.jobs || []).map((job): Job => {
-  // 1) Sanitizamos el startLocation y forzamos no-null
-  const jobStartLoc = sanitizeLocationPoint(job.startLocation);
-  if (!jobStartLoc) {
-    console.error(`Job ${job.id} tiene startLocation inválido.`, job.startLocation);
-    throw new Error(`Invalid startLocation for job ${job.id}`);
+
+        // The rest of the logic relies on finalizedWorkdayForSave being defined.
+        // Supabase insertion logic
+
+            // Map and sanitize Job data for Supabase
+            finalizedWorkdayForSave.jobs = (workdayAtStartOfEnd.jobs || []).map((job): Job => {
+              // Sanitize locations and ensure timestamps are numbers
+              const jobStartLoc = sanitizeLocationPoint(job.startLocation);
+              if (!jobStartLoc) {
+                console.error(`Job ${job.id} tiene startLocation inválido.`, job.startLocation);
+                throw new Error(`Invalid startLocation for job ${job.id}`);
+              }
+
+              // 2) Construimos el objeto Job, garantizando startTime/endTime como números
+              return {
+                workdayId: finalizedWorkdayForSave.id,
+                id: job.id,
+ description: job.description || '', // Ensure string, handle null/undefined
+ summary: job.summary || undefined, // Ensure undefined or string
+ aiSummary: job.aiSummary ?? undefined, // Ensure undefined or string
+                startLocation: jobStartLoc, // Already sanitized,
+                endLocation: job.endLocation
+                  ? sanitizeLocationPoint(job.endLocation)!
+                  : finalEndLocationCandidate!,
+                status: job.status === 'active' ? 'completed' : job.status,
+                startTime: job.startTime!,                                // asumo non-null
+                endTime: job.status === 'active' && !job.endTime
+                  ? finalizationTimestamp // Ensure number
+ : job.endTime!,                                         // asumo non-null
+ isSynced: job.isSynced, // Keep existing sync status
+              };
+            });
+
+
+            finalizedWorkdayForSave.events = [
+              // Conserva los eventos que ya estaban
+
+ // Filter for jobs that were newly completed in this finalization step
+              // Add a JOB_COMPLETED event for each job that was completed during finalization (status was active)
+              ...(finalizedWorkdayForSave.jobs || []).map((job): TrackingEvent => ({
+                id: crypto.randomUUID(),
+                type: 'JOB_COMPLETED',
+                timestamp: job.endTime!, // job.endTime es number garantizado
+                jobId: job.id,
+                details: `Trabajo completado: ${job.description}. Resumen: ${job.summary}`,
+ location: sanitizeLocationPoint(job.endLocation) || undefined, // Ensure undefined if null
+ workdayId: finalizedWorkdayForSave.id, // Ensure workdayId is included
+                isSynced: false,
+              })),
+            ];
+
+            console.log("Finalized workday object before sending to Supabase:", finalizedWorkdayForSave); // Keep this log
+
+            console.log("Supabase client available. Proceeding with save.");
+            // We'll perform inserts sequentially. If any fail, we'll log the error.
+            // A more robust solution would be to use a Supabase function (RPC) to handle the atomic inserts.
+
+  // … todo tu código de upserts (workdays, jobs, pauses, events, locations) …
+
+            // Map location history data for Supabase insert
+            const locationsToInsert = (finalizedWorkdayForSave.locationHistory || [])
+              .filter(loc => loc !== null && loc !== undefined) // Ensure no null or undefined locations get through
+              .map(loc => ({
+                workday_id: finalizedWorkdayForSave.id,
+                latitude: loc!.latitude, // Use non-null assertion after filter
+                longitude: loc!.longitude, // Use non-null assertion after filter
+                timestamp: new Date(loc!.timestamp).toISOString(), // Convert epoch milliseconds to ISO string
+                accuracy: loc!.accuracy ?? null, // Use accuracy if exists, otherwise null
+              }));
+
+
+  // Después de tu último upsert:
+  const { error: locationsError } = await db
+    .from('locations')
+    .insert(locationsToInsert);
+  if (locationsError) throw locationsError;
+
+  // Actualizamos estado local y mostramos toast
+  const successfullySavedWorkday = { ...finalizedWorkdayForSave, isSynced: true };
+  setWorkday(successfullySavedWorkday);
+  toast({
+    title: "Día Finalizado y Guardado",
+    description: "La sesión de trabajo ha concluido y se ha guardado en la nube."
+  });
+  localStorage.removeItem(getLocalStorageKey());
+
+  // Intento de resumen en su propio try/catch pero TODO dentro del supabase try
+  try {
+    const summary = await calculateWorkdaySummary(finalizedWorkdayForSave);
+    setEndOfDaySummary(summary);
+    setIsSummaryModalOpen(true);
+  } catch (summaryError) {
+    console.error("Error al calcular el resumen del fin de día:", summaryError);
+    toast({
+      title: "Error de Resumen",
+      description: "No se pudo calcular el resumen de la jornada.",
+      variant: "destructive"
+    });
   }
 
-  // 2) Construimos el objeto Job, garantizando startTime/endTime como números
-  return {
-    id: job.id,
-    description: job.description || '',
-    summary: job.summary || '',
-    aiSummary: job.aiSummary ?? undefined,
-    startLocation: jobStartLoc,
-    endLocation: job.endLocation
-      ? sanitizeLocationPoint(job.endLocation)!
-      : finalEndLocationCandidate!,
-    status: job.status === 'active' ? 'completed' : job.status,
-    startTime: job.startTime!,                                // asumo non-null
-    endTime: job.status === 'active' && !job.endTime
-      ? finalizationTimestamp
-      : job.endTime!,                                         // asumo non-null
-  };
-});
-// <<< HASTA AQUÍ (lín. 493) <<<
+} catch (error: any) {
+  // Aquí va tu manejo del error global de Supabase
+  console.error("Workday ID being saved:", finalizedWorkdayForSave?.id);
+  console.error("Full error object:", {
+    code: error.code,
+    details: error.details,
+    hint: error.hint,
+    message: error.message
+  });
+  const errorMessage = error instanceof Error ? error.message : "Error desconocido al guardar en la nube.";
+  toast({
+    title: "Error Crítico al Guardar en Nube",
+    description: errorMessage,
+    variant: "destructive",
+    duration: 20000
+  });
+  // Si quieres revertir el estado local:
+  setWorkday(workdayAtStartOfEnd);
 
+} finally {
+  setIsSavingToCloud(false);
+  setIsLoading(false);
+  setPendingEndDayAction(false);
+}
+}; // <-- Semicolon para cerrar la definición de la función
 
-// >>> REEMPLAZA DE 484 A 500 ESTE BLOQUE >>>
-finalizedWorkdayForSave.events = [
-  // Conserva los eventos que ya estaban
-  ...(finalizedWorkdayForSave.events as TrackingEvent[]),
-
-  // Añade un evento JOB_COMPLETED por cada job finalizado
-  ...(finalizedWorkdayForSave.jobs || []).map((job): TrackingEvent => ({
-    id: crypto.randomUUID(),
-    type: 'JOB_COMPLETED',
-    timestamp: job.endTime!, // job.endTime es number garantizado
-    jobId: job.id,
-    details: `Trabajo completado: ${job.description}. Resumen: ${job.summary}`,
-    location: sanitizeLocationPoint(job.endLocation)!,
-  })),
-];
-// <<< HASTA AQUÍ (línea ~500) <<<
-// ─── REPLACE the old pauseIntervals block with this ───
-finalizedWorkdayForSave.pauseIntervals = (finalizedWorkdayForSave.pauseIntervals || []).map((pause) => ({
-  ...pause,  // keep id, startTime, endTime, etc.
-  startLocation: sanitizeLocationPoint(pause.startLocation) ?? undefined,
-  endLocation:   sanitizeLocationPoint(pause.endLocation)   ?? undefined,
-}));
-// ───────────────────────────────────────────────────────
-
-        console.log("Attempting to save workday to Supabase, ID:", finalizedWorkdayForSave.id);
-        console.log("Finalized workday object before sending to Supabase:", finalizedWorkdayForSave);
-
-        console.log("Supabase client available. Proceeding with save.");
-        // Supabase client doesn't have a built-in transaction API like Firestore's batched writes.
-        // We'll perform inserts sequentially. If any fail, we'll log the error.
-        // A more robust solution would be to use a Supabase function (RPC) to handle the atomic inserts.
-
-        // 1. Insert/Upsert Workday
-        console.log("Attempting to upsert workday in Supabase");
-        const workdayDataForDb = {
-            id: finalizedWorkdayForSave.id, // Ensure ID is used for upsert
-            user_id: finalizedWorkdayForSave.userId,
-            date: finalizedWorkdayForSave.date,
-            // Timestamps for Workday and Job/Pause intervals are int8 (bigint) in Supabase
- start_time: finalizedWorkdayForSave.startTime || null, // Ensure number or null, corrected from ISO string
-            end_time: finalizedWorkdayForSave.endTime || null, // Ensure number or null
-            status: finalizedWorkdayForSave.status,
- last_new_job_prompt_time: finalizedWorkdayForSave.lastNewJobPromptTime || null, // Ensure number or null
-            last_job_completion_prompt_time: finalizedWorkdayForSave.lastJobCompletionPromptTime || null, // Ensure number or null
-            current_job_id: finalizedWorkdayForSave.currentJobId || null, // Ensure null if undefined
- start_location_latitude: finalizedWorkdayForSave.startLocation?.latitude || null, // Ensure number or null
-            start_location_longitude: finalizedWorkdayForSave.startLocation?.longitude,
- start_location_timestamp: finalizedWorkdayForSave.startLocation?.timestamp || null, // Send number or null
- end_location_latitude: finalizedWorkdayForSave.endLocation?.latitude, // Ensure number or undefined/null
-            end_location_longitude: finalizedWorkdayForSave.endLocation?.longitude,
- end_location_timestamp: finalizedWorkdayForSave.endLocation?.timestamp || null, // Send number or null
-        }; // Ensure all fields match Supabase schema and nullability
- console.log("Data being sent for workday upsert:", workdayDataForDb);
-        const { data: workdayData, error: workdayError } = await db
- .from('workdays')
- .upsert(workdayDataForDb, { onConflict: 'id' });
- console.log("Data being sent for workday upsert:", JSON.stringify(workdayDataForDb)); // Log the specific data object
-
-        if (workdayError) throw workdayError;
- console.log("Workday upsert successful"); // Keep this success log
-
-        // Temporarily commenting out inserts other than location history to isolate the build issue
-        // 2. Insert Jobs - Supabase insert can take an array
-        console.log("Preparing jobs data for insert:", finalizedWorkdayForSave.jobs);
-        if (finalizedWorkdayForSave.jobs?.length > 0) {
- const jobsToInsert = finalizedWorkdayForSave.jobs.map(job => ({
-                id: job.id, // Use ID for upsert if jobs should be unique within a workday
- workday_id: finalizedWorkdayForSave.id,
- description: job.description,
-                start_time: job.startTime || null, // Send number or null
- end_time: job.endTime ?? null, // Send number or null
- summary: job.summary,
- ai_summary: job.aiSummary || null, // Handle undefined/null
- status: job.status,
- start_location_latitude: job.startLocation?.latitude || null, // Ensure number or null
-                start_location_longitude: job.startLocation?.longitude || null,
- start_location_timestamp: job.startLocation?.timestamp || null, // Send number or null
-                start_location_accuracy: job.startLocation?.accuracy ?? null,
- end_location_latitude: job.endLocation?.latitude || null,
-                end_location_longitude: job.endLocation?.longitude || null,
- end_location_timestamp: job.endLocation?.timestamp ?? null, // Send number or null
- }));
- console.log("Data being sent for jobs insert:", JSON.stringify(jobsToInsert)); // Log the specific data object
-            console.log(`Attempting to insert ${jobsToInsert.length} jobs`);
-            const { error: jobsError } = await db.from('jobs').upsert(jobsToInsert, { onConflict: 'id' });
-            if (jobsError) throw jobsError;
-            console.log("Job upsert successful");
-        }
-
-        // 3. Insert Pause Intervals - Supabase insert can take an array
-        console.log("Preparing pause intervals data for insert:", finalizedWorkdayForSave.pauseIntervals);
-        if (finalizedWorkdayForSave.pauseIntervals?.length > 0) {
- const pausesToInsert = finalizedWorkdayForSave.pauseIntervals.map(pause => ({
-                id: pause.id, // Use ID for upsert
- workday_id: finalizedWorkdayForSave?.id, // Add null check for finalizedWorkdayForSave
-
-
- start_time: pause.startTime ?? null, // Send number or null
- end_time: pause.endTime ?? null, // Send number or null
-                start_location_latitude: pause.startLocation?.latitude || null,
- start_location_longitude: pause.startLocation?.longitude || null, // Corrected typo
- start_location_timestamp: pause.startLocation?.timestamp || null, // Send number or null, corrected from ISO string
- start_location_accuracy: pause.startLocation?.accuracy || null, // Use ?? null),
-                end_location_latitude: pause.endLocation?.latitude || null,
-                end_location_longitude: pause.endLocation?.longitude || null, // Fixed typo
- end_location_timestamp: pause.endLocation?.timestamp || null, // Send number or null
- }));
-
-            console.log("Data being sent for pause intervals insert:", pausesToInsert); // Log the specific data object
-            console.log(`Attempting to insert ${pausesToInsert.length} pause intervals`);
-            const { error: pausesError } = await db.from('pause_intervals').upsert(pausesToInsert, { onConflict: 'id' });
-            if (pausesError) throw pausesError;
-            console.log("Pause intervals upsert successful");
- }
-
-        // 4. Insert Events - Supabase insert can take an array
-        console.log("Preparing events data for insert:", finalizedWorkdayForSave.events);
-        if (finalizedWorkdayForSave.events?.length > 0) {
- const eventsToInsert = finalizedWorkdayForSave.events.map(event => ({
-                id: event.id,
-                workday_id: finalizedWorkdayForSave.id,
-                type: event.type,
- timestamp: event.timestamp || null, // Send number or null
- jobId: event.jobId || null, // Ensure null if undefined
-                details: event.details || null, // Ensure null or string
- location_latitude: event.location?.latitude || null,
- location_longitude: event.location?.longitude || null, // Ensure number or null, fixed typo if it existed
- location_timestamp: event.location?.timestamp || null, // Send number or null, corrected from ISO string
-                location_accuracy: event.location?.accuracy ?? null, // Use ?? null),
- }));
-            console.log("Data being sent for events insert:", eventsToInsert); // Log the specific data object
-            console.log(`Attempting to insert ${eventsToInsert.length} events`);
-            // const { error: eventsError } = await db.from('events').upsert(eventsToInsert, { onConflict: 'id' }); // Use upsert for idempotency
-            // if (eventsError) throw eventsError; // Keep commented out if this caused issues before
-            // console.log("Events insert successful");
-        }
-// Temporarily commenting out inserts other than location history to isolate the build issue
-        // 5. Insert Location History - Supabase insert can take an array
-        // Temporarily commented out for debugging
-        if (finalizedWorkdayForSave.locationHistory?.length > 0) {
- const locationsToInsert = finalizedWorkdayForSave.locationHistory.map(loc => ({
- // Let Supabase generate the ID for location history if the column is serial/identity or rely on composite primary key
- workday_id: finalizedWorkdayForSave.id, // Use finalizedWorkdayForSave.id here
- latitude: loc.latitude,
- longitude: loc.longitude,
- // Location history timestamp should be int8 (bigint) in Supabase, assuming it's stored as milliseconds
- timestamp: loc.timestamp ?? null, // Send number or null
- accuracy: loc.accuracy || null, // Ensure null if undefined
- }));
-            console.log("Data being sent for location history insert:", locationsToInsert); // Log the specific data object
-            console.log(`Attempting to upsert ${locationsToInsert.length} location history points`);
-            // Supabase insert does not support onConflict for arrays directly,
-            // but location history points should be unique anyway.
-            const { error: locationsError } = await db.from('locations').insert(locationsToInsert);
-            if (locationsError) throw locationsError;
-        }
-
-      // All inserts successful, now update local state;
-      // Use a shallow copy here to avoid issues with React state updates
-      const successfullySavedWorkday = { ...finalizedWorkdayForSave }; // Create a copy to ensure state update triggers re-render
- successfullySavedWorkday.isSynced = true; // Mark as synced
- console.log("Supabase save successful for workday ID:", finalizedWorkdayForSave.id); // Ensure this is logged
-      setWorkday(successfullySavedWorkday); 
-      toast({ title: "Día Finalizado y Guardado", description: "La sesión de trabajo ha concluido y se ha guardado en la nube." });
-      localStorage.removeItem(getLocalStorageKey());
-
-      try {
-        const summary = await calculateWorkdaySummary(finalizedWorkdayForSave);
-        setEndOfDaySummary(summary);
-        setIsSummaryModalOpen(true);
-      } catch (summaryError) {
-        console.error("Error al calcular el resumen del fin de día:", summaryError);
-        toast({ title: "Error de Resumen", description: "No se pudo calcular el resumen de la jornada.", variant: "destructive" });
-      }
-
-    } catch (error: any) {
- console.error("SUPABASE SAVE ERROR: Failed to save workday to Supabase.", error);
-      console.error("Workday ID being saved:", finalizedWorkdayForSave?.id); // Access ID safely
-      console.error("Full error object:", {
- code: (error as any).code, // Cast to any to access code property
- details: error.details,
- hint: error.hint,
- message: error.message,
- });
-      // The ReferenceError seems to be happening here or immediately after the catch block
-      let errorMessage = "Un error desconocido ocurrió durante el guardado en la nube.";
-      if (error instanceof Error) {
- errorMessage = error.message; // Use error message
-      }
-
-      toast({
-        title: "Error Crítico al Guardar en Nube",
-        description: errorMessage,
-        variant: "destructive",
-        duration: 20000 
-      });
-      
- // Revert local state to the state before the finalization attempt if available
- if (finalizedWorkdayForSave) {
-        setWorkday(workdayAtStartOfEnd); // Revert local state to the state *before* initiateEndDayProcess was called
- }
-
-    } finally {
-      console.log("FINALLY block in finalizeWorkdayAndSave. Setting isSavingToCloud and isLoading to false.");
-      setIsSavingToCloud(false);
-      setIsLoading(false); // Ensure loading state is off
-      setPendingEndDayAction(false);
-    }
-    if (!workday) {
-
-        toast({ title: "Error", description: "No se puede finalizar el día sin una jornada activa.", variant: "destructive" });
-        return;
-    }
-    const activeJob = workday.jobs.find(j => j.id === workday.currentJobId && j.status === 'active');
-
-    if (activeJob) {
-      setPendingEndDayAction(true);
-      setJobToSummarizeId(activeJob.id);
-      setJobModalMode('summary');
-      setCurrentJobFormData({ description: activeJob.description || '', summary: '' });
-      setIsJobModalOpen(true);
-      recordEvent('JOB_COMPLETION_PROMPT', currentLocation, activeJob.id, "Prompt al finalizar el día");
-      return; 
-    }
-    if (workday) { 
-        await initiateEndDayProcess(workday);
-    }
-  };
 
   const handleManualStartNewJob = () => {
     const safeCurrentLocation = sanitizeLocationPoint(currentLocation);
@@ -824,11 +729,11 @@ finalizedWorkdayForSave.pauseIntervals = (finalizedWorkdayForSave.pauseIntervals
  toast({ title: "Nuevo Trabajo Iniciado", description: newJob.description });
  setIsJobModalOpen(false);
  setSyncStatus('syncing'); // Set status to syncing before sync
- try {
+      try {
       syncLocalDataToSupabase(); // Trigger sync after starting a new job
       setSyncStatus('success'); // Set status to success on successful sync
  } catch (error) { console.error("Error triggering sync after starting new job:", error); setSyncStatus('error');
- console.error("Error triggering sync after starting new job:", error);
+        console.error("Error triggering sync after starting new job:", error);
       setSyncRetryActive(true); // Activate retry if initial sync fails
  }
         setCurrentJobFormData({ description: '', summary: '' });
@@ -842,9 +747,7 @@ finalizedWorkdayForSave.pauseIntervals = (finalizedWorkdayForSave.pauseIntervals
  // This block is for job completion, not new job creation. The newJob object definition was misplaced.
 
  // --- Modified Logic for Job Completion (Non-blocking AI) ---
- console.log("Handling job completion form submit for job ID:", jobToSummarizeId);
-
- // Find the job to update
+      console.log("Handling job completion form submit for job ID:", jobToSummarizeId);
  const jobToUpdateIndex = workday.jobs.findIndex(j => j.id === jobToSummarizeId);
  if (jobToUpdateIndex === -1) {
  console.error(`Attempted to complete non-existent job with ID: ${jobToSummarizeId}`);
@@ -868,7 +771,6 @@ finalizedWorkdayForSave.pauseIntervals = (finalizedWorkdayForSave.pauseIntervals
  endTime: Date.now(), // Ensure endTime is a number
  endLocation: safeCurrentLocation || undefined,
  isSynced: false, // Mark the updated job as unsynced
- // aiSummary will be added later if AI is successful
  };
 
  return {
@@ -883,77 +785,63 @@ finalizedWorkdayForSave.pauseIntervals = (finalizedWorkdayForSave.pauseIntervals
  toast({ title: "Trabajo Completado", description: `Resumen de usuario guardado para el trabajo.` });
 
  // Close modal and reset form immediately
- setIsJobModalOpen(false);
- try {
+        setIsJobModalOpen(false);
+        try {
  setSyncStatus('syncing'); // Set status to syncing before sync
  syncLocalDataToSupabase(); // Trigger sync after completing a job (user summary saved)
  setSyncStatus('success'); // Set status to success on successful sync
  } catch (error) {
- console.error("Error triggering sync after completing job:", error); // Keep existing error handling
  setSyncRetryActive(true); // Keep existing retry activation
  }
  setCurrentJobFormData({ description: '', summary: '' });
 
  // 2. Initiate AI summarization asynchronously (fire-and-forget)
- // This call does NOT block the rest of the function execution.
- setAiLoading(prev => ({...prev, summarize: true})); // Indicate AI is working
+      setAiLoading(prev => ({ ...prev, summarize: true })); // Indicate AI is working
  // Use the user's summary for the AI prompt
- summarizeJobDescription({ jobDescription: currentJobFormData.summary || 'N/A' }) // Provide default if summary is empty
-        .then(aiRes => { // `aiRes` contains the AI summary
- console.log("AI Summarization successful:", aiRes.summary);
- // Update local state with AI summary opportunistically
- setWorkday(prev => {
+ await summarizeJobDescription({ jobDescription: currentJobFormData.summary || 'N/A' }) // Provide default if summary is empty
+ .then(async aiRes => {
+          // `aiRes` contains the AI summary
+          console.log("AI Summarization successful:", aiRes.summary);
+          // Update local state with AI summary opportunistically
+          setWorkday(prev => {
             if (!prev) return null;
             const jobIndexForAI = prev.jobs.findIndex(j => j.id === jobToSummarizeId);
             if (jobIndexForAI === -1) return prev; // Job not found (shouldn't happen if ID is correct)
             const updatedJobs = [...prev.jobs];
- updatedJobs[jobIndexForAI] = {
+            updatedJobs[jobIndexForAI] = {
  ...updatedJobs[jobIndexForAI],
  aiSummary: aiRes.summary,
- };
- updatedJobs[jobIndexForAI].isSynced = false; // Mark job as unsynced again with AI summary
- // We could also potentially update localStorage here if desired,
- // but for now, keep it simple and rely on the next cloud sync.
+            };
+            updatedJobs[jobIndexForAI].isSynced = false; // Mark job as unsynced again with AI summary
  return { ...prev, jobs: updatedJobs };
           });
- // Optionally show a toast for successful AI summary update
- syncLocalDataToSupabase(); // Trigger sync after AI summary is added
+          // Optionally show a toast for successful AI summary update
+ await syncLocalDataToSupabase(); // Trigger sync after AI summary is added
  toast({ title: "Resumen de IA Disponible", description: "Se añadió el resumen de IA al trabajo." }); // Keep AI success toast
- // No need to set sync status here explicitly if syncLocalDataToSupabase handles it
- // However, if you want to show success specifically for this AI sync, you could add:
- // setSyncStatus('success');
-        })
-        .catch(err => {
+      }) // Close the then block for summarizeJobDescription
+ .catch(err => {
  console.error("AI Error (summarizeJobDescription):", err); // Keep existing error handling
  toast({ title: "Error de IA", description: "No se pudo generar el resumen de IA para este trabajo.", variant: "destructive" });
- // The local state already has the user's summary, so no change needed there.
-        })
-        .finally(() => {
-
- // 4. Check if End Day action was pending and proceed
+          // The local state already has the user's summary, so no change needed there.
+ })
+ .finally(() => {
+          // 4. Check if End Day action was pending and proceed
  if (pendingEndDayAction) { // Ensure we only proceed if the flag is still true
  console.log("AI summarize finally block: Pending end day action detected. Checking latest state...");
-            // We need to check the *current* state of the workday in the callback.
- setWorkday(latestWorkdayState => {
- if (!latestWorkdayState) return null; // Should not happen here
-                const jobIsLocallyCompleted = latestWorkdayState.jobs.find(j => j.id === jobToSummarizeId)?.status === 'completed';
-                if (pendingEndDayAction && jobIsLocallyCompleted) {
-                    console.log("Pending end day action detected and job locally completed. Initiating end day process.");
-                    // Pass the latest state to initiateEndDayProcess
-                    initiateEndDayProcess(latestWorkdayState);
-                    setPendingEndDayAction(false); // Clear the flag once action is initiated
-                } else if (!pendingEndDayAction) {
- // If no pending end day action, this was just a manual job completion, reset form
-                    console.log("AI summarize finally block: Job completed, but no pending end day action.");
- // Form is already reset, this block is unnecessary
-                    setCurrentJobFormData({ description: '', summary: '' });
-                    setJobToSummarizeId(null);
-                 }
- return latestWorkdayState; // Always return state
- });
+ // We need to check the *current* state of the workday in the callback.
+ setWorkday(latestWorkdayState => { // Using functional update to get latest state
+ if (!latestWorkdayState) return latestWorkdayState; // Return current state if null
+ const jobIsLocallyCompleted = latestWorkdayState.jobs.find(j => j.id === jobToSummarizeId)?.status === 'completed';
+ if (jobIsLocallyCompleted) { // Only proceed if job is locally completed
+ initiateEndDayProcess(latestWorkdayState, toast, setIsLoading);
+ setPendingEndDayAction(false); // Clear the flag once action is initiated
  }
-    });
-
+ return latestWorkdayState; // Always return the latest state
+          }
+); // Close the setWorkday functional update call
+ setAiLoading(prev => ({ ...prev, summarize: false })); // Ensure AI loading is off
+    };
+  }); // Close the handleJobFormSubmit function definition
 
 
   const handleEndDay = async () => {
@@ -972,12 +860,7 @@ finalizedWorkdayForSave.pauseIntervals = (finalizedWorkdayForSave.pauseIntervals
  recordEvent('JOB_COMPLETION_PROMPT', currentLocation, activeJob.id, "Prompt al finalizar el día");
       return; // Stop here, the process will continue after the job form submit
     }
-
-    // If no active job, proceed directly to finalizing the workday
-    if (workday) { // Ensure workday is not null
- await initiateEndDayProcess(workday);
-    }
-  };
+ };
 
 
   const LabelIcon: React.FC<{ htmlFor?: string; className?: string; children: React.ReactNode }> = ({ htmlFor, className, children }) => {
@@ -1088,7 +971,6 @@ finalizedWorkdayForSave.pauseIntervals = (finalizedWorkdayForSave.pauseIntervals
     return null;
   };
 
-  // Define CurrentStatusDisplay
   const CurrentStatusDisplay = () => {
     if (!workday) {
       return <p className="text-muted-foreground">Presiona "Iniciar Seguimiento" para comenzar tu día.</p>;
@@ -1129,23 +1011,22 @@ finalizedWorkdayForSave.pauseIntervals = (finalizedWorkdayForSave.pauseIntervals
     );
   };
 
-// Final render
-return (
-  <>
- <div className="sync-status">Sync Status: {syncStatus}</div> {/* Added sync status div */}
-    <Card className="w-full max-w-md shadow-xl">
-      {/* …el resto de tu JSX… */}
-      <CardFooter className="flex-col space-y-4">
-        <ActionButton />
-        {workday?.status !== 'ended' && (
-          <div className="text-sm text-muted-foreground">
-            Nota: La geolocalización es crucial para el registro. Asegúrate de tener permisos activos en tu dispositivo.
-          </div>
-        )}
-      </CardFooter>
+  // Final Render
+  return (
+    <div className="flex justify-center items-center min-h-screen p-4">
+      <Card className="w-full max-w-md shadow-xl">
+        {/* ...el resto de tu JSX (CardHeader, CardContent) */}
+        <CardFooter className="flex-col space-y-4">
+          <ActionButton />
+          {workday?.status !== 'ended' && (
+            <div className="text-sm text-muted-foreground">
+              Nota: La geolocalización es crucial para el registro. Asegúrate de tener permisos activos en tu dispositivo.
+            </div>
+          )}
+        </CardFooter>
       </Card>
-  </>
-);
-}   // cierra el return del final render
-}   // cierra el return del handleJobFormSubmit
-}   // cierra export default function TechTrackApp
+    </div>
+  );
+    }
+  }
+}
