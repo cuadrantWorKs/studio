@@ -1014,19 +1014,60 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
   // Final Render
   return (
     <div className="flex justify-center items-center min-h-screen p-4">
-      <Card className="w-full max-w-md shadow-xl">
-        {/* ...el resto de tu JSX (CardHeader, CardContent) */}
+      <Card className="w-full max-w-md shadow-xl"> {/* Card component starts here */}
+        <CardHeader>
+          <CardTitle className="flex items-center space-x-2">
+            <User className="h-6 w-6" />
+            <span>{technicianName}</span>
+          </CardTitle>
+          <CardDescription>
+            Sistema de Seguimiento Técnico
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col space-y-4">
+          <CurrentStatusDisplay />
+
+          <LocationInfo
+ location={currentLocation === null ? undefined : currentLocation}
+ error={geolocationError}
+ label="Current Location"
+ getGoogleMapsLink={(loc) => `https://www.google.com/maps/search/?api=1&query=${loc.latitude},${loc.longitude}`} />
+ {geolocationError && (
+ <div className="text-sm text-red-600 flex items-start space-x-2">
+ <Ban className="h-5 w-5 flex-shrink-0" />
+ <span><strong>Geolocalización Deshabilitada:</strong> Para iniciar el seguimiento, la aplicación necesita acceder a tu ubicación. Por favor, habilita los permisos de ubicación para esta app en la configuración de tu dispositivo.</span>
+ </div>
+ )}
+          {workday?.status !== 'idle' && (
+            <> {/* Fragment starts here */}
+              <div className="flex items-center space-x-2 text-sm">
+                <Clock className="h-5 w-5 text-blue-500" />
+                <span>Tiempo Transcurrido: {formatTime(elapsedTime)}</span>
+              </div>
+              {currentJob && (
+                <div className="flex items-center space-x-2 text-sm"><Briefcase className="h-5 w-5 text-green-500" /><span>Trabajo Actual: {currentJob.description}</span></div>
+ )}
+            </>
+ )}
+          {workday?.status === 'idle' && !currentLocation && !geolocationError && (
+            <div className="text-sm text-orange-600 flex items-center space-x-2">
+              <MapPinned className="h-4 w-4 flex-shrink-0" /> <span>Esperando ubicación para iniciar seguimiento...</span>
+            </div>
+ )} {/* Fragment ends here */}
+        </CardContent>
+
         <CardFooter className="flex-col space-y-4">
-          <ActionButton />
-          {workday?.status !== 'ended' && (
-            <div className="text-sm text-muted-foreground">
-              Nota: La geolocalización es crucial para el registro. Asegúrate de tener permisos activos en tu dispositivo.
+          {workday?.status === 'idle' && !currentLocation && !geolocationError && (
+            <div className="text-sm text-orange-600 flex items-center space-x-2">
+              <MapPinned className="h-4 w-4 flex-shrink-0" /> <span>Esperando ubicación para iniciar seguimiento...</span>
             </div>
           )}
         </CardFooter>
-      </Card>
+      </Card> {/* Card component ends here */}
     </div>
-  );
-    }
-  }
+ ); {/* Main div ends here */}
 }
+}
+}
+
+
