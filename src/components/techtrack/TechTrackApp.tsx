@@ -1014,7 +1014,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
   // Final Render
   return (
     <div className="flex justify-center items-center min-h-screen p-4">
-      <Card className="w-full max-w-md shadow-xl"> {/* Card component starts here */}
+      <Card className="w-full max-w-md shadow-xl">
         <CardHeader>
           <CardTitle className="flex items-center space-x-2">
             <User className="h-6 w-6" />
@@ -1029,7 +1029,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
 
           <LocationInfo
  location={currentLocation === null ? undefined : currentLocation}
- error={geolocationError}
+ error={geolocationError || undefined}
  label="Current Location"
  getGoogleMapsLink={(loc) => `https://www.google.com/maps/search/?api=1&query=${loc.latitude},${loc.longitude}`} />
  {geolocationError && (
@@ -1039,35 +1039,31 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
  </div>
  )}
           {workday?.status !== 'idle' && (
-            <> {/* Fragment starts here */}
+            <>
               <div className="flex items-center space-x-2 text-sm">
                 <Clock className="h-5 w-5 text-blue-500" />
                 <span>Tiempo Transcurrido: {formatTime(elapsedTime)}</span>
               </div>
               {currentJob && (
                 <div className="flex items-center space-x-2 text-sm"><Briefcase className="h-5 w-5 text-green-500" /><span>Trabajo Actual: {currentJob.description}</span></div>
- )}
+              )}
             </>
- )}
-          {workday?.status === 'idle' && !currentLocation && !geolocationError && (
-            <div className="text-sm text-orange-600 flex items-center space-x-2">
-              <MapPinned className="h-4 w-4 flex-shrink-0" /> <span>Esperando ubicación para iniciar seguimiento...</span>
-            </div>
- )} {/* Fragment ends here */}
-        </CardContent>
-
-        <CardFooter className="flex-col space-y-4">
-          {workday?.status === 'idle' && !currentLocation && !geolocationError && (
+          )}
+          {workday?.status === 'idle' && !currentLocation && (
             <div className="text-sm text-orange-600 flex items-center space-x-2">
               <MapPinned className="h-4 w-4 flex-shrink-0" /> <span>Esperando ubicación para iniciar seguimiento...</span>
             </div>
           )}
+        </CardContent>
+
+        <CardFooter className="flex-col space-y-4">
+          <ActionButton />
         </CardFooter>
-      </Card> {/* Card component ends here */}
+      </Card>
     </div>
  ); {/* Main div ends here */}
 }
-}
-}
 
 
+  }
+}
