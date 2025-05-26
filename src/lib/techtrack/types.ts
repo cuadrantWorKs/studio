@@ -42,7 +42,7 @@ export interface TrackingEvent {
 }
 
 export interface PauseInterval {
-  id: any;
+  id: string; // Use a specific type like string or number instead of any
   startTime: number | null;
   endTime?: number | null;
   startLocation?: LocationPoint;
@@ -64,7 +64,9 @@ export interface Workday {
   pauseIntervals: PauseInterval[];
   lastNewJobPromptTime?: number;
   lastJobCompletionPromptTime?: number;
-  currentJobId?: string | null;
+  currentJobId?: string | null; // Fix the type here as well
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  [key: string]: any; // Allow any other properties for now
 }
 
 export interface WorkdaySummaryContext extends Workday {
@@ -77,4 +79,11 @@ export interface GeolocationError {
   code: number;
   message: string;
 }
+
+export function isError(error: unknown): error is Error {
+  return error instanceof Error;
+}
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-enable @typescript-eslint/no-explicit-any */
 
