@@ -6,24 +6,29 @@ export interface LocationPoint {
   accuracy?: number;
 }
 
+export type JobStatus = 'active' | 'completed' | 'cancelled';
+
 export interface Job {
   id: string;
+  workdayId: string;
   description: string;
   startTime: number;
-  startLocation: LocationPoint;
+  startLocation?: LocationPoint;
   endTime?: number;
   endLocation?: LocationPoint;
   summary?: string; // Technician's summary
   aiSummary?: string; // AI-generated summary
-  status: 'active' | 'completed';
+  status: JobStatus;
 }
 
-export type TrackingStatus = 'idle' | 'tracking' | 'paused' | 'ended';
 
-export interface TrackingEvent {
-  id: string;
-  type: 
+export type TrackingStatus = 'idle' | 'tracking' | 'paused' | 'ended';
+export type TrackingEventType =
     | 'SESSION_START' 
+    | 'WORKDAY_START' // Added
+    | 'WORKDAY_END' // Added
+    | 'PAUSE_START' // Added
+    | 'PAUSE_END' // Added
     | 'SESSION_PAUSE' 
     | 'SESSION_RESUME' 
     | 'SESSION_END' 
@@ -35,18 +40,26 @@ export interface TrackingEvent {
     | 'NEW_JOB_PROMPT'
     | 'USER_ACTION' // Added for manual user interactions
     | 'ERROR';
+
+
+export interface TrackingEvent {
+  id: string; // Added id
+  workdayId: string; // Added workdayId
   timestamp: number;
   location?: LocationPoint;
   jobId?: string;
-  details?: string; 
+  details?: string;
+  isSynced: boolean; // Added isSynced
 }
 
 export interface PauseInterval {
-  id: string; // Use a specific type like string or number instead of any
+  id: string;
+  workdayId: string; // Added workdayId
   startTime: number | null;
   endTime?: number | null;
   startLocation?: LocationPoint;
   endLocation?: LocationPoint;
+  isSynced: boolean; // Added isSynced
 }
 
 export interface Workday {
@@ -59,12 +72,13 @@ export interface Workday {
   endLocation?: LocationPoint | null;
   status: TrackingStatus;
   locationHistory: LocationPoint[];
+  // locationHistory: LocationPoint[]; // Removed locationHistory
   jobs: Job[];
   events: TrackingEvent[];
   pauseIntervals: PauseInterval[];
   lastNewJobPromptTime?: number;
   lastJobCompletionPromptTime?: number;
-  currentJobId?: string | null; // Fix the type here as well
+  currentJobId?: string | null;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   [key: string]: any; // Allow any other properties for now
 }
@@ -83,7 +97,4 @@ export interface GeolocationError {
 export function isError(error: unknown): error is Error {
   return error instanceof Error;
 }
-
-/* eslint-disable @typescript-eslint/no-explicit-any */
-/* eslint-enable @typescript-eslint/no-explicit-any */
 

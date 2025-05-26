@@ -30,8 +30,10 @@ import { decidePromptForNewJob } from '@/ai/flows/decide-prompt-for-new-job';
 import { decidePromptForJobCompletion } from '@/ai/flows/decide-prompt-for-job-completion';
 
 import { calculateWorkdaySummary } from '@/lib/techtrack/summary';
+import { db as localDb } from '@/db'; // Import the local database instance
 import WorkdaySummaryDisplay from './WorkdaySummaryDisplay';
 import { db } from '@/lib/supabase';
+import { syncLocalDataToSupabase } from '@/lib/techtrack/sync'; // Import sync function
 import { Label } from '@/components/ui/label'; // Import the Label component from your UI library
 import { formatTime } from '@/lib/utils';
 import LocationInfo from './LocationInfo';
@@ -40,7 +42,7 @@ import type {
  GeolocationError, WorkdaySummaryContext, TrackingStatus
 } from '@/lib/techtrack/types';
 
-const LOCATION_INTERVAL_MS = 5 * 60 * 1000;
+const LOCATION_INTERVAL_MS = 60000;
 const STOP_DETECT_DURATION_MS = 15 * 60 * 1000;
 const MOVEMENT_THRESHOLD_METERS = 100;
 const RECENT_PROMPT_THRESHOLD_MS = 30 * 60 * 1000;
@@ -90,6 +92,8 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
   const [isSavingToCloud, setIsSavingToCloud] = useState(false);
   const [aiLoading, setAiLoading] = useState<Record<string, boolean>>({});
   const [pendingEndDayAction, setPendingEndDayAction] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'success' | 'error'>('idle');
+  const [syncRetryActive, setSyncRetryActive] = useState(false);
   const [jobToSummarizeId, setJobToSummarizeId] = useState<string | null>(null);
 
   const { toast } = useToast();
@@ -210,12 +214,37 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
         const safeCurrentLocation = sanitizeLocationPoint(currentLocation) as LocationPoint | null; // Explicitly cast
         if (safeCurrentLocation) { 
           setWorkday(prev => prev ? ({ ...prev, locationHistory: [...prev.locationHistory, safeCurrentLocation] }) : null);
-          recordEvent('LOCATION_UPDATE', safeCurrentLocation, undefined, "Actualización periódica de 5 min");
+          recordEvent('LOCATION_UPDATE', safeCurrentLocation, undefined, "Actualización periódica de 1 min");
         }
-      }, LOCATION_INTERVAL_MS);
+      }, 60 * 1000); // Changed to 1 minute
     }
+
     return () => clearInterval(intervalId);
   }, [workday?.status, currentLocation, recordEvent]);
+
+  useEffect(() => {
+    let retryInterval: NodeJS.Timeout | undefined = undefined;
+
+    if (syncRetryActive) {
+      console.log('Sync retry active. Setting up interval.');
+      retryInterval = setInterval(async () => {
+        console.log('Attempting failed sync retry...');        setSyncStatus('syncing'); // Set status to syncing before retry attempt
+        try {
+          await syncLocalDataToSupabase();
+          setSyncStatus('success'); // Set status to success on successful retry
+          // Keep the previous logic to clear interval and retry state
+          setSyncRetryActive(false); // Sync succeeded, stop retries
+          console.log('Failed sync retry successful.');
+        } catch (error) {
+          console.error('Failed sync retry failed:', error);
+        }
+      }, 15 * 60 * 1000); // 15 minutes
+    }
+
+    return () => {
+      if (retryInterval) clearInterval(retryInterval);
+    };
+  }, [syncRetryActive]);
 
   useEffect(() => {
     if (workday?.status === 'tracking' && !currentJob) {
@@ -279,7 +308,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
   }, [workday, currentJob, currentLocation, toast, recordEvent, isJobModalOpen, aiLoading.jobCompletion]);
 
 
-  const handleStartTracking = () => {
+  const handleStartTracking = async () => {
     const safeCurrentLocation = sanitizeLocationPoint(currentLocation);
     if (!safeCurrentLocation) {
       toast({ title: "Ubicación Requerida", description: "No se puede iniciar el seguimiento sin ubicación.", variant: "destructive" });
@@ -289,8 +318,9 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
     setEndOfDaySummary(null);
     const startTime = Date.now();
     const newWorkday: Workday = {
+
       id: crypto.randomUUID(),
-      userId: technicianName,
+ technicianId: technicianName,
       date: getCurrentFormattedDate(),
  startTime: startTime, // Ensure startTime is a number (epoch milliseconds)
       startLocation: safeCurrentLocation, 
@@ -299,7 +329,9 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
       jobs: [],
       events: [{ id: crypto.randomUUID(), type: 'SESSION_START', timestamp: startTime, location: safeCurrentLocation || undefined, details: `Sesión iniciada por ${technicianName}` }],
       pauseIntervals: [],
+ isSynced: false,
     };
+ await localDb.workdays.add({ ...newWorkday, isSynced: false });
     setWorkday(newWorkday);
     toast({ title: "Seguimiento Iniciado", description: "Tu jornada laboral ha comenzado." });
 
@@ -310,6 +342,14 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
         recordEvent('NEW_JOB_PROMPT', safeCurrentLocation, undefined, "Prompt inicial después del inicio de sesión");
     }, 100);
     setIsLoading(false);
+ setSyncStatus('syncing'); // Set status to syncing before initial sync
+ try {
+ await syncLocalDataToSupabase(); // Trigger sync after starting workday
+      setSyncStatus('success'); // Set status to success on successful sync
+ } catch (error) {
+ console.error("Error triggering sync after starting workday:", error); setSyncStatus('error');
+      setSyncRetryActive(true); // Activate retry if initial sync fails
+ }
   };
 
   const handlePauseTracking = () => {
@@ -318,17 +358,28 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
     const now = Date.now();
     const newPauseInterval: PauseInterval = {
  id: crypto.randomUUID(), // Generate ID for new pause interval
+ workdayId: workday.id, // Link to the current workday
       startTime: now,
- startLocation: sanitizeLocationPoint(currentLocation) ?? undefined // Ensure undefined if null
-    } as PauseInterval; // Explicitly cast to PauseInterval
+ startLocation: sanitizeLocationPoint(currentLocation) ?? undefined, // Ensure undefined if null
+ isSynced: false,
+    };
  setWorkday(prev => prev ? ({ // Use functional update
       ...prev,
       status: 'paused',
+      // Add the new pause interval to the array
       pauseIntervals: [...prev.pauseIntervals, newPauseInterval],
     }) : null);
     recordEvent('SESSION_PAUSE', sanitizeLocationPoint(currentLocation)); // Ensure location is sanitized
     toast({ title: "Seguimiento Pausado" });
     setIsLoading(false);
+ setSyncStatus('syncing'); // Set status to syncing before sync
+ try {
+      syncLocalDataToSupabase(); // Trigger sync after pausing
+      setSyncStatus('success'); // Set status to success on successful sync
+ } catch (error) { console.error("Error triggering sync after pausing:", error); setSyncStatus('error');
+ console.error("Error triggering sync after pausing:", error);
+      setSyncRetryActive(true); // Activate retry if initial sync fails
+ }
   };
 
   const handleResumeTracking = () => {
@@ -341,15 +392,26 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
       if (updatedPauses.length > 0) {
         const currentPause = updatedPauses[updatedPauses.length - 1];
         if (!currentPause.endTime && currentPause.startTime) {
+ currentPause.workdayId = prev.id; // Ensure workdayId is set on update
  currentPause.endTime = now; // Ensure endTime is a number
           currentPause.endLocation = sanitizeLocationPoint(currentLocation) ?? undefined;
+ currentPause.isSynced = false; // Mark as unsynced
         }
+ // Existing pauses that were already ended and potentially synced remain unchanged
       }
       return { ...prev, status: 'tracking', pauseIntervals: updatedPauses };
     });
     recordEvent('SESSION_RESUME', sanitizeLocationPoint(currentLocation)); // Ensure location is sanitized
     toast({ title: "Seguimiento Reanudado" });
     setIsLoading(false);
+ setSyncStatus('syncing'); // Set status to syncing before sync
+ try {
+      syncLocalDataToSupabase(); // Trigger sync after resuming
+      setSyncStatus('success'); // Set status to success on successful sync
+ } catch (error) { console.error("Error triggering sync after resuming:", error); setSyncStatus('error');
+ console.error("Error triggering sync after resuming:", error);
+      setSyncRetryActive(true); // Activate retry if initial sync fails
+ }
   };
 
  const initiateEndDayProcess = async (workdayDataToEnd: Workday | null) => {
@@ -496,35 +558,6 @@ finalizedWorkdayForSave.events = [
   })),
 ];
 // <<< HASTA AQUÍ (línea ~500) <<<
-
-// <<< REEMPLAZA TODO ESTO >>>
-//
-// 1) Map your existing events into a proper TrackingEvent[]
-const existingEvents: TrackingEvent[] = (finalizedWorkdayForSave.events || []).map((e) => ({
-  id:       e.id || crypto.randomUUID(),
-  type:     e.type,
-  timestamp:e.timestamp,
-  jobId:    e.jobId ?? undefined,
-  details:  e.details ?? undefined,
-  location: e.location ?? undefined,
-}));
-
-// 2) Build your JOB_COMPLETED events
-const completedEvents: TrackingEvent[] = (finalizedWorkdayForSave.jobs || []).map((job) => ({
-  id:       crypto.randomUUID(),
-  type:     'JOB_COMPLETED',
-  timestamp: job.endTime ?? finalizationTimestamp,
-  jobId:    job.id,
-  details:  `Trabajo completado: ${job.description}. Resumen: ${job.summary}. IA: ${job.aiSummary ?? 'N/A'}`,
-  location: job.endLocation ?? job.startLocation ?? undefined,
-}));
-
-// 3) Overwrite events once, combining both lists
-finalizedWorkdayForSave.events = [
-  ...existingEvents,
-  ...completedEvents,
-];
-// HASTA AQUÍ >>>
 // ─── REPLACE the old pauseIntervals block with this ───
 finalizedWorkdayForSave.pauseIntervals = (finalizedWorkdayForSave.pauseIntervals || []).map((pause) => ({
   ...pause,  // keep id, startTime, endTime, etc.
@@ -669,7 +702,8 @@ finalizedWorkdayForSave.pauseIntervals = (finalizedWorkdayForSave.pauseIntervals
       // All inserts successful, now update local state;
       // Use a shallow copy here to avoid issues with React state updates
       const successfullySavedWorkday = { ...finalizedWorkdayForSave }; // Create a copy to ensure state update triggers re-render
-      console.log("Supabase save successful for workday ID:", finalizedWorkdayForSave.id); // Ensure this is logged
+ successfullySavedWorkday.isSynced = true; // Mark as synced
+ console.log("Supabase save successful for workday ID:", finalizedWorkdayForSave.id); // Ensure this is logged
       setWorkday(successfullySavedWorkday); 
       toast({ title: "Día Finalizado y Guardado", description: "La sesión de trabajo ha concluido y se ha guardado en la nube." });
       localStorage.removeItem(getLocalStorageKey());
@@ -776,8 +810,10 @@ finalizedWorkdayForSave.pauseIntervals = (finalizedWorkdayForSave.pauseIntervals
  id: crypto.randomUUID(),
  description: currentJobFormData.description,
  startTime: Date.now(), // Ensure startTime is a number (epoch milliseconds)
+ workdayId: workday.id, // Link to the current workday
  startLocation: safeCurrentLocation, // Already sanitized
  status: 'active',
+ isSynced: false,
  };
  setWorkday(prev => prev ? ({
  ...prev, // Spread previous state
@@ -787,6 +823,14 @@ finalizedWorkdayForSave.pauseIntervals = (finalizedWorkdayForSave.pauseIntervals
  recordEvent('JOB_START', safeCurrentLocation, newJob.id, `Nuevo trabajo iniciado: ${newJob.description}`);
  toast({ title: "Nuevo Trabajo Iniciado", description: newJob.description });
  setIsJobModalOpen(false);
+ setSyncStatus('syncing'); // Set status to syncing before sync
+ try {
+      syncLocalDataToSupabase(); // Trigger sync after starting a new job
+      setSyncStatus('success'); // Set status to success on successful sync
+ } catch (error) { console.error("Error triggering sync after starting new job:", error); setSyncStatus('error');
+ console.error("Error triggering sync after starting new job:", error);
+      setSyncRetryActive(true); // Activate retry if initial sync fails
+ }
         setCurrentJobFormData({ description: '', summary: '' });
  setJobToSummarizeId(null); // Reset jobToSummarizeId
     } else if (jobModalMode === 'summary' && jobToSummarizeId) {
@@ -823,6 +867,7 @@ finalizedWorkdayForSave.pauseIntervals = (finalizedWorkdayForSave.pauseIntervals
  status: 'completed', // Explicitly cast to literal type
  endTime: Date.now(), // Ensure endTime is a number
  endLocation: safeCurrentLocation || undefined,
+ isSynced: false, // Mark the updated job as unsynced
  // aiSummary will be added later if AI is successful
  };
 
@@ -839,6 +884,14 @@ finalizedWorkdayForSave.pauseIntervals = (finalizedWorkdayForSave.pauseIntervals
 
  // Close modal and reset form immediately
  setIsJobModalOpen(false);
+ try {
+ setSyncStatus('syncing'); // Set status to syncing before sync
+ syncLocalDataToSupabase(); // Trigger sync after completing a job (user summary saved)
+ setSyncStatus('success'); // Set status to success on successful sync
+ } catch (error) {
+ console.error("Error triggering sync after completing job:", error); // Keep existing error handling
+ setSyncRetryActive(true); // Keep existing retry activation
+ }
  setCurrentJobFormData({ description: '', summary: '' });
 
  // 2. Initiate AI summarization asynchronously (fire-and-forget)
@@ -858,16 +911,20 @@ finalizedWorkdayForSave.pauseIntervals = (finalizedWorkdayForSave.pauseIntervals
  ...updatedJobs[jobIndexForAI],
  aiSummary: aiRes.summary,
  };
+ updatedJobs[jobIndexForAI].isSynced = false; // Mark job as unsynced again with AI summary
  // We could also potentially update localStorage here if desired,
  // but for now, keep it simple and rely on the next cloud sync.
  return { ...prev, jobs: updatedJobs };
           });
  // Optionally show a toast for successful AI summary update
- toast({ title: "Resumen de IA Disponible", description: "Se añadió el resumen de IA al trabajo." });
+ syncLocalDataToSupabase(); // Trigger sync after AI summary is added
+ toast({ title: "Resumen de IA Disponible", description: "Se añadió el resumen de IA al trabajo." }); // Keep AI success toast
+ // No need to set sync status here explicitly if syncLocalDataToSupabase handles it
+ // However, if you want to show success specifically for this AI sync, you could add:
+ // setSyncStatus('success');
         })
         .catch(err => {
-          console.error("AI Error (summarizeJobDescription):", err);
- // 3. Handle AI failure - log error, show toast, but don't revert job status
+ console.error("AI Error (summarizeJobDescription):", err); // Keep existing error handling
  toast({ title: "Error de IA", description: "No se pudo generar el resumen de IA para este trabajo.", variant: "destructive" });
  // The local state already has the user's summary, so no change needed there.
         })
@@ -1075,6 +1132,7 @@ finalizedWorkdayForSave.pauseIntervals = (finalizedWorkdayForSave.pauseIntervals
 // Final render
 return (
   <>
+ <div className="sync-status">Sync Status: {syncStatus}</div> {/* Added sync status div */}
     <Card className="w-full max-w-md shadow-xl">
       {/* …el resto de tu JSX… */}
       <CardFooter className="flex-col space-y-4">
