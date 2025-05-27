@@ -78,6 +78,7 @@ const sanitizeLocationPoint = (location?: LocationPoint | null | undefined): Loc
 
 
 export default function TechTrackApp({ technicianName }: TechTrackAppProps): JSX.Element {
+  console.log('TechTrackApp render start');
   const [workday, setWorkday] = useState<Workday | null>(null);
   const [currentLocation, setCurrentLocation] = useState<LocationPoint | null>(null);
   const [geolocationError, setGeolocationError] = useState<GeolocationError | null>(null); // Keep this for user feedback
@@ -136,29 +137,33 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps): JSX
 
   useEffect(() => {
     if (typeof navigator !== 'undefined' && navigator.geolocation) {
-      const watchId = navigator.geolocation.watchPosition(
-        (position) => {
-          const newLocation: LocationPoint = {
-            latitude: position.coords.latitude,
-            longitude: position.coords.longitude,
-            accuracy: position.coords.accuracy ?? undefined, 
+ try {
+ const watchId = navigator.geolocation.watchPosition(
+ (position) => {
+ const newLocation: LocationPoint = {
+ latitude: position.coords.latitude,
+ longitude: position.coords.longitude,
+ accuracy: position.coords.accuracy ?? undefined,
  timestamp: position.timestamp, // Keep as number (epoch milliseconds)
-          };
-          setCurrentLocation(sanitizeLocationPoint(newLocation)); // Sanitize immediately, already returns undefined if null/invalid
+ };
+ setCurrentLocation(sanitizeLocationPoint(newLocation)); // Sanitize immediately, already returns undefined if null/invalid
  setGeolocationError(null);
-        },
-        (error) => {
-          setGeolocationError({ code: error.code, message: error.message });
-          toast({ title: "Error de Geolocalización", description: error.message, variant: "destructive" });
-        },
+            },
+ (error) => {
+ setGeolocationError({ code: error.code, message: error.message });
+ toast({ title: "Error de Geolocalización", description: error.message, variant: "destructive" });
+            },
  { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 }
-      );
-      return () => navigator.geolocation.clearWatch(watchId);
+ );
+ return () => navigator.geolocation.clearWatch(watchId);
+ } catch (err) {
+ console.error('Geolocation watch error', err);
+      }
     }
   }, []); // toast is a stable reference from useToast
 
   const recordEvent = useCallback((type: TrackingEvent['type'], locationParam: LocationPoint | null | undefined, jobId?: string, details?: string) => {
- setWorkday(prev => { // Use functional update
+    setWorkday(prev => { // Use functional update
       if (!prev) return null;
       const eventLocation = sanitizeLocationPoint(locationParam === undefined ? currentLocation : locationParam); // Sanitize the location for the event
       const tempEventLiteral = {
@@ -1187,6 +1192,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps): JSX
   };
 
   // Final Render
+ console.log('TechTrackApp render end');
  return (
     <div className="flex justify-center items-center min-h-screen p-4">
       <Card className="w-full max-w-md shadow-xl">
@@ -1236,9 +1242,8 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps): JSX
         </CardFooter>
       </Card>
     </div>
- ); {/* Main div ends here */}
+ );
 }
-
   }
 }
 }
