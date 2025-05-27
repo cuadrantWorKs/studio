@@ -59,8 +59,8 @@ export interface PauseInterval {
   workdayId: string;
   startTime: number | null;
   endTime?: number | null;
-  startLocation?: LocationPoint;
-  endLocation?: LocationPoint;
+  startLocation?: LocationPoint | null;
+  endLocation?: LocationPoint | null;
   isSynced: boolean;
 }
 

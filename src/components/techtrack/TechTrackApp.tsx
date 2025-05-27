@@ -55,7 +55,7 @@ interface TechTrackAppProps {
 }
 
 // Helper function to sanitize location point data for Firestore
-const sanitizeLocationPoint = (location: LocationPoint | null | undefined): LocationPoint | null => {
+const sanitizeLocationPoint = (location?: LocationPoint | null | undefined): LocationPoint | null => {
   if (
     location &&
     typeof location.latitude === 'number' && !isNaN(location.latitude) &&
@@ -70,14 +70,14 @@ const sanitizeLocationPoint = (location: LocationPoint | null | undefined): Loca
     if (typeof location.accuracy === 'number' && !isNaN(location.accuracy)) {
       sanitized.accuracy = location.accuracy;
     } // No need to include accuracy if not a number
-    return sanitized;
-  }
+    return sanitized; // Return sanitized LocationPoint or undefined
+  } // Return sanitized LocationPoint or null
   return null;
 };
 
 
 
-export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
+export default function TechTrackApp({ technicianName }: TechTrackAppProps): JSX.Element {
   const [workday, setWorkday] = useState<Workday | null>(null);
   const [currentLocation, setCurrentLocation] = useState<LocationPoint | null>(null);
   const [geolocationError, setGeolocationError] = useState<GeolocationError | null>(null); // Keep this for user feedback
@@ -144,8 +144,8 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
             accuracy: position.coords.accuracy ?? undefined, 
  timestamp: position.timestamp, // Keep as number (epoch milliseconds)
           };
-          setCurrentLocation(sanitizeLocationPoint(newLocation)); // Sanitize immediately
-          setGeolocationError(null);
+          setCurrentLocation(sanitizeLocationPoint(newLocation)); // Sanitize immediately, already returns undefined if null/invalid
+ setGeolocationError(null);
         },
         (error) => {
           setGeolocationError({ code: error.code, message: error.message });
@@ -155,20 +155,21 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
       );
       return () => navigator.geolocation.clearWatch(watchId);
     }
-  }, [toast]);
+  }, []); // toast is a stable reference from useToast
 
   const recordEvent = useCallback((type: TrackingEvent['type'], locationParam: LocationPoint | null | undefined, jobId?: string, details?: string) => {
-    setWorkday(prev => { // Use functional update
+ setWorkday(prev => { // Use functional update
       if (!prev) return null;
-      const eventLocation = sanitizeLocationPoint(locationParam === undefined ? currentLocation : locationParam);      const tempEventLiteral = {
+      const eventLocation = sanitizeLocationPoint(locationParam === undefined ? currentLocation : locationParam); // Sanitize the location for the event
+      const tempEventLiteral = {
         id: crypto.randomUUID(),
         type,
- timestamp: Date.now(), // Ensure timestamp is a number (epoch milliseconds)
-        jobId,
+ timestamp: Date.now(), // Ensure timestamp is a number (epoch milliseconds) // This seems correct as is
+        jobId: jobId ?? undefined, // Ensure jobId is undefined if null
         details: details ?? undefined, // Ensure details is undefined if null
-        location: eventLocation ?? undefined, // Ensure undefined if null
+        location: eventLocation, // sanitizeLocationPoint already returns undefined if null/invalid
       };
-
+ // The cast to TrackingEvent is necessary here to add workdayId and isSynced
  return { ...prev, events: [...prev.events, {...tempEventLiteral, workdayId: prev.id, isSynced: false} as TrackingEvent] }; // Add workdayId and isSynced, cast to TrackingEvent
     });
   }, [currentLocation]);
@@ -211,16 +212,16 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
   useEffect(() => {
     let intervalId: NodeJS.Timeout;
     if (workday?.status === 'tracking' && currentLocation) { 
-      intervalId = setInterval(() => {
-        const safeCurrentLocation = sanitizeLocationPoint(currentLocation) as LocationPoint | null; // Explicitly cast
-        if (safeCurrentLocation) { 
-          setWorkday(prev => prev ? ({ ...prev, locationHistory: [...prev.locationHistory, safeCurrentLocation] }) : null);
+ intervalId = setInterval(() => { // setInterval should not be inside the state update logic. It should trigger the state update.
+ const safeCurrentLocation = sanitizeLocationPoint(currentLocation); // Sanitize outside the state update
+ if (safeCurrentLocation) { // Check if sanitizeLocationPoint returned a valid location
+ setWorkday(prev => prev ? ({ ...prev, locationHistory: [...prev.locationHistory, safeCurrentLocation] }) : null); // Add sanitized location to history
           recordEvent('LOCATION_UPDATE', safeCurrentLocation, undefined, "Actualización periódica de 1 min");
         }
       }, 60 * 1000); // Changed to 1 minute
     }
 
-    return () => clearInterval(intervalId);
+ return () => { if (intervalId) clearInterval(intervalId); };
   }, [workday?.status, currentLocation, recordEvent]);
 
   useEffect(() => {
@@ -230,7 +231,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
       console.log('Sync retry active. Setting up interval.');
       retryInterval = setInterval(async () => {
         console.log('Attempting failed sync retry...');        setSyncStatus('syncing'); // Set status to syncing before retry attempt
-        try {
+        try { // Start of try block for sync attempt
           await syncLocalDataToSupabase();
           setSyncStatus('success'); // Set status to success on successful retry
           // Keep the previous logic to clear interval and retry state
@@ -246,10 +247,10 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
       if (retryInterval) clearInterval(retryInterval);
     };
   }, [syncRetryActive]);
-
+ 
   useEffect(() => {
     if (workday?.status === 'tracking' && !currentJob) {
-      if (aiLoading.newJob || isJobModalOpen) return; 
+      if (aiLoading.newJob || isJobModalOpen) return;
       
       const lastMovementTime = workday.locationHistory[workday.locationHistory.length -1]?.timestamp || workday.startTime;
       if (Date.now() - (lastMovementTime || Date.now()) > STOP_DETECT_DURATION_MS) {
@@ -272,7 +273,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
           })
           .finally(() => setAiLoading(prev => ({...prev, newJob: false})));
       }
-    }
+    } // No dependencies on toast or recordEvent needed here
   }, [workday, currentLocation, toast, recordEvent, currentJob, isJobModalOpen, aiLoading.newJob]);
 
   useEffect(() => {
@@ -304,7 +305,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
               toast({ title: "Error de IA", description: "No se pudo verificar la finalización del trabajo.", variant: "destructive" });
             })
             .finally(() => setAiLoading(prev => ({...prev, jobCompletion: false})));
-        }
+        } // No dependencies on toast or recordEvent needed here
     }
   }, [workday, currentJob, currentLocation, toast, recordEvent, isJobModalOpen, aiLoading.jobCompletion]);
 
@@ -315,12 +316,12 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
       toast({
         title: "Sin Geolocalización",
         description: "Iniciando jornada sin coordenadas.",
-        variant: "warning"
+        variant: "destructive"
       });
     }
     setIsLoading(true);
     setEndOfDaySummary(null);
-    const startTime = Date.now();
+    const startTime = Date.now(); // Ensure startTime is a number (epoch milliseconds)
     const workdayId = crypto.randomUUID();
 
     // Declare with let so we can reference it during construction
@@ -331,8 +332,8 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
       date: getCurrentFormattedDate(),
       startTime: startTime, // Assign the number directly, already ensured to be a number
       startLocation: safeCurrentLocation,
- status: 'tracking' as TrackingStatus, // Ensure status is of type TrackingStatus
-      locationHistory: [safeCurrentLocation],
+ status: 'tracking' as TrackingStatus,
+ locationHistory: safeCurrentLocation ? [safeCurrentLocation] : [],
       events: [{
         id: crypto.randomUUID(),
         type: 'SESSION_START' as TrackingEventType, // Ensure type is of type TrackingEventType
@@ -340,7 +341,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
         timestamp: startTime as number,
         location: safeCurrentLocation || undefined, // Ensure location is LocationPoint | undefined
         details: `Sesión iniciada por ${technicianName}`,
-        // Now we can reference workdayId
+ // Now we can reference workdayId // This comment seems misplaced here
         workdayId: workdayId,
         isSynced: false,
       } as TrackingEvent], // Cast to TrackingEvent
@@ -357,17 +358,17 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
       userId: newWorkday.userId,
       date: newWorkday.date,
       startTime: newWorkday.startTime,
-      startLocation: newWorkday.startLocation || null, // Ensure LocationPoint | null for DB
-      endTime: newWorkday.endTime || null,
-      endLocation: newWorkday.endLocation || null,
+ startLocation: newWorkday.startLocation ?? null, // Use ?? null for DB
+      endTime: newWorkday.endTime === null ? undefined : newWorkday.endTime,
+ endLocation: newWorkday.endLocation ?? null,
       status: newWorkday.status as 'idle' | 'tracking' | 'paused' | 'ended',
       locationHistory: newWorkday.locationHistory,
-      jobs: newWorkday.jobs,
+ jobs: newWorkday.jobs, // Assuming jobs property is handled appropriately within DbWorkday mapping
       events: newWorkday.events,
       pauseIntervals: newWorkday.pauseIntervals,
       isSynced: newWorkday.isSynced,
  id: newWorkday.id,
-    };
+ } as DbWorkday; // Explicitly cast to DbWorkday
     await localDb.workdays.add(workdayForDb);
     setWorkday(newWorkday);
     toast({ title: "Seguimiento Iniciado", description: "Tu jornada laboral ha comenzado." });
@@ -399,10 +400,10 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
     setIsLoading(true);
     const now = Date.now();
     const newPauseInterval: PauseInterval = {
- id: crypto.randomUUID(), // Generate ID for new pause interval
- workdayId: workday.id, // Link to the current workday
-      startTime: now,
- startLocation: sanitizeLocationPoint(currentLocation) ?? undefined, // Ensure undefined if null
+ id: crypto.randomUUID(),
+ workdayId: workday.id,
+ startTime: now, // Ensure startTime is number
+ startLocation: sanitizeLocationPoint(currentLocation), // Sanitize returns undefined if null/invalid
  isSynced: false,
     };
  setWorkday(prev => prev ? ({ // Use functional update
@@ -411,17 +412,15 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
       // Add the new pause interval to the array
       pauseIntervals: [...prev.pauseIntervals, newPauseInterval],
     }) : null);
-    recordEvent('SESSION_PAUSE', safeLoc || undefined); // Ensure location is sanitized
-    toast({ title: "Seguimiento Pausado", description: "Tu jornada laboral está en pausa." });
+ recordEvent('SESSION_PAUSE', sanitizeLocationPoint(currentLocation)); // Sanitize returns undefined if null/invalid
+ toast({ title: "Seguimiento Pausado", description: "Tu jornada laboral está en pausa." }); // This toast message is fine
     setIsLoading(false);
  setSyncStatus('syncing'); // Set status to syncing before sync
  try {
       syncLocalDataToSupabase(); // Trigger sync after pausing
       setSyncStatus('success'); // Set status to success on successful sync
  } catch (error) { console.error("Error triggering sync after pausing:", error); setSyncStatus('error');
- console.error("Error triggering sync after pausing:", error);
       setSyncRetryActive(true); // Activate retry if initial sync fails
- }
   };
 
   const handleResumeTracking = () => {
@@ -435,18 +434,18 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
       if (lastActivePauseIndex > -1) {
         const currentPause = updatedPauses[lastActivePauseIndex];
  currentPause.endTime = now;
-          currentPause.endLocation = sanitizeLocationPoint(currentLocation) ?? undefined;
+ currentPause.endLocation = sanitizeLocationPoint(currentLocation); // Sanitize returns undefined if null/invalid
  currentPause.isSynced = false; // Mark as unsynced
         }
  return {
  ...prev,
- status: 'tracking',
+ status: 'tracking' as TrackingStatus, // Ensure cast
  pauseIntervals: updatedPauses, // Ensure updatedPauses is returned
- // Existing pauses that were already ended and potentially synced remain unchanged
+ // Existing pauses that were already ended and potentially synced are spread by ...prev
       }
     });
-    recordEvent('SESSION_RESUME', safeLoc || undefined); // Ensure location is sanitized
-    toast({ title: "Seguimiento Reanudado", description: "¡Bienvenido de nuevo! El seguimiento está activo." });
+ recordEvent('SESSION_RESUME', sanitizeLocationPoint(currentLocation) ?? undefined); // Use ?? undefined for the location
+ toast({ title: "Seguimiento Reanudado", description: "¡Bienvenido de nuevo! El seguimiento está activo." });
     setIsLoading(false);
     // Trigger sync after resuming
     syncLocalDataToSupabase().then(() => {
@@ -455,6 +454,145 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
       console.error("Error triggering sync after resuming:", error);
       setSyncRetryActive(true); // Activate retry if initial sync fails
     });
+  };
+
+  const handleEndDay = async () => {
+    if (!workday) {
+        toast({ title: "Error", description: "No se puede finalizar el día sin una jornada activa.", variant: "destructive" });
+        return;
+    }
+    const activeJob = workday.jobs.find(j => j.id === workday.currentJobId && j.status === 'active');
+
+    if (activeJob) {
+ setPendingEndDayAction(true);
+ setJobToSummarizeId(activeJob.id);
+ setJobModalMode('summary');
+ setCurrentJobFormData({ description: activeJob.description || '', summary: '' });
+ setIsJobModalOpen(true);
+ recordEvent('JOB_COMPLETION_PROMPT', currentLocation, activeJob.id, "Prompt al finalizar el día");
+      return; // Stop here, the process will continue after the job form submit
+    }
+
+    // If no active job, proceed directly to initiating the end day process
+    // Call initiateEndDayProcess with the current state of the workday.
+    // This is safe because initiateEndDayProcess will make a copy.
+    // The state updates (like setting status to 'ended') will happen inside finalizeWorkdayAndSave.
+    console.log("No active job found. Initiating end day process directly.");
+    // Ensure we are passing the current workday state
+    if (workday) { // Check if workday is still valid
+      initiateEndDayProcess(workday, toast, setIsLoading);
+    } else {
+       console.error("Workday became null unexpectedly before initiateEndDayProcess could be called.");
+       toast({ title: "Error Interno", description: "Estado de jornada perdido al intentar finalizar.", variant: "destructive" });
+    }
+ };
+
+  const LabelIcon: React.FC<{ htmlFor?: string; className?: string; children: React.ReactNode }> = ({ htmlFor, className, children }) => {
+ return (
+ <Label htmlFor={htmlFor} className={`flex items-center ${className}`}>
+ {children === 'Descripción' && <MessageSquareText className="mr-1 h-4 w-4" />}
+ {children === 'Resumen' && <MessageSquareText className="mr-1 h-4 w-4" />}
+ {children}
+ </Label>
+ );
+  };
+
+  // Define ActionButton outside of handleJobFormSubmit
+  // Define ActionButton
+  const ActionButton = () => {
+    const commonDisabled = isLoading || isSavingToCloud;
+    if (!workday || workday.status === 'idle') {
+      return (
+        <Button
+          onClick={handleStartTracking}
+          disabled={!currentLocation || commonDisabled}
+          className="w-full"
+          size="lg"
+        >
+          {isLoading
+            ? <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            : <Play className="mr-2 h-5 w-5" />}
+          Iniciar Seguimiento
+        </Button>
+      );
+    }
+    if (workday.status === 'tracking') {
+      return (
+        <div className="grid grid-cols-2 gap-4">
+          <Button
+            onClick={handlePauseTracking}
+            variant="outline"
+            disabled={commonDisabled}
+            className="w-full"
+            size="lg"
+          >
+            {isLoading
+              ? <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              : <Pause className="mr-2 h-5 w-5" />}
+            Pausar
+          </Button>
+          <Button
+            onClick={handleEndDay}
+            variant="destructive"
+            disabled={commonDisabled}
+            className="w-full"
+            size="lg"
+          >
+            {isSavingToCloud
+              ? <CloudUpload className="mr-2 h-5 w-5 animate-pulse" />
+              : <StopCircle className="mr-2 h-5 w-5" />}
+            Finalizar Día
+          </Button>
+        </div>
+      );
+    }
+    if (workday.status === 'paused') {
+      return (
+        <div className="grid grid-cols-2 gap-4">
+          <Button
+            onClick={handleResumeTracking}
+            disabled={commonDisabled}
+            className="w-full"
+            size="lg"
+          >
+            {isLoading
+              ? <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              : <Play className="mr-2 h-5 w-5" />}
+            Reanudar
+          </Button>
+          <Button
+            onClick={handleEndDay}
+            variant="destructive"
+            disabled={commonDisabled}
+            className="w-full"
+            size="lg"
+          >
+            {isSavingToCloud
+              ? <CloudUpload className="mr-2 h-5 w-5 animate-pulse" />
+              : <StopCircle className="mr-2 h-5 w-5" />}
+            Finalizar Día
+          </Button>
+        </div>
+      );
+    }
+    if (workday.status === 'ended') {
+      return (
+        <Button
+          onClick={() => {
+            setWorkday(null);
+            setElapsedTime(0);
+            setEndOfDaySummary(null);
+            setPendingEndDayAction(false);
+          }}
+          variant="secondary"
+          className="w-full"
+          size="lg"
+        >
+          Iniciar Nuevo Día
+        </Button>
+      );
+    }
+    return null;
   };
 
   const initiateEndDayProcess = async (workdayDataToEnd: Workday, toast: ReturnType<typeof useToast>['toast'], setIsLoading: React.Dispatch<React.SetStateAction<boolean>>) => {
@@ -497,43 +635,43 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
  try { // Start of the try block covering database operations
 
       // Determine the best end location for the workday
-      const finalEndLocationCandidate = sanitizeLocationPoint(currentLocation) ||
-        (finalizedWorkdayForSave.locationHistory.length > 0 ? sanitizeLocationPoint(finalizedWorkdayForSave.locationHistory[finalizedWorkdayForSave.locationHistory.length - 1]) : null) || // Explicitly sanitize
-        sanitizeLocationPoint(finalizedWorkdayForSave.startLocation) || // Explicitly sanitize
-        null;
+ const finalEndLocationCandidate = sanitizeLocationPoint(currentLocation) ?? // Use ?? null instead of ?? undefined
+ (finalizedWorkdayForSave.locationHistory.length > 0 ? sanitizeLocationPoint(finalizedWorkdayForSave.locationHistory[finalizedWorkdayForSave.locationHistory.length - 1]) : undefined) ?? // Explicitly sanitize
+ sanitizeLocationPoint(finalizedWorkdayForSave.startLocation) ?? // Explicitly sanitize
+ undefined;
 
-      finalizedWorkdayForSave.endLocation = finalEndLocationCandidate || null; // Ensure it's null if undefined
+ finalizedWorkdayForSave.endLocation = finalEndLocationCandidate; // sanitizeLocationPoint returns undefined if null/invalid
 
       // Update pause intervals that were still active at the end of the day using the finalization timestamp
       finalizedWorkdayForSave.pauseIntervals = (finalizedWorkdayForSave.pauseIntervals || []).map((pause: PauseInterval) => {
-        if (pause.startTime && !pause.endTime) {
+ if (pause.startTime && pause.endTime === undefined) { // Check for undefined endTime
           return {
             id: pause.id,
-            workdayId: finalizedWorkdayForSave.id, // Add workdayId
-            startLocation: sanitizeLocationPoint(pause.startLocation) || null, // Ensure startLocation is sanitized and can be null for DB
-            startTime: pause.startTime,
-            endTime: finalizationTimestamp, // Ensure end time is a number
-            endLocation: finalEndLocationCandidate || undefined, // Use the determined final end location or undefined
-            isSynced: false, // Mark as unsynced
+            workdayId: finalizedWorkdayForSave.id, // Ensure workdayId is linked
+ startLocation: sanitizeLocationPoint(pause.startLocation) ?? undefined,
+ startTime: pause.startTime,
+ endTime: finalizationTimestamp,
+            endLocation: finalEndLocationCandidate ?? undefined, // Use the determined final end location or undefined
+ isSynced: false,
           };
-        } else { // Handle already ended pauses and ensure they are linked to the workday
+        } else { // Handle already ended pauses and ensure they are linked to the workday // This comment seems misplaced
           return {
-            ...pause, // Spread the original pause object to include id, workdayId, startTime
+ ...pause, // Keep existing data including end time/location if already ended
             startLocation: sanitizeLocationPoint(pause.startLocation) || undefined,
-            endTime: pause.endTime ?? undefined,
-            endLocation: sanitizeLocationPoint(pause.endLocation) || undefined, // Ensure existing endLocation is sanitized
+ endTime: pause.endTime ?? undefined,
+ endLocation: sanitizeLocationPoint(pause.endLocation) ?? undefined, // Ensure existing endLocation is sanitized
             isSynced: pause.isSynced, // Keep existing sync status for already ended pauses
           };
         }
       });
 
       // Rigorous Sanitization Pass for main Workday locations
-      finalizedWorkdayForSave.startLocation = sanitizeLocationPoint(finalizedWorkdayForSave.startLocation);
-      finalizedWorkdayForSave.endLocation = sanitizeLocationPoint(finalizedWorkdayForSave.endLocation);
+ finalizedWorkdayForSave.startLocation = sanitizeLocationPoint(finalizedWorkdayForSave.startLocation); // sanitizeLocationPoint returns null if invalid
+ finalizedWorkdayForSave.endLocation = sanitizeLocationPoint(finalizedWorkdayForSave.endLocation); // sanitizeLocationPoint returns null if invalid
 
       finalizedWorkdayForSave.locationHistory = (finalizedWorkdayForSave.locationHistory || []) // Ensure array exists
         .map(loc => sanitizeLocationPoint(loc)) // Sanitize each location point
-        .filter(loc => loc !== null) as LocationPoint[];
+ .filter((loc): loc is LocationPoint => loc !== undefined); // Filter out undefined and type guard
 
       // The rest of the logic relies on finalizedWorkdayForSave being defined.
       // Supabase insertion logic
@@ -541,21 +679,21 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
       finalizedWorkdayForSave.jobs = (workdayAtStartOfEnd.jobs || []).map((job): Job => {
         // Sanitize locations and ensure timestamps are numbers
         const jobStartLoc = sanitizeLocationPoint(job.startLocation) || null; // Ensure startLocation is null if invalid
-        const jobEndLoc = sanitizeLocationPoint(job.endLocation) || finalEndLocationCandidate || null; // Use job end location, then final end location, or null
-
+ const jobEndLoc = sanitizeLocationPoint(job.endLocation) ?? finalEndLocationCandidate ?? null; // Use job end location, then final end location, or null // This logic seems okay
+        // Note: Job completion event logic below also uses job.endLocation, which will be sanitized here // This note is fine
         return {
           workdayId: finalizedWorkdayForSave.id,
           id: job.id,
           description: job.description || '', // Ensure string, handle null/undefined
           summary: job.summary || undefined,
           aiSummary: job.aiSummary ?? undefined, // Ensure undefined or string
-          startLocation: jobStartLoc,
-          endLocation: jobEndLoc,
-          status: job.status === 'active' ? 'completed' : job.status,
+          startLocation: jobStartLoc ?? undefined, // Ensure undefined if null
+          endLocation: jobEndLoc === null ? undefined : jobEndLoc, // Convert null to undefined for Job type // This conversion seems necessary
+          status: job.status === 'active' ? 'completed' : job.status, // Mark active jobs as completed
           startTime: job.startTime!, // asumo non-null
           endTime: job.status === 'active' && !job.endTime
             ? finalizationTimestamp // Ensure number
-            : job.endTime!, // asumo non-null
+            : job.endTime! ?? undefined, // Ensure number or undefined
           isSynced: job.isSynced, // Keep existing sync status
         } as Job; // Explicitly cast to Job
       });
@@ -569,7 +707,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
           timestamp: job.endTime!, // job.endTime es number garantizado
           jobId: job.id,
           details: `Trabajo completado: ${job.description}. Resumen: ${job.summary}`,
-          location: sanitizeLocationPoint(job.endLocation) || undefined, // Use job's end location, ensure undefined if null
+ location: sanitizeLocationPoint(job.endLocation) ?? undefined, // Use ?? undefined here as well
           workdayId: finalizedWorkdayForSave.id, // Ensure workdayId is included
           isSynced: false,
         }));
@@ -588,9 +726,9 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
         user_id: finalizedWorkdayForSave.userId,
         date: finalizedWorkdayForSave.date,
         start_time: new Date(finalizedWorkdayForSave.startTime!).toISOString(),
-        start_location: finalizedWorkdayForSave.startLocation || null,
-        end_time: new Date(finalizedWorkdayForSave.endTime!).toISOString(),
-        end_location: finalizedWorkdayForSave.endLocation || null,
+        start_location: sanitizeLocationPoint(finalizedWorkdayForSave.startLocation) ?? null, // Use ?? null for DB
+        end_time: finalizedWorkdayForSave.endTime ? new Date(finalizedWorkdayForSave.endTime).toISOString() : null,
+        end_location: sanitizeLocationPoint(finalizedWorkdayForSave.endLocation) ?? null, // Use ?? null for DB
         status: finalizedWorkdayForSave.status,
         is_synced: true, // Mark as synced after successful upsert
       }, { onConflict: 'id' });
@@ -603,8 +741,8 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
         description: job.description,
         summary: job.summary ?? null, // Supabase requires null for optional fields
         ai_summary: job.aiSummary ?? null, // Supabase requires null for optional fields
-        start_location: job.startLocation || null, // Supabase requires null for optional fields
-        end_location: job.endLocation || null, // Supabase requires null for optional fields
+        start_location: sanitizeLocationPoint(job.startLocation) ?? null,
+        end_location: sanitizeLocationPoint(job.endLocation) ?? null,
         status: job.status,
         start_time: new Date(job.startTime!).toISOString(),
         end_time: new Date(job.endTime!).toISOString(),
@@ -619,9 +757,9 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
       const pauseIntervalsToUpsert = (finalizedWorkdayForSave.pauseIntervals || []).map(pause => ({
         id: pause.id,
         workday_id: pause.workdayId,
-        start_time: new Date(pause.startTime!).toISOString(),
-        start_location: sanitizeLocationPoint(pause.startLocation) || null, // Ensure sanitized and null for DB
-        end_time: pause.endTime ? new Date(pause.endTime).toISOString() : null, // Handle optional endTime, null for DB
+ start_time: pause.startTime ? new Date(pause.startTime).toISOString() : null, // Only convert if not null
+ start_location: sanitizeLocationPoint(pause.startLocation) ?? null,
+ end_time: pause.endTime ? new Date(pause.endTime).toISOString() : null, // Only convert if not null
         end_location: sanitizeLocationPoint(pause.endLocation) || null, // Ensure sanitized and null for DB
         is_synced: true, // Mark as synced after successful upsert
       }));
@@ -637,9 +775,9 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
         type: event.type,
         timestamp: new Date(event.timestamp).toISOString(),
         job_id: event.jobId ?? null, // Handle optional jobId, null for DB
-        details: event.details ?? null, // Handle optional details, null for DB
+ details: event.details ?? null, // Handle optional details, null for DB // This seems fine
         location: sanitizeLocationPoint(event.location) || null, // Ensure sanitized and null for DB
-        is_synced: true, // Mark as synced after successful upsert
+ is_synced: true, // Mark as synced after successful upsert
       }));
       if (eventsToUpsert.length > 0) {
         const { error: eventsError } = await db.from('events').upsert(eventsToUpsert, { onConflict: 'id' });
@@ -647,13 +785,13 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
       }
 
       // 5. insert locations (assuming locations are always inserted, not upserted)
-      const locationsToInsert = (finalizedWorkdayForSave.locationHistory || [])
-        .filter(loc => loc !== null && loc !== undefined) // Ensure no null or undefined locations get through
+      const locationsToInsert = (finalizedWorkdayForSave.locationHistory || []) // Ensure array exists
+ .filter((loc): loc is LocationPoint => loc !== undefined) // Filter out undefined locations and type guard
         .map(loc => ({
           workday_id: finalizedWorkdayForSave.id,
-          latitude: loc!.latitude, // Use non-null assertion after filter
-          longitude: loc!.longitude, // Use non-null assertion after filter
-          timestamp: new Date(loc!.timestamp).toISOString(), // Convert epoch milliseconds to ISO string
+ latitude: loc.latitude, // Safe after filter and type guard
+ longitude: loc.longitude, // Safe after filter and type guard
+ timestamp: new Date(loc.timestamp).toISOString(), // Convert epoch milliseconds to ISO string
           accuracy: loc!.accuracy ?? null, // Use accuracy if exists, otherwise null
         }));
 
@@ -705,12 +843,12 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
   // Si quieres revertir el estado local:
   setWorkday(workdayAtStartOfEnd);
 
-} finally {
+} finally { // Use finally to ensure these run regardless of success or failure
       setIsSavingToCloud(false); // Ensure this is set to false regardless of success or failure
   setIsLoading(false);
   setPendingEndDayAction(false);
 }
-}; // <-- Semicolon para cerrar la definición de la función
+}; // <-- Close the function definition
 
 
   const handleManualStartNewJob = () => {
@@ -725,7 +863,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
  setJobToSummarizeId(null); // Ensure jobToSummarizeId is null when starting a new job action
     recordEvent('USER_ACTION', safeCurrentLocation, undefined, "Modal de nuevo trabajo abierto manualmente");
   
-  };
+ };
 
   const handleManualCompleteJob = () => {
     if (!currentJob) return;
@@ -733,7 +871,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
     setCurrentJobFormData({ description: currentJob.description || '', summary: '' });
     setIsJobModalOpen(true);
  recordEvent('USER_ACTION', sanitizeLocationPoint(currentLocation), currentJob.id, "Modal de completar trabajo abierto manualmente"); // Ensure location is sanitized
-  };
+ };
 
 
 
@@ -753,7 +891,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
  description: currentJobFormData.description,
  startTime: Date.now(), // Ensure startTime is a number (epoch milliseconds)
  workdayId: workday.id, // Link to the current workday
- startLocation: safeCurrentLocation || null, // Ensure startLocation is null if geolocation is not available
+ startLocation: safeCurrentLocation ?? undefined, // Ensure startLocation is undefined if geolocation is not available
  status: 'active',
  isSynced: false,
  };
@@ -762,7 +900,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
  jobs: [...prev.jobs, newJob],
  currentJobId: newJob.id,
  }) : null);
- recordEvent('JOB_START', safeCurrentLocation || undefined, newJob.id, `Nuevo trabajo iniciado: ${newJob.description}`); // Ensure location is undefined if null
+ recordEvent('JOB_START', safeCurrentLocation, newJob.id, `Nuevo trabajo iniciado: ${newJob.description}`); // Sanitize returns undefined if null/invalid
  toast({ title: "Nuevo Trabajo Iniciado", description: newJob.description });
  setIsJobModalOpen(false);
  setSyncStatus('syncing'); // Set status to syncing before sync
@@ -806,7 +944,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
  summary: currentJobFormData.summary || '', // Ensure user summary is saved as string
  status: 'completed', // Explicitly cast to literal type
  endTime: Date.now(), // Ensure endTime is a number
- endLocation: safeCurrentLocation || null, // Ensure endLocation is null if geolocation is not available
+ endLocation: safeCurrentLocation ?? undefined, // Ensure endLocation is undefined if geolocation is not available
  isSynced: false, // Mark the updated job as unsynced
  };
 
@@ -818,7 +956,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
         });
 
         // Record the job completion event immediately after local update
- recordEvent('JOB_COMPLETED', safeCurrentLocation || undefined, jobToSummarizeId, `Trabajo completado. Usuario: ${currentJobFormData.summary}`); // Ensure location is undefined if null
+ recordEvent('JOB_COMPLETED', safeCurrentLocation, jobBeforeCompletion.id, `Trabajo completado. Usuario: ${currentJobFormData.summary}`); // Sanitize returns undefined if null/invalid
  toast({ title: "Trabajo Completado", description: `Resumen de usuario guardado para el trabajo.` });
 
  // Close modal and reset form immediately
@@ -848,7 +986,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
             updatedJobs[jobIndexForAI] = {
  ...updatedJobs[jobIndexForAI],
  aiSummary: aiRes.summary,
-            };
+ };
             updatedJobs[jobIndexForAI].isSynced = false; // Mark job as unsynced again with AI summary
  return { ...prev, jobs: updatedJobs };
           });
@@ -858,6 +996,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
       }) // Close the then block for summarizeJobDescription
  .catch(err => {
  console.error("AI Error (summarizeJobDescription):", err); // Keep existing error handling
+          setAiLoading(prev => ({ ...prev, summarize: false })); // Also turn off AI loading on error
  toast({ title: "Error de IA", description: "No se pudo generar el resumen de IA para este trabajo.", variant: "destructive" });
           // The local state already has the user's summary, so no change needed there.
  })
@@ -867,17 +1006,16 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
  console.log("AI summarize finally block: Pending end day action detected. Checking latest state...");
  // We need to check the *current* state of the workday in the callback.
  setWorkday(latestWorkdayState => { // Using functional update to get latest state
- if (!latestWorkdayState) return latestWorkdayState; // Return current state if null
+ if (!latestWorkdayState) return latestWorkdayState; // Return current state if null or undefined
  const jobIsLocallyCompleted = latestWorkdayState.jobs.find(j => j.id === jobToSummarizeId)?.status === 'completed';
  if (jobIsLocallyCompleted) { // Only proceed if job is locally completed
  initiateEndDayProcess(latestWorkdayState, toast, setIsLoading);
  setPendingEndDayAction(false); // Clear the flag once action is initiated
  }
  return latestWorkdayState; // Always return the latest state
-          }
-); // Close the setWorkday functional update call
+ }); // Close the setWorkday functional update call
  setAiLoading(prev => ({ ...prev, summarize: false })); // Ensure AI loading is off
-    };
+ }
   }); // Close the handleJobFormSubmit function definition
 
 
@@ -1101,5 +1239,6 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
  ); {/* Main div ends here */}
 }
 
+  }
 }
 }
