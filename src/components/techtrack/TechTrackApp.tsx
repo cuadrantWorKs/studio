@@ -1,7 +1,6 @@
 
 "use client";
 
-import type { Workday as DbWorkday } from '@/db'; // Import DbWorkday from db.ts
 import { useState, useEffect, useCallback, useMemo } from 'react';
 
 import Link from 'next/link';
@@ -33,6 +32,7 @@ import { decidePromptForJobCompletion } from '@/ai/flows/decide-prompt-for-job-c
 import { calculateWorkdaySummary } from '@/lib/techtrack/summary';
 import { db as localDb } from '@/db'; // Import the local database instance
 import WorkdaySummaryDisplay from './WorkdaySummaryDisplay';
+import type { Workday as DbWorkday } from '@/db'; // Import DbWorkday from db.ts
 import { db } from '@/lib/supabase';
 import { syncLocalDataToSupabase } from '@/lib/techtrack/sync'; // Import sync function
 import { Label } from '@/components/ui/label'; // Import the Label component from your UI library
@@ -312,12 +312,11 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
   const handleStartTracking = async () => {
     const safeCurrentLocation = sanitizeLocationPoint(currentLocation);
     if (!safeCurrentLocation) {
-      toast({ title: "Ubicación Requerida", description: "No se puede iniciar el seguimiento sin ubicación.", variant: "destructive" });
- toast({
- title: "Sin Geolocalización",
- description: "Se iniciará la jornada sin coordenadas reales.",
- variant: "warning"
- });
+      toast({
+        title: "Sin Geolocalización",
+        description: "Iniciando jornada sin coordenadas.",
+        variant: "warning"
+      });
     }
     setIsLoading(true);
     setEndOfDaySummary(null);
@@ -353,22 +352,23 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
     // Guardamos local & estado, ensuring types for DB insertion
     // When adding to localDb, ensure startTime and startLocation match expected types
     // Explicitly construct the object with all Workday properties and correct types
-    const workdayForDb: DbWorkday = {
-      technicianId: newWorkday.technicianId || '', // Ensure string
-      userId: newWorkday.userId, // Ensure userId is included
+ const workdayForDb: DbWorkday = {
+      technicianId: newWorkday.technicianId,
+      userId: newWorkday.userId,
       date: newWorkday.date,
-      startTime: newWorkday.startTime!, // Add non-null assertion
-      startLocation: newWorkday.startLocation ?? null, // Ensure LocationPoint | null for DB
-      status: newWorkday.status as 'idle' | 'tracking' | 'paused' | 'ended', // Cast to union of literals
+      startTime: newWorkday.startTime,
+      startLocation: newWorkday.startLocation || null, // Ensure LocationPoint | null for DB
+      endTime: newWorkday.endTime || null,
+      endLocation: newWorkday.endLocation || null,
+      status: newWorkday.status as 'idle' | 'tracking' | 'paused' | 'ended',
+      locationHistory: newWorkday.locationHistory,
+      jobs: newWorkday.jobs,
       events: newWorkday.events,
       pauseIntervals: newWorkday.pauseIntervals,
       isSynced: newWorkday.isSynced,
-      jobs: newWorkday.jobs,
-      id: ''
+ id: newWorkday.id,
     };
-    
- await localDb.workdays.add(workdayForDb); // Add the explicitly constructed object with type assertion
-
+    await localDb.workdays.add(workdayForDb);
     setWorkday(newWorkday);
     toast({ title: "Seguimiento Iniciado", description: "Tu jornada laboral ha comenzado." });
 
@@ -467,160 +467,201 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
     // Let's simplify and pass the original workdayDataToEnd to finalizeWorkdayAndSave
 
     // Use a timeout to ensure any pending state updates related to job completion
-    // or other actions that might trigger initiateEndDayProcess have a chance to
-    // be processed by React before the finalization process begins.
+    // or other actions that might trigger initiateEndDayProcess have a chance to be processed by React before the finalization process begins.
     // Pass workdayDataToEnd which represents the state at the time of initiating
     // the end day process.
-    setTimeout(async () => {
-      await finalizeWorkdayAndSave(workdayDataToEnd, actionTime);
-    }, 0);
+    // We no longer need the timeout here because the try/catch/finally structure in finalizeWorkdayAndSave
+    // handles the state updates correctly.
+     await finalizeWorkdayAndSave(workdayDataToEnd, actionTime);
   };
 
 
   const finalizeWorkdayAndSave = async (workdayAtStartOfEnd: Workday, finalizationTimestamp: number) => {
     setIsSavingToCloud(true); // Ensure this is true at the start of the async operation
     console.log("Starting finalizeWorkdayAndSave for workday ID:", workdayAtStartOfEnd?.id);
+    let finalizedWorkdayForSave: Workday = { ...workdayAtStartOfEnd, status: 'ended', endTime: finalizationTimestamp, currentJobId: null };
 
-    let finalizedWorkdayForSave: Workday = { ...workdayAtStartOfEnd };
-    
-        if (!db) {
-            console.error("Database DB instance is not available. Check configuration.");
-                toast({title: "Error de Configuración de Base de Datos",
-                description: "No se puede conectar a la base de datos.",
-                variant: "destructive",
-                duration: 10000
-            });
-            // Revert status as save didn't even start, and Firebase is not used
-            setWorkday(prev => prev ? { ...prev, status: workdayAtStartOfEnd.status, endTime: undefined } : workdayAtStartOfEnd);
- return; // Exit the function early if DB is not available
- }
+    if (!db) {
+      console.error("Database DB instance is not available. Check configuration.");
+      toast({
+        title: "Error de Configuración de Base de Datos",
+        description: "No se puede conectar a la base de datos.",
+        variant: "destructive",
+        duration: 10000
+      });
+      // Revert status as save didn't even start
+      setWorkday(prev => prev ? { ...prev, status: workdayAtStartOfEnd.status, endTime: undefined } : workdayAtStartOfEnd);
+      return; // Exit the function early if DB is not available
+    }
 
  try { // Start of the try block covering database operations
 
-        // Create finalizedWorkdayForSave by copying properties, ensuring number timestamps are preserved
-        // Also update status, endTime, and determine the final endLocation using the provided timestamp
-        finalizedWorkdayForSave = {
-            ...workdayAtStartOfEnd, // Start with the original workday properties
-            status: 'ended', // Set status to ended
-            endTime: finalizationTimestamp, // Set the final end time
-            // endLocation will be determined after sanitization below
-            currentJobId: null, // Explicitly set current job to null
+      // Determine the best end location for the workday
+      const finalEndLocationCandidate = sanitizeLocationPoint(currentLocation) ||
+        (finalizedWorkdayForSave.locationHistory.length > 0 ? sanitizeLocationPoint(finalizedWorkdayForSave.locationHistory[finalizedWorkdayForSave.locationHistory.length - 1]) : null) || // Explicitly sanitize
+        sanitizeLocationPoint(finalizedWorkdayForSave.startLocation) || // Explicitly sanitize
+        null;
 
-            // Deep copy and sanitize nested arrays to ensure data integrity and correct types
-            jobs: (workdayAtStartOfEnd.jobs || []).map(job => ({ ...job })), // Shallow copy jobs for initial structure, ensure original status and times are copied
- events: (workdayAtStartOfEnd.events || []).map(event => ({ ...event })),
- pauseIntervals: (workdayAtStartOfEnd.pauseIntervals || []).map(pause => ({ ...pause })),
- locationHistory: (workdayAtStartOfEnd.locationHistory || []).map(loc => ({ ...loc })),
-        };
-        
-        // Determine the best end location for the workday
-        const finalEndLocationCandidate = sanitizeLocationPoint(currentLocation) ||
-                                          (finalizedWorkdayForSave.locationHistory.length > 0 ? sanitizeLocationPoint(finalizedWorkdayForSave.locationHistory[finalizedWorkdayForSave.locationHistory.length - 1]) : null) || // Explicitly sanitize
-                                          sanitizeLocationPoint(finalizedWorkdayForSave.startLocation) || // Explicitly sanitize
-                                          null;
+      finalizedWorkdayForSave.endLocation = finalEndLocationCandidate || null; // Ensure it's null if undefined
 
-        finalizedWorkdayForSave.endLocation = finalEndLocationCandidate || null; // Ensure it's null if undefined
-        
-        // Update pause intervals that were still active at the end of the day using the finalization timestamp
- finalizedWorkdayForSave.pauseIntervals = (finalizedWorkdayForSave.pauseIntervals || []).map((pause: PauseInterval) => {
-            if (pause.startTime && !pause.endTime) {
-                return {
-                    id: pause.id,
- workdayId: finalizedWorkdayForSave.id, // Add workdayId
- startLocation: sanitizeLocationPoint(pause.startLocation) || null, // Ensure startLocation is sanitized and can be null for DB
- startTime: pause.startTime,
- endTime: finalizationTimestamp, // Ensure end time is a number
-                endLocation: finalEndLocationCandidate || undefined, // Use the determined final end location or undefined
- isSynced: false, // Mark as unsynced
-                };
-            } else { // Handle already ended pauses and ensure they are linked to the workday
-                return {
-                    ...pause, // Spread the original pause object to include id, workdayId, startTime
- startLocation: sanitizeLocationPoint(pause.startLocation) || undefined,
- endTime: pause.endTime ?? undefined,
- endLocation: sanitizeLocationPoint(pause.endLocation) || undefined, // Ensure existing endLocation is sanitized
- isSynced: pause.isSynced, // Keep existing sync status for already ended pauses
-                };
-            }
- });
-        
-        // Rigorous Sanitization Pass for main Workday locations
-        finalizedWorkdayForSave.startLocation = sanitizeLocationPoint(finalizedWorkdayForSave.startLocation);
-        finalizedWorkdayForSave.endLocation = sanitizeLocationPoint(finalizedWorkdayForSave.endLocation);
+      // Update pause intervals that were still active at the end of the day using the finalization timestamp
+      finalizedWorkdayForSave.pauseIntervals = (finalizedWorkdayForSave.pauseIntervals || []).map((pause: PauseInterval) => {
+        if (pause.startTime && !pause.endTime) {
+          return {
+            id: pause.id,
+            workdayId: finalizedWorkdayForSave.id, // Add workdayId
+            startLocation: sanitizeLocationPoint(pause.startLocation) || null, // Ensure startLocation is sanitized and can be null for DB
+            startTime: pause.startTime,
+            endTime: finalizationTimestamp, // Ensure end time is a number
+            endLocation: finalEndLocationCandidate || undefined, // Use the determined final end location or undefined
+            isSynced: false, // Mark as unsynced
+          };
+        } else { // Handle already ended pauses and ensure they are linked to the workday
+          return {
+            ...pause, // Spread the original pause object to include id, workdayId, startTime
+            startLocation: sanitizeLocationPoint(pause.startLocation) || undefined,
+            endTime: pause.endTime ?? undefined,
+            endLocation: sanitizeLocationPoint(pause.endLocation) || undefined, // Ensure existing endLocation is sanitized
+            isSynced: pause.isSynced, // Keep existing sync status for already ended pauses
+          };
+        }
+      });
 
+      // Rigorous Sanitization Pass for main Workday locations
+      finalizedWorkdayForSave.startLocation = sanitizeLocationPoint(finalizedWorkdayForSave.startLocation);
+      finalizedWorkdayForSave.endLocation = sanitizeLocationPoint(finalizedWorkdayForSave.endLocation);
 
+      finalizedWorkdayForSave.locationHistory = (finalizedWorkdayForSave.locationHistory || []) // Ensure array exists
+        .map(loc => sanitizeLocationPoint(loc)) // Sanitize each location point
+        .filter(loc => loc !== null) as LocationPoint[];
 
- finalizedWorkdayForSave.locationHistory = (finalizedWorkdayForSave.locationHistory || []) // Ensure array exists
-            .map(loc => sanitizeLocationPoint(loc)) // Sanitize each location point
- .filter(loc => loc !== null) as LocationPoint[];
+      // The rest of the logic relies on finalizedWorkdayForSave being defined.
+      // Supabase insertion logic
+      // Map and sanitize Job data for Supabase
+      finalizedWorkdayForSave.jobs = (workdayAtStartOfEnd.jobs || []).map((job): Job => {
+        // Sanitize locations and ensure timestamps are numbers
+        const jobStartLoc = sanitizeLocationPoint(job.startLocation) || null; // Ensure startLocation is null if invalid
+        const jobEndLoc = sanitizeLocationPoint(job.endLocation) || finalEndLocationCandidate || null; // Use job end location, then final end location, or null
 
-        // The rest of the logic relies on finalizedWorkdayForSave being defined.
-        // Supabase insertion logic
-            // Map and sanitize Job data for Supabase
-            finalizedWorkdayForSave.jobs = (workdayAtStartOfEnd.jobs || []).map((job): Job => {
-              // Sanitize locations and ensure timestamps are numbers
-              const jobStartLoc = sanitizeLocationPoint(job.startLocation) || null; // Ensure startLocation is null if invalid
-              const jobEndLoc = sanitizeLocationPoint(job.endLocation) || finalEndLocationCandidate || null; // Use job end location, then final end location, or null
+        return {
+          workdayId: finalizedWorkdayForSave.id,
+          id: job.id,
+          description: job.description || '', // Ensure string, handle null/undefined
+          summary: job.summary || undefined,
+          aiSummary: job.aiSummary ?? undefined, // Ensure undefined or string
+          startLocation: jobStartLoc,
+          endLocation: jobEndLoc,
+          status: job.status === 'active' ? 'completed' : job.status,
+          startTime: job.startTime!, // asumo non-null
+          endTime: job.status === 'active' && !job.endTime
+            ? finalizationTimestamp // Ensure number
+            : job.endTime!, // asumo non-null
+          isSynced: job.isSynced, // Keep existing sync status
+        } as Job; // Explicitly cast to Job
+      });
 
-              return {
-                workdayId: finalizedWorkdayForSave.id,
-                id: job.id,
- description: job.description || '', // Ensure string, handle null/undefined
- summary: job.summary || undefined,
- aiSummary: job.aiSummary ?? undefined, // Ensure undefined or string
-                startLocation: jobStartLoc,
-                endLocation: jobEndLoc,
-                status: job.status === 'active' ? 'completed' : job.status,
-                startTime: job.startTime!,                                // asumo non-null
-                endTime: job.status === 'active' && !job.endTime
-                  ? finalizationTimestamp // Ensure number
- : job.endTime!,                                         // asumo non-null
- isSynced: job.isSynced, // Keep existing sync status
-              } as Job; // Explicitly cast to Job
-            });
+      // Add JOB_COMPLETED event for jobs completed during this finalization step
+      const newCompletionEvents = (finalizedWorkdayForSave.jobs || [])
+        .filter(job => workdayAtStartOfEnd.jobs.find(j => j.id === job.id)?.status === 'active' && job.status === 'completed')
+        .map((job): TrackingEvent => ({
+          id: crypto.randomUUID(),
+          type: 'JOB_COMPLETED',
+          timestamp: job.endTime!, // job.endTime es number garantizado
+          jobId: job.id,
+          details: `Trabajo completado: ${job.description}. Resumen: ${job.summary}`,
+          location: sanitizeLocationPoint(job.endLocation) || undefined, // Use job's end location, ensure undefined if null
+          workdayId: finalizedWorkdayForSave.id, // Ensure workdayId is included
+          isSynced: false,
+        }));
 
-            finalizedWorkdayForSave.events = [
-              // Conserva los eventos que ya estaban
+      // Combine existing events with new completion events
+      finalizedWorkdayForSave.events = [...(workdayAtStartOfEnd.events || []), ...newCompletionEvents];
 
- // Filter for jobs that were newly completed in this finalization step
-              // Add a JOB_COMPLETED event for each job that was completed during finalization (status was active)
-              ...(finalizedWorkdayForSave.jobs || []).map((job): TrackingEvent => ({
-                id: crypto.randomUUID(),
-                type: 'JOB_COMPLETED',
-                timestamp: job.endTime!, // job.endTime es number garantizado
-                jobId: job.id,
-                details: `Trabajo completado: ${job.description}. Resumen: ${job.summary}`,
- location: sanitizeLocationPoint(job.endLocation) || undefined, // Use job's end location, ensure undefined if null
- workdayId: finalizedWorkdayForSave.id, // Ensure workdayId is included
-                isSynced: false,
-              })),
-            ];
+      console.log("Finalized workday object before sending to Supabase:", finalizedWorkdayForSave); // Keep this log
+      console.log("Supabase client available. Proceeding with save.");
 
-            console.log("Finalized workday object before sending to Supabase:", finalizedWorkdayForSave); // Keep this log
+      // Perform Supabase insertions sequentially.
+      // 1. upsert workdays
+      const { error: workdayError } = await db.from('workdays').upsert({
+        id: finalizedWorkdayForSave.id,
+        technician_id: finalizedWorkdayForSave.technicianId,
+        user_id: finalizedWorkdayForSave.userId,
+        date: finalizedWorkdayForSave.date,
+        start_time: new Date(finalizedWorkdayForSave.startTime!).toISOString(),
+        start_location: finalizedWorkdayForSave.startLocation || null,
+        end_time: new Date(finalizedWorkdayForSave.endTime!).toISOString(),
+        end_location: finalizedWorkdayForSave.endLocation || null,
+        status: finalizedWorkdayForSave.status,
+        is_synced: true, // Mark as synced after successful upsert
+      }, { onConflict: 'id' });
+      if (workdayError) throw workdayError;
 
-            console.log("Supabase client available. Proceeding with save.");
-            // We'll perform inserts sequentially. If any fail, we'll log the error.
-            // A more robust solution would be to use a Supabase function (RPC) to handle the atomic inserts.
+      // 2. upsert jobs
+      const jobsToUpsert = (finalizedWorkdayForSave.jobs || []).map(job => ({
+        workday_id: job.workdayId,
+        id: job.id,
+        description: job.description,
+        summary: job.summary ?? null, // Supabase requires null for optional fields
+        ai_summary: job.aiSummary ?? null, // Supabase requires null for optional fields
+        start_location: job.startLocation || null, // Supabase requires null for optional fields
+        end_location: job.endLocation || null, // Supabase requires null for optional fields
+        status: job.status,
+        start_time: new Date(job.startTime!).toISOString(),
+        end_time: new Date(job.endTime!).toISOString(),
+        is_synced: true, // Mark as synced after successful upsert
+      }));
+      if (jobsToUpsert.length > 0) {
+        const { error: jobsError } = await db.from('jobs').upsert(jobsToUpsert, { onConflict: 'id' });
+        if (jobsError) throw jobsError;
+      }
 
-  // … todo tu código de upserts (workdays, jobs, pauses, events, locations) …
+      // 3. upsert pause_intervals
+      const pauseIntervalsToUpsert = (finalizedWorkdayForSave.pauseIntervals || []).map(pause => ({
+        id: pause.id,
+        workday_id: pause.workdayId,
+        start_time: new Date(pause.startTime!).toISOString(),
+        start_location: sanitizeLocationPoint(pause.startLocation) || null, // Ensure sanitized and null for DB
+        end_time: pause.endTime ? new Date(pause.endTime).toISOString() : null, // Handle optional endTime, null for DB
+        end_location: sanitizeLocationPoint(pause.endLocation) || null, // Ensure sanitized and null for DB
+        is_synced: true, // Mark as synced after successful upsert
+      }));
+      if (pauseIntervalsToUpsert.length > 0) {
+        const { error: pausesError } = await db.from('pause_intervals').upsert(pauseIntervalsToUpsert, { onConflict: 'id' });
+        if (pausesError) throw pausesError;
+      }
 
-            // Map location history data for Supabase insert
-            const locationsToInsert = (finalizedWorkdayForSave.locationHistory || [])
-              .filter(loc => loc !== null && loc !== undefined) // Ensure no null or undefined locations get through
-              .map(loc => ({
-                workday_id: finalizedWorkdayForSave.id,
-                latitude: loc!.latitude, // Use non-null assertion after filter
-                longitude: loc!.longitude, // Use non-null assertion after filter
-                timestamp: new Date(loc!.timestamp).toISOString(), // Convert epoch milliseconds to ISO string
-                accuracy: loc!.accuracy ?? null, // Use accuracy if exists, otherwise null
-              }));
+      // 4. upsert events
+      const eventsToUpsert = (finalizedWorkdayForSave.events || []).map(event => ({
+        id: event.id,
+        workday_id: event.workdayId,
+        type: event.type,
+        timestamp: new Date(event.timestamp).toISOString(),
+        job_id: event.jobId ?? null, // Handle optional jobId, null for DB
+        details: event.details ?? null, // Handle optional details, null for DB
+        location: sanitizeLocationPoint(event.location) || null, // Ensure sanitized and null for DB
+        is_synced: true, // Mark as synced after successful upsert
+      }));
+      if (eventsToUpsert.length > 0) {
+        const { error: eventsError } = await db.from('events').upsert(eventsToUpsert, { onConflict: 'id' });
+        if (eventsError) throw eventsError;
+      }
 
+      // 5. insert locations (assuming locations are always inserted, not upserted)
+      const locationsToInsert = (finalizedWorkdayForSave.locationHistory || [])
+        .filter(loc => loc !== null && loc !== undefined) // Ensure no null or undefined locations get through
+        .map(loc => ({
+          workday_id: finalizedWorkdayForSave.id,
+          latitude: loc!.latitude, // Use non-null assertion after filter
+          longitude: loc!.longitude, // Use non-null assertion after filter
+          timestamp: new Date(loc!.timestamp).toISOString(), // Convert epoch milliseconds to ISO string
+          accuracy: loc!.accuracy ?? null, // Use accuracy if exists, otherwise null
+        }));
 
   // Después de tu último upsert:
-  const { error: locationsError } = await db
-    .from('locations')
-    .insert(locationsToInsert);
-  if (locationsError) throw locationsError;
+      if (locationsToInsert.length > 0) {
+        const { error: locationsError } = await db.from('locations').insert(locationsToInsert);
+        if (locationsError) throw locationsError;
+      }
 
   // Actualizamos estado local y mostramos toast
   const successfullySavedWorkday = { ...finalizedWorkdayForSave, isSynced: true };
@@ -665,7 +706,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
   setWorkday(workdayAtStartOfEnd);
 
 } finally {
-  setIsSavingToCloud(false);
+      setIsSavingToCloud(false); // Ensure this is set to false regardless of success or failure
   setIsLoading(false);
   setPendingEndDayAction(false);
 }
@@ -1008,7 +1049,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
   };
 
   // Final Render
-  return (
+ return (
     <div className="flex justify-center items-center min-h-screen p-4">
       <Card className="w-full max-w-md shadow-xl">
         <CardHeader>
@@ -1059,5 +1100,6 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
     </div>
  ); {/* Main div ends here */}
 }
+
 }
 }
