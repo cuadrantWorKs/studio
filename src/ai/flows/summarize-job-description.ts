@@ -7,6 +7,7 @@ import {z} from 'genkit';
 
 const SummarizeJobDescriptionInputSchema = z.object({
   jobDescription: z.string().describe('A brief description of the work done.'),
+  userSummary: z.string().describe('The summary provided by the user.'), // Added userSummary
 });
 export type SummarizeJobDescriptionInput = z.infer<typeof SummarizeJobDescriptionInputSchema>;
 
@@ -26,8 +27,9 @@ const summarizeJobDescriptionPrompt = ai.definePrompt({
   input: {schema: SummarizeJobDescriptionInputSchema},
   output: {schema: SummarizeJobDescriptionOutputSchema},
   prompt: `You are an expert at writing summaries of technical work.
-  Based on the following description, write a detailed summary of the work done:
-  {{{jobDescription}}}`,
+  Based on the following description and user provided summary, write a detailed summary of the work done:
+  Job Description: {{{jobDescription}}}
+  User Summary: {{{userSummary}}}` // Modified prompt to include userSummary
 });
 
 const summarizeJobDescriptionFlow = ai.defineFlow(
