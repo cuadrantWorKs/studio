@@ -11,6 +11,9 @@ export async function syncLocalDataToSupabase() {
     return;
   }
   console.log('Starting local data synchronization to Supabase...');
+  // Add logging to inspect localDb and its properties
+  console.log('localDb:', localDb);
+  console.log('localDb.workdays:', localDb.workdays);
 
   try {
     // Sync Workdays
