@@ -70,9 +70,29 @@ export const sanitizeLocationPoint = (location?: LocationPoint | null | undefine
   return undefined;
 };
 
-const CurrentStatusDisplay = (): JSX.Element => (
- <div>Placeholder Display</div>
-);
+interface CurrentStatusDisplayProps {
+  workday: Workday | null;
+  endOfDaySummary: WorkdaySummaryContext | null;
+  isSavingToCloud: boolean;
+}
+
+// Placeholder for CurrentStatusDisplay
+const CurrentStatusDisplay: React.FC<CurrentStatusDisplayProps> = ({ workday, endOfDaySummary, isSavingToCloud }) => {
+  if (!workday) {
+    return <div>Cargando estado...</div>;
+  }
+  return (
+    <div>
+      <div>Estado de la Jornada: {workday.status}</div>
+      {endOfDaySummary && (
+        <div>
+          <h3>Resumen del Día</h3>
+          <p>{endOfDaySummary.summary}</p>
+        </div>
+      )}
+    </div>
+  );
+};
 
 function TechTrackApp({ technicianName }: TechTrackAppProps): JSX.Element {
   const [workday, setWorkday] = useState<Workday | null>(null);
@@ -353,11 +373,11 @@ function TechTrackApp({ technicianName }: TechTrackAppProps): JSX.Element {
         type: 'SESSION_START' as TrackingEventType, // Ensure type is of type TrackingEventType
         // Explicitly cast timestamp to number as we know it's Date.now()
         timestamp: startTime,
- location: safeCurrentLocation, // sanitizeLocationPoint returns LocationPoint | undefined, matches type
+        location: safeCurrentLocation, // sanitizeLocationPoint returns LocationPoint | undefined, matches type
  details: `Sesión iniciada por ${technicianName}`,
         workdayId: workdayId,
         isSynced: false,
-      } as TrackingEvent], // Cast to TrackingEvent
+      }], // Removed explicit cast as literal type should match
       pauseIntervals: [],
       isSynced: false,
       jobs: [], // Initialize jobs array with correct type
@@ -379,7 +399,7 @@ function TechTrackApp({ technicianName }: TechTrackAppProps): JSX.Element {
  jobs: newWorkday.jobs, // jobs property is a JSONB field in the DB
       events: newWorkday.events, // events property
       pauseIntervals: newWorkday.pauseIntervals,
- isSynced: newWorkday.isSynced,
+ isSynced: newWorkday.isSynced, // Ensure isSynced is included
  id: newWorkday.id, // Ensure ID is included for Dexie
  } as Workday; // Explicitly cast to Workday
     await localDb.workdays.add(workdayForDb);
@@ -405,7 +425,7 @@ function TechTrackApp({ technicianName }: TechTrackAppProps): JSX.Element {
           description: "La jornada ha comenzado y se ha sincronizado inicialmente con la nube."
         });
     } catch (error) { // Add the error parameter to the catch block
- console.error("Error triggering sync after starting workday:", error); // Log the actual error
+ console.error("Error triggering sync after starting workday:", error); // Log the actual error in catch block
         setSyncStatus('error');
         setSyncRetryActive(true); // Activate retry if initial sync fails
  toast({
@@ -429,7 +449,7 @@ function TechTrackApp({ technicianName }: TechTrackAppProps): JSX.Element {
  isSynced: false,
     };
  setWorkday(prev => prev ? ({ // Use functional update
- ...prev,
+      ...prev,
       status: 'paused',
       // Add the new pause interval to the array
       pauseIntervals: [...prev.pauseIntervals, newPauseInterval],
@@ -446,7 +466,7 @@ function TechTrackApp({ technicianName }: TechTrackAppProps): JSX.Element {
         description: "Datos sincronizados con la nube después de pausar.", // Use functional update for toast
  });
  } catch (error) {
- console.error("Error triggering sync after pausing:", error); // Log the actual error
+ console.error("Error triggering sync after pausing:", error); // Log the actual error in catch block
       setSyncRetryActive(true); // Activate retry if initial sync fails
  toast({
  title: "Error de Sincronización",
@@ -537,10 +557,10 @@ const handleJobFormSubmit = async (jobId?: string | null) => {
   // Common logic for setting loading state during save operations
   setIsSavingToCloud(true);
  
-  if (jobModalMode === 'new') { // Moved closing brace here
+  if (jobModalMode === 'new') {
     if (!safeCurrentLocation) {
  toast({ title: "Ubicación Requerida", description: "No se puede iniciar un nuevo trabajo sin una ubicación válida.", variant: "destructive" }); // Show toast
- return; // Return early if location is not available
+      return; // Return early if location is not available
     }
     const newJob: Job = { // Define the newJob object here with proper type annotation
       id: crypto.randomUUID(), // Assign a new UUID
@@ -567,8 +587,8 @@ const handleJobFormSubmit = async (jobId?: string | null) => {
         title: "Sincronización Exitosa",
         description: "Datos sincronizados con la nube después de iniciar un trabajo."
       });
- } catch (error) { // Add the error parameter to the catch block
- console.error("Error triggering sync after starting new job:", error);
+ } catch (error) { // Add the error parameter to the catch block.
+ console.error("Error triggering sync after starting new job:", error); // Log the actual error in catch block
  setSyncStatus('error'); // Set status to error on failure
  toast({ title: "Error de Sincronización", description: "Fallo al sincronizar datos después de iniciar un trabajo. Reintentos automáticos activados.", variant: "destructive" }); // Add toast on sync failure
  } finally {
@@ -579,11 +599,11 @@ const handleJobFormSubmit = async (jobId?: string | null) => {
     // This block is for job completion/summarization
     console.log(jobToSummarizeId);
 
-    // --- Modified Logic for Job Completion (Non-blocking AI) ---
-    console.log("Handling job completion form submit for job ID:", jobToSummarizeId);
-    const jobToUpdateIndex = workday.jobs.findIndex(j => j.id === jobToSummarizeId); // Find the index of the job to update
-    if (jobToUpdateIndex === -1) {
-      console.error(`Attempted to complete non-existent job with ID: ${jobToSummarizeId}`);
+ // --- Modified Logic for Job Completion (Non-blocking AI) ---
+ console.log("Handling job completion form submit for job ID:", jobToSummarizeId);
+ const jobToUpdateIndex = workday.jobs.findIndex(j => j.id === jobToSummarizeId); // Find the index of the job to update
+ if (jobToUpdateIndex === -1) {
+ console.error(`Attempted to complete non-existent job with ID: ${jobToSummarizeId}`);
  toast({ title: "Error Interno", description: "No se encontró el trabajo para completar.", variant: "destructive" }); // Add toast for user feedback
 
  setCurrentJobFormData({ description: '', summary: '' });
@@ -629,7 +649,7 @@ const handleJobFormSubmit = async (jobId?: string | null) => {
         description: "Datos sincronizados con la nube después de completar un trabajo."
       });
  } catch (error) { // Add the error parameter to the catch block
- console.error("Error triggering sync after completing job:", error); // Log the actual error
+ console.error("Error triggering sync after completing job:", error); // Log the actual error in catch block
  toast({ title: "Error de Sincronización", description: "Fallo al sincronizar datos después de completar un trabajo. Reintentos automáticos activados.", variant: "destructive" });
  setSyncRetryActive(true); // Keep existing retry activation
  } finally {
@@ -674,7 +694,6 @@ const handleJobFormSubmit = async (jobId?: string | null) => {
  description: "No se pudo generar el resumen de IA para este trabajo. Puedes añadirlo manualmente más tarde.",
  variant: "destructive"
  });
- toast({ title: "Error de IA", description: "No se pudo generar el resumen de IA para este trabajo.", variant: "destructive" });
         // The local state already has the user's summary, so no change needed there.
       })
       .finally(() => { // Ensure proper closing brace for .finally()
@@ -682,6 +701,7 @@ const handleJobFormSubmit = async (jobId?: string | null) => {
         console.log("AI summarize finally block: Pending end day action detected. Checking latest state...");
  setWorkday(latestWorkdayState => { // Using functional update to get latest state
  if (!latestWorkdayState) return null; // Return null if latest state is null or undefined
+ // Fix: Check if the job is locally completed before initiating the end day process.
           const jobIsLocallyCompleted = latestWorkdayState.jobs.find(j => j.id === jobToSummarizeId)?.status === 'completed'; // Check the latest state
  if (jobIsLocallyCompleted) { // Only proceed if job is locally completed
             initiateEndDayProcess(latestWorkdayState, toast, setIsLoading);
@@ -691,14 +711,38 @@ const handleJobFormSubmit = async (jobId?: string | null) => {
  setAiLoading(prev => ({ ...prev, summarize: false })); // Ensure AI loading is off regardless of pendingEndDayAction
  }); // Close the summarizeJobDescription then/catch/finally block
     setJobToSummarizeId(null); // Reset jobToSummarizeId after processing completion
-};
+}; // Closing brace for handleJobFormSubmit
  // MARK: Function Definitions
-  const handleManualCompleteJob = () => {
-    if (!currentJob) return;
     setJobModalMode('summary');
-    setCurrentJobFormData({ description: currentJob.description || '', summary: '' }); // Ensure description is string
-    setIsJobModalOpen(true);
+    // Only proceed if currentJob is not null or undefined
+ if (currentJob) {
+ setCurrentJobFormData({ description: currentJob.description || '', summary: '' }); // Ensure description is string
+ setIsJobModalOpen(true);
  recordEvent('USER_ACTION', currentLocation, currentJob.id, "Modal de completar trabajo abierto manualmente");
+ } else {
+ toast({
+ title: "Error",
+ description: "No hay un trabajo activo para completar manualmente.",
+ variant: "destructive",
+      });
+    }
+  };
+
+  const handleManualCompleteJob = () => {
+    // Only proceed if currentJob is not null or undefined
+    if (currentJob) {
+      setJobToSummarizeId(currentJob.id); // Ensure jobToSummarizeId is set to the active job's ID
+      setJobModalMode('summary' as 'new' | 'summary'); // Explicitly cast
+      setCurrentJobFormData({ description: currentJob.description || '', summary: '' }); // Ensure description is string
+      setIsJobModalOpen(true);
+      recordEvent('USER_ACTION', currentLocation, currentJob.id, "Modal de completar trabajo abierto manualmente");
+    } else {
+      toast({
+        title: "Error",
+        description: "No hay un trabajo activo para completar manualmente.",
+        variant: "destructive",
+      });
+    }
   };
 
  const handleManualStartNewJob = () => {
@@ -707,234 +751,231 @@ const handleJobFormSubmit = async (jobId?: string | null) => {
       toast({ title: "Ubicación Requerida", description: "No se puede iniciar un nuevo trabajo sin una ubicación válida.", variant: "destructive" });
       return;
     }
-    setJobModalMode('new');
+    setJobModalMode('new' as 'new' | 'summary'); // Explicitly cast to literal type
     setCurrentJobFormData({ description: '', summary: '' }); // Set initial form data
-    setIsJobModalOpen(true);
+    setIsJobModalOpen(true); // Open the modal
  setJobToSummarizeId(null); // Ensure jobToSummarizeId is null when starting a new job action
-    recordEvent('USER_ACTION', safeCurrentLocation, undefined, "Modal de nuevo trabajo abierto manualmente");
- };
+    recordEvent('USER_ACTION', safeCurrentLocation, undefined, "Modal de nuevo trabajo abierto manualmente"); // Record the event
+  };
 
   const ActionButton = () => {
- const commonDisabled = isLoading;
+    const commonDisabled = isLoading || isSavingToCloud || aiLoading.newJob || aiLoading.jobCompletion || aiLoading.summarize; // Disable buttons while loading, saving, or AI is active
+
     if (!workday || workday.status === 'idle') {
-      return (
+      // Render start button if no workday exists or workday status is idle
+ return (
         <Button
-          onClick={handleStartTracking} // Ensure this uses handleStartTracking
-          disabled={!currentLocation || commonDisabled}
-          className="w-full"
+          onClick={() => handleStartTracking()}
+          disabled={commonDisabled || !currentLocation} // Disable if loading/saving or no location
+ variant="default" // Primary button for starting
+ className="w-full"
           size="lg"
         >
-          {isLoading
-            ? <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            : <Play className="mr-2 h-5 w-5" />}
+          {commonDisabled ? (
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+          ) : (
+            <Play className="mr-2 h-4 w-4" /> // Play icon for starting
+          )}
           Iniciar Seguimiento
         </Button>
       );
     }
-    if (workday.status === 'tracking') {
-      return (
-        <div className="grid grid-cols-2 gap-4">
+
+    // Display button based on workday status
+    switch (workday.status) {
+      case 'tracking':
+        return (
+          <div className="flex space-x-2 w-full">
+            <Button onClick={handlePauseTracking} disabled={commonDisabled} variant="secondary" className="flex-1">
+              {commonDisabled ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Pause className="mr-2 h-4 w-4" />}
+ Pausar
+            </Button>
+            <Button onClick={handleEndDay} disabled={commonDisabled} variant="destructive" className="flex-1">
+              {commonDisabled ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <StopCircle className="mr-2 h-4 w-4" />}
+ Finalizar Día
+            </Button>
+          </div>
+ );
+
+ case 'paused':
+        return (
+          <div className="flex space-x-2 w-full"> {/* Use a div for spacing */}
+            <Button onClick={handleResumeTracking} disabled={commonDisabled} variant="default" className="flex-1">
+              {commonDisabled ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Play className="mr-2 h-4 w-4" />}
+ Reanudar
+            </Button>
+            {/* Add a spacer or another button here if needed */}
+            <Button onClick={handleEndDay} disabled={commonDisabled} variant="destructive" className="flex-1">
+              {commonDisabled ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <StopCircle className="mr-2 h-4 w-4" />}
+ Finalizar Día
+            </Button>
+          </div>
+ );
+ case 'ended':
+        return (
           <Button
-            onClick={handlePauseTracking}
-            variant="outline"
+            onClick={() => {
+ // Reset state for a new day
+                  setWorkday(null);
+                  setElapsedTime(0);
+                  setEndOfDaySummary(null);
+ localStorage.removeItem(getLocalStorageKey()); // Clear local storage
+ toast({ title: "Día Finalizado", description: "Puedes comenzar un nuevo día de seguimiento." });
+                }}
  disabled={commonDisabled}
-            className="w-full"
-            size="lg"
+ variant="default" // Primary button for starting a new day
+ className="w-full" // Make the button full width
+ size="lg"
           >
-            {isLoading
-              ? <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              : <Pause className="mr-2 h-5 w-5" />}
-            Pausar
-          </Button>
-          <Button
-            onClick={handleEndDay}
-            variant="destructive"
- disabled={commonDisabled}
-            className="w-full"
-            size="lg"
-          >
-            {isSavingToCloud
-              ? <CloudUpload className="mr-2 h-5 w-5 animate-pulse" />
-              : <StopCircle className="mr-2 h-5 w-5" />}
-            Finalizar Día
-          </Button>
-        </div>
-      );
-    }
-    if (workday.status === 'paused') {
-      return (
-        <div className="grid grid-cols-2 gap-4">
-          <Button
-            onClick={handleResumeTracking}
-            disabled={commonDisabled}
- className="w-full"
-            size="lg"
-          >
-            {isLoading
-              ? <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              : <Play className="mr-2 h-5 w-5" />}
-            Reanudar
-          </Button>
-          <Button
-            onClick={handleEndDay}
-            variant="destructive"
- disabled={commonDisabled}
-            className="w-full"
-            size="lg"
-          >
-            {isSavingToCloud
-              ? <CloudUpload className="mr-2 h-5 w-5 animate-pulse" />
-              : <StopCircle className="mr-2 h-5 w-5" />}
-            Finalizar Día
-          </Button>
-        </div>
-      );
-    }
-    if (workday.status === 'ended') {
-      return (
-        <Button
-          onClick={() => { // Use arrow function for inline click handler
-            setWorkday(null);
-            setElapsedTime(0);
-          }}
-          variant="secondary"
-          className="w-full"
-          size="lg"
-        >
+            {commonDisabled ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Play className="mr-2 h-4 w-4" />} {/* Use Play icon for starting new day */}
           Iniciar Nuevo Día
-        </Button>
-      );
+ </Button>
+ );
     }
+
     return null;
   };
 
 
- return ( // Start of return statement for JSX
-
-    <div className="flex justify-center items-center min-h-screen p-4">
-      <Card className="w-full max-w-md shadow-xl">
-        <CardHeader>
-          <CardTitle className="flex items-center space-x-2">
-            <User className="h-6 w-6" />
-            <span>{technicianName}</span> {/* Ensure technicianName is used here */}
-          </CardTitle>
-          <CardDescription>
-            Sistema de Seguimiento Técnico
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col space-y-4"> {/* Changed to flex-col for better layout control */}          {workday && (
-            <CurrentStatusDisplay />
-          )}
+ return (
+    <>
+ <div className="flex justify-center items-center min-h-screen p-4"> {/* Container for Card, ensures centering */}
+        <Card className="w-full max-w-md shadow-xl">
+          {/* CardHeader and following sections are now correctly nested inside Card */}
+          <CardHeader>
+            <CardTitle className="flex items-center space-x-2">
+              <User className="h-6 w-6" />
+              <span>{technicianName}</span> {/* Ensure technicianName is used here */}
+            </CardTitle>
+            <CardDescription>
+              Sistema de Seguimiento Técnico
+            </CardDescription>
+          </CardHeader>
           {workday?.status !== 'ended' && ( // Hide location and time info after day ends
-            <>
-              <LocationInfo
+            <> {/* Wrap multiple elements in a fragment */}
+ <LocationInfo
                 location={currentLocation}
                 error={geolocationError || undefined}
                 label="Ubicación Actual"
-                getGoogleMapsLink={(loc) => `https://www.google.com/maps/search/?api=1&query=${loc.latitude},${loc.longitude}`}
+ getGoogleMapsLink={(loc: LocationPoint) => `https://www.google.com/maps/search/?api=1&query=${loc.latitude},${loc.longitude}`}
               />
               {geolocationError && (
- <div className="text-sm text-red-600 flex items-start space-x-2">
-                <Ban className="h-5 w-5 flex-shrink-0" /> {/* Added icon for error */}
- <span><strong>Geolocalización Deshabilitada:</strong> Para iniciar el seguimiento, la aplicación necesita acceder a tu ubicación. Por favor, habilita los permisos de ubicación para esta app en la configuraci&quot;on de tu dispositivo.</span> {/* Fixed unescaped entities */}
- </div> // Closing div for geolocation error
- )}
+                <div className="text-sm text-red-600 flex items-start space-x-2">
+                  <Ban className="h-5 w-5 flex-shrink-0" /> {/* Added icon for error */}
+                  <span><strong>Geolocalización Deshabilitada:</strong> Para iniciar el seguimiento, la aplicación necesita acceder a tu ubicación. Por favor, habilita los permisos de ubicación para esta app en la configuración de tu dispositivo.</span> {/* Fixed unescaped entities */}
+                </div>
+              )}
               {workday?.status !== 'idle' && ( // Show elapsed time and current job if tracking or paused
-                <>
+                <> {/* Wrap multiple elements in a fragment */}
                   <div className="flex items-center space-x-2 text-sm"><Clock className="h-5 w-5 text-blue-500" /><span>Tiempo Transcurrido: {formatTime(elapsedTime)}</span></div>
-                  {currentJob && (<div className="flex items-center space-x-2 text-sm"><Briefcase className="h-5 w-5 text-green-500" /><span>Trabajo Actual: {currentJob.description}</span></div>)}
- </>
+                  {currentJob ? (
+                    <div className="flex items-center space-x-2 text-sm">
+ <Briefcase className="h-5 w-5 text-green-500" />
+ <span>Trabajo Actual: {currentJob.description}</span>
+                    </div>
+                  ) : null}
+                </>
               )}
             </>
-          )} {/* Closing tag for workday?.status !== 'ended' conditional rendering */}
+          )}
           {workday?.status === 'idle' && !currentLocation && ( // Show waiting for location message only in idle state
-            <div className="text-sm text-orange-600 flex items-center space-x-2">
-              <MapPinned className="h-4 w-4 flex-shrink-0" /> <span>Esperando ubicación para iniciar seguimiento...</span>
-            </div>
-          )}
-        </CardContent>
+            <CardContent className="flex flex-col space-y-4"> {/* Changed to flex-col for better layout control */}
+              <> {/* Wrap multiple elements in a fragment */}
+                <CurrentStatusDisplay
+                  workday={workday}
+                  endOfDaySummary={endOfDaySummary}
+                  isSavingToCloud={isSavingToCloud}
+                />
+                <div className="text-sm text-orange-600 flex items-center space-x-2">
+                  <MapPinned className="h-4 w-4 flex-shrink-0" /> <span>Esperando ubicación para iniciar seguimiento...</span>
+                </div>
+              </>
+            </CardContent>  
+          )};
+        
+      
 
-        <CardFooter className="flex-col space-y-4">
-          <ActionButton /> {/* Ensure ActionButton is rendered */}
+          <CardFooter className="flex-col space-y-4">
+ <ActionButton />
 
-          {/* Job Management Buttons (Show only when tracking and not loading/saving) */}
-          {workday?.status === 'tracking' && !isLoading && !isSavingToCloud && (
-            <div className="flex space-x-2 w-full">
-              <Button onClick={handleManualStartNewJob} variant="secondary" size="sm" className="flex-1">
-                <Briefcase className="mr-1 h-4 w-4" /> Nuevo Trabajo
-              </Button>
-              {currentJob && (
-                <Button onClick={handleManualCompleteJob} variant="secondary" size="sm" className="flex-1">
-                  <CheckCircle className="mr-1 h-4 w-4" /> Completar Trabajo
+            {/* Job Management Buttons (Show only when tracking and not loading/saving) */}
+            {workday?.status === 'tracking' && !isLoading && !isSavingToCloud && (
+              <div className="flex space-x-2 w-full">
+                <Button onClick={handleManualStartNewJob} variant="secondary" size="sm" className="flex-1">
+                  <Briefcase className="mr-1 h-4 w-4" /> Nuevo Trabajo
                 </Button>
-              )}
-            </div>
-          )}
+                {currentJob && (
+                  <Button onClick={handleManualCompleteJob} variant="secondary" size="sm" className="flex-1">
+                    <CheckCircle className="mr-1 h-4 w-4" /> Completar Trabajo
+                  </Button>
+                )}
+              </div>
+            )}
 
-          {/* Sync Status Indicator */}
-          {syncStatus !== 'idle' && (
-            <div className={`flex items-center space-x-2 text-sm ${syncStatus === 'error' ? 'text-red-600' : syncStatus === 'success' ? 'text-green-600' : 'text-blue-600'}`}>
-              {syncStatus === 'syncing' && <Loader2 className="h-4 w-4 animate-spin" />}
-              {syncStatus === 'success' && <CloudUpload className="h-4 w-4" />}
-              {syncStatus === 'error' && <AlertTriangle className="h-4 w-4" />}
-              <span>
-                {syncStatus === 'syncing' && 'Sincronizando...'}
-                {syncStatus === 'success' && 'Sincronizado con la nube.'}
-                {syncStatus === 'error' && 'Error de sincronización. Reintentando.'}
-              </span>
-            </div>
-          )}
+            {/* Sync Status Indicator */}
+            {syncStatus !== 'idle' && (
+              <div className={"flex items-center space-x-2 text-sm " + (syncStatus === 'error' ? 'text-red-600' : syncStatus === 'success' ? 'text-green-600' : 'text-blue-600')}>
+                {syncStatus === 'syncing' && <Loader2 className="h-4 w-4 animate-spin" />}
+                {syncStatus === 'success' && <CloudUpload className="h-4 w-4" />}
+                {syncStatus === 'error' && <AlertTriangle className="h-4 w-4" />}
+                <span>
+                  {syncStatus === 'syncing' && 'Sincronizando...'}
+                  {syncStatus === 'success' && 'Sincronizado con la nube.'}
+                  {syncStatus === 'error' && 'Error de sincronización. Reintentando.'}
+                </span>
+              </div>
+            )}
 
-          {/* AI Loading Indicators */}
-          {(aiLoading.newJob || aiLoading.jobCompletion || aiLoading.summarize) && (
-            <div className="flex items-center space-x-2 text-sm text-purple-600">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              <span>
-                {aiLoading.newJob && 'IA pensando (nuevo trabajo)...'}
-                {aiLoading.jobCompletion && 'IA pensando (finalizar trabajo)...'}
-                {aiLoading.summarize && 'IA resumiendo trabajo...'}
-              </span>
-            </div>
-          )}
+            {/* AI Loading Indicators */}
+            {(aiLoading.newJob || aiLoading.jobCompletion || aiLoading.summarize) && (
+              <div className="flex items-center space-x-2 text-sm text-purple-600">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                <span>
+                  {aiLoading.newJob && 'IA pensando (nuevo trabajo)...'}
+                  {aiLoading.jobCompletion && 'IA pensando (finalizar trabajo)...'}
+                  {aiLoading.summarize && 'IA resumiendo trabajo...'}
+                </span>
+              </div>
+            )}
 
-          {/* Link to History */}
-          <Link href="/history" passHref legacyBehavior>
-            <Button variant="ghost" className="w-full">
-              <History className="mr-2 h-4 w-4" /> Ver Historial
-            </Button>
-          </Link>
-        </CardFooter>
-      </Card>
+            {/* Link to History */}
+            <Link href="/history" passHref legacyBehavior>
+              <Button variant="ghost" className="w-full">
+                <History className="mr-2 h-4 w-4" /> Ver Historial
+              </Button>
+            </Link>
+          </CardFooter>
+        </Card>
 
-      {/* Job Modal (New Job or Summarize Job) */}
-      <Dialog open={isJobModalOpen} onOpenChange={setIsJobModalOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{jobModalMode === 'new' ? 'Nuevo Trabajo' : 'Completar/Resumir Trabajo'}</DialogTitle>
-            <DialogDescription>
-              {jobModalMode === 'new' ? 'Describe el nuevo trabajo que vas a comenzar.' : 'Describe el trabajo completado o añade un resumen.'}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="grid w-full max-w-sm items-center gap-1.5">
-              <Label htmlFor="job-description">Descripción del Trabajo</Label>
-              <Textarea
+        {/* Job Modal (New Job or Summarize Job) */}
+        <Dialog open={isJobModalOpen} onOpenChange={setIsJobModalOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>{jobModalMode === 'new' ? 'Nuevo Trabajo' : 'Completar/Resumir Trabajo'}</DialogTitle>
+              <DialogDescription>
+                {jobModalMode === 'new' ? 'Describe el nuevo trabajo que vas a comenzar.' : 'Describe el trabajo completado o añade un resumen.'}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-4 py-4">
+              <div className="grid w-full max-w-sm items-center gap-1.5">
+                <Label htmlFor="job-description">Descripción del Trabajo</Label>
+                <Textarea
                 id="job-description"
                 placeholder={jobModalMode === 'new' ? 'Mantenimiento preventivo en cliente XYZ...' : 'Se realizó limpieza y ajuste de componentes.'}
-                value={currentJobFormData.description}
-                onChange={(e) => setCurrentJobFormData({ ...currentJobFormData, description: e.target.value })}
-              />
+ value={currentJobFormData.description}
+ onChange={(e) => setCurrentJobFormData({ ...currentJobFormData, description: e.target.value })}
+                />
+              </div>
             </div>
-          </div>
-          <DialogFooter>
-            <DialogClose asChild>
-              <Button type="button" variant="secondary">Cancelar</Button>
-            </DialogClose>
-            <Button type="submit" onClick={() => handleJobFormSubmit(jobToSummarizeId)}>{jobModalMode === 'new' ? 'Iniciar Trabajo' : 'Guardar Resumen'}</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </div>
+            <DialogFooter>
+              <DialogClose asChild>
+                <Button type="button" variant="secondary">Cancelar</Button>
+              </DialogClose>
+              <Button type="submit" onClick={() => handleJobFormSubmit(jobToSummarizeId)}>{jobModalMode === 'new' ? 'Iniciar Trabajo' : 'Guardar Resumen'}</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </div> {/* Closing div for centering container */}
+    </>
   );
-}
 }
