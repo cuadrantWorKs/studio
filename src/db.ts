@@ -1,5 +1,5 @@
 import Dexie, { Table } from 'dexie';
-import { Workday, LocationPoint, Job, TrackingEvent, PauseInterval, TrackingStatus } from './lib/techtrack/types';
+import { Workday, Job, TrackingEvent, PauseInterval } from './lib/techtrack/types';
 
 export interface Location {
   id?: number; // Primary key

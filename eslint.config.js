@@ -1,0 +1,38 @@
+import eslint from '@eslint/js';
+import tseslint from 'typescript-eslint';
+import react from 'eslint-plugin-react';
+import nextjs from '@next/eslint-plugin-next';
+
+export default tseslint.config(
+  eslint.configs.recommended,
+  {
+    ignores: [".next/**"],
+  },
+  ...tseslint.configs.recommended,
+  {
+    files: ['**/*.js', '**/*.jsx', '**/*.ts', '**/*.tsx'],
+    plugins: {
+      react: react,
+      '@next/next': nextjs,
+    },
+    rules: {
+      // Add any custom rules here
+      ...react.configs.recommended.rules,
+      ...react.configs['jsx-runtime'].rules,
+      ...nextjs.configs.recommended.rules,
+      ...nextjs.configs['core-web-vitals'].rules,
+    },
+    languageOptions: {
+      parserOptions: {
+        ecmaFeatures: {
+          jsx: true,
+        },
+      },
+    },
+    settings: {
+      react: {
+        version: 'detect',
+      },
+    },
+  }
+);

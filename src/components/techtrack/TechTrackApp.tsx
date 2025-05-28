@@ -3,6 +3,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 
+import PropTypes from 'prop-types';
 import Link from 'next/link';
 
 import { Button } from '@/components/ui/button';
@@ -80,7 +81,7 @@ interface CurrentStatusDisplayProps {
   isSavingToCloud: boolean;
 }
 
-const CurrentStatusDisplay: React.FC<CurrentStatusDisplayProps> = ({ workday, endOfDaySummary, isSavingToCloud }) => {
+const CurrentStatusDisplay = ({ workday, endOfDaySummary, isSavingToCloud }: CurrentStatusDisplayProps) => {
   if (!workday) {
  return <p className="text-muted-foreground">Presiona "Iniciar Seguimiento" para comenzar tu día.</p>;
   }
@@ -143,6 +144,12 @@ const CurrentStatusDisplay: React.FC<CurrentStatusDisplayProps> = ({ workday, en
  );
   }
 };
+
+CurrentStatusDisplay.propTypes = {
+  workday: PropTypes.object, // More specific shape can be defined if needed
+  endOfDaySummary: PropTypes.object, // More specific shape can be defined if needed
+  isSavingToCloud: PropTypes.bool.isRequired,
+};
 export default function TechTrackApp({ technicianName }: TechTrackAppProps): JSX.Element {
   const [workday, setWorkday] = useState<Workday | null>(null);
   const [currentLocation, setCurrentLocation] = useState<LocationPoint | null>(null);
@@ -152,13 +159,11 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps): JSX
   const [isJobModalOpen, setIsJobModalOpen] = useState(false);
   const [jobModalMode, setJobModalMode] = useState<'new' | 'summary'>('new');
   const [currentJobFormData, setCurrentJobFormData] = useState({ description: '', summary: '' });
-  const [isSummaryModalOpen, setIsSummaryModalOpen] = useState(false);
   const [endOfDaySummary, setEndOfDaySummary] = useState<WorkdaySummaryContext | null>(null);
 
   const [isLoading, setIsLoading] = useState(false);
   const [isSavingToCloud, setIsSavingToCloud] = useState(false);
   const [aiLoading, setAiLoading] = useState<Record<string, boolean>>({});
-  const [pendingEndDayAction, setPendingEndDayAction] = useState(false);
   const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'success' | 'error'>('idle');
   const [syncRetryActive, setSyncRetryActive] = useState(false);
   const [jobToSummarizeId, setJobToSummarizeId] = useState<string | null>(null);
@@ -579,7 +584,6 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps): JSX
     const activeJob = workday.jobs.find(j => j.id === workday.currentJobId && j.status === 'active');
 
     if (activeJob) {
- setPendingEndDayAction(true);
  setJobToSummarizeId(activeJob.id);
  setJobModalMode('summary');
  setCurrentJobFormData({ description: activeJob.description || '', summary: '' });
@@ -650,6 +654,7 @@ const handleJobFormSubmit = async (jobId?: string | null) => {
     }
 
     // This block is for job completion, not new job creation. The newJob object definition was misplaced.
+ console.log(jobToSummarizeId);
 
     // --- Modified Logic for Job Completion (Non-blocking AI) ---
     console.log("Handling job completion form submit for job ID:", jobToSummarizeId);
@@ -664,6 +669,7 @@ const handleJobFormSubmit = async (jobId?: string | null) => {
     }
 
     // Store the job data *before* updating its status to 'completed'
+ console.log('Workday before update:', workday);
     const jobBeforeCompletion = workday.jobs[jobToUpdateIndex];
     // 1. Immediately update local state to mark job as completed with user summary
  setWorkday(prev => {
@@ -678,6 +684,7 @@ const handleJobFormSubmit = async (jobId?: string | null) => {
  isSynced: false, // Mark the updated job as unsynced
  };
 
+ console.log('Updated jobs before setting state:', updatedJobs);
  return {
         ...prev,
  jobs: updatedJobs,
@@ -713,6 +720,7 @@ const handleJobFormSubmit = async (jobId?: string | null) => {
  await summarizeJobDescription({ jobDescription: currentJobFormData.summary || 'N/A' }) // Provide default if summary is empty
       .then(async aiRes => {
         // `aiRes` contains the AI summary
+        console.log('AI Summarization result:', aiRes);
         console.log("AI Summarization successful:", aiRes.summary);
         // Update local state with AI summary opportunistically
         setWorkday(prev => {
@@ -747,13 +755,12 @@ const handleJobFormSubmit = async (jobId?: string | null) => {
       .finally(() => { // Ensure proper closing brace for .finally()
         // 4. Check if End Day action was pending and proceed
         console.log("AI summarize finally block: Pending end day action detected. Checking latest state...");
-        // We need to check the *current* state of the workday in the callback.
+        // We need to check the *current* state of the workday in the callback. // Removed duplicate console.log
  setWorkday(latestWorkdayState => { // Using functional update to get latest state
  if (!latestWorkdayState) return latestWorkdayState; // Return current state if null or undefined
           const jobIsLocallyCompleted = latestWorkdayState.jobs.find(j => j.id === jobToSummarizeId)?.status === 'completed'; // Check the latest state
           if (jobIsLocallyCompleted) { // Only proceed if job is locally completed
             initiateEndDayProcess(latestWorkdayState, toast, setIsLoading);
- setPendingEndDayAction(false); // Clear the flag once action is initiated
           }
  return latestWorkdayState; // Always return the latest state
  }); // Close the setWorkday functional update call
@@ -866,7 +873,6 @@ const handleJobFormSubmit = async (jobId?: string | null) => {
           onClick={() => {
             setWorkday(null);
             setElapsedTime(0);
-            setEndOfDaySummary(null);
             setPendingEndDayAction(false);
           }}
           variant="secondary"

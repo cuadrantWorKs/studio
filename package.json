@@ -8,8 +8,11 @@
     "genkit:watch": "genkit start -- tsx --watch src/ai/dev.ts",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
-    "typecheck": "tsc --noEmit"
+    "lint:fix": "eslint . --ext .ts,.tsx --fix",
+    "format": "prettier --write .",
+    "e2e": "playwright test --retries=1 --reporter=dot",
+    "typecheck": "tsc --noEmit",
+    "gemini": "npm run typecheck && npm run lint:fix && npm run format && npm run e2e"
   },
   "dependencies": {
     "@genkit-ai/googleai": "^1.8.0",
@@ -59,15 +62,20 @@
     "zod": "^3.24.2"
   },
   "devDependencies": {
+    "@playwright/test": "^1.52.0",
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",
+    "concurrently": "^9.1.2",
     "eslint": "9.27.0",
     "eslint-config-next": "15.3.2",
     "genkit-cli": "^1.8.0",
+    "playwright": "^1.52.0",
     "postcss": "^8",
     "prettier": "^3.5.3",
     "tailwindcss": "^3.4.1",
-    "typescript": "^5"
+    "typescript": "^5",
+    "typescript-eslint": "^8.33.0",
+    "wait-on": "^8.0.3"
   }
 }

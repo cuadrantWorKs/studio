@@ -2,7 +2,7 @@
 import { db as localDb } from '@/db'; // Import your local Dexie database instance
 import { db as supabaseDb } from '@/lib/supabase'; // Import your Supabase client instance
 import type { Workday, Job, TrackingEvent, PauseInterval, LocationPoint } from './types'; // Import types from types.ts
-import { isError } from './types';
+
 
 export async function syncLocalDataToSupabase() {
   // Check network status before attempting sync

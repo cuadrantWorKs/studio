@@ -3,8 +3,7 @@
 import { useState, useEffect } from 'react';
 import { db as localDb } from '@/db'; // Import local Dexie DB
 import { Button } from '@/components/ui/button';
-import { deserializePauseInterval } from "@/lib/techtrack/utils"; // Import the utility function
-import type { Workday, LocationPoint, PauseInterval } from '@/lib/techtrack/types';
+import type { Workday } from '@/lib/techtrack/types';
 
 import { syncLocalDataToSupabase } from '@/lib/techtrack/sync';
 export default function HistoryPage() {
@@ -15,13 +14,12 @@ export default function HistoryPage() {
     try {
       const allWorkdays = await localDb.workdays.toArray();
       const allLocations = await localDb.locations.toArray();
-      const locationsByWorkdayId: Record<string, Location[]> = allLocations.reduce((acc: Record<string, Location[]>, location) => {
+      allLocations.reduce((acc: Record<string, Location[]>, location) => {
         if (location.workdayId !== undefined) { // Check if workdayId is defined
           const workdayIdString = location.workdayId.toString();
           if (!acc[workdayIdString]) {
             acc[workdayIdString] = [];
           }
-      // @ts-ignore
           acc[workdayIdString].push(location as Location); // Cast location to Location type from db
         }
         return acc; // Return accumulator
@@ -34,9 +32,6 @@ export default function HistoryPage() {
         // const rawPauses: any[] = JSON.parse(workday.pauseIntervals as string || '[]'); 
         return {
           ...workday,
-          id: workday.id?.toString() || '', // Convert number id from db to string id in type
-          // If pauseIntervals was stored as string, you would deserialize here:
-          // pauseIntervals: deserializePauseInterval(workday.pauseIntervals as any) 
           // But assuming it's stored as PauseInterval[] directly
           pauseIntervals: workday.pauseIntervals || [], // Ensure pauseIntervals is always an array
         };

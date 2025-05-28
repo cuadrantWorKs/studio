@@ -1,5 +1,5 @@
 // src/lib/techtrack/workday.ts
-import type { Workday, WorkdaySummaryContext } from './types';
+import type { Workday } from './types';
 import { calculateWorkdaySummary } from './summary';
 import { syncLocalDataToSupabase } from './sync';
 import { db as localDb } from '@/db';
@@ -25,7 +25,7 @@ export const initiateEndDayProcess = async (
   // 1. Update workday status and end time/location locally
   const updatedWorkday = {
     ...currentWorkday,
-    status: 'ended' as 'ended',
+    status: 'ended' as const,
     endTime: endTime,
     // endLocation will ideally be the last known location from state in TechTrackApp before calling this function
     // Need to pass endLocation as a parameter, or access it from a shared state/context

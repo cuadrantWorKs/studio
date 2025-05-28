@@ -11,7 +11,7 @@ interface LocationInfoProps {
   getGoogleMapsLink: (location: LocationPoint) => string;
 }
 
-export default function LocationInfo({ location, label, time, error, getGoogleMapsLink }: LocationInfoProps) {
+export default function LocationInfo({ location, label, time, getGoogleMapsLink }: LocationInfoProps) {
   if (!location) return null;
   return (
     <div className="text-xs mt-1">
