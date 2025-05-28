@@ -1,29 +1,24 @@
 "use client";
-
-import { useState, useEffect } from 'react';
-import { db as localDb } from '@/db'; // Import local Dexie DB
-import { Button } from '@/components/ui/button';
-import type { Workday } from '@/lib/techtrack/types';
-
-import { syncLocalDataToSupabase } from '@/lib/techtrack/sync';
+import { useState, useEffect } from "react";
+import { db as localDb } from "@/db"; // Import local Dexie DB
+import type { Workday, LocationPoint } from "@/lib/techtrack/types";
 export default function HistoryPage() {
   const [workdays, setWorkdays] = useState<Workday[]>([]);
-  const [isSyncing, setIsSyncing] = useState(false);
 
   const fetchWorkdays = async () => {
     try {
       const allWorkdays = await localDb.workdays.toArray();
       const allLocations = await localDb.locations.toArray();
-      allLocations.reduce((acc: Record<string, Location[]>, location) => {
+      allLocations.reduce((acc: Record<string, LocationPoint[]>, location) => {
         if (location.workdayId !== undefined) { // Check if workdayId is defined
           const workdayIdString = location.workdayId.toString();
           if (!acc[workdayIdString]) {
             acc[workdayIdString] = [];
           }
-          acc[workdayIdString].push(location as Location); // Cast location to Location type from db
+          acc[workdayIdString].push(location as LocationPoint); // Cast location to LocationPoint type from db
         }
-        return acc; // Return accumulator
-      }, {} as Record<string, Location[]>); // Correct initial value and type assertion
+        return acc;
+      }, {} as Record<string, LocationPoint[]>);
 
       // Attach location history to workdays and ensure type compatibility
       // Assuming pauseIntervals is already stored as PauseInterval[] in the database
@@ -46,26 +41,10 @@ export default function HistoryPage() {
     fetchWorkdays();
   }, []);
 
-  const handleManualSync = async () => {
-    setIsSyncing(true);
-    try {
-      await syncLocalDataToSupabase();
-      await fetchWorkdays(); // Refetch data after sync
-    } catch (error) {
-      console.error("Error syncing local data:", error);
-      // TODO: Handle error (e.g., show a toast)
-    } finally {
-      setIsSyncing(false);
-    }
-  };
-
   return (
     <div className="container mx-auto p-4">
-      {/* Import and use Button if needed */}
       <h1 className="text-2xl font-bold mb-4">Historial de Jornadas Laborales</h1>
-      <Button onClick={handleManualSync} disabled={isSyncing}>
-        {isSyncing ? 'Sincronizando...' : 'Sincronizar Ahora'}
-      </Button>
+      {/* </Button> */}
       {/* Display the list of workdays here */}
       <ul>
         {workdays.map(workday => (

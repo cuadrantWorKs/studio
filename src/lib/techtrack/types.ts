@@ -80,7 +80,7 @@ export interface Workday {
   lastJobCompletionPromptTime?: number;
   currentJobId?: string | null;
  isSynced: boolean; // Added isSynced
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   [key: string]: any;
 }
 

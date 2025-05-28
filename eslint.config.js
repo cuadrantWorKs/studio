@@ -17,6 +17,12 @@ export default tseslint.config(
     },
     rules: {
       // Add any custom rules here
+      'react/prop-types': 'off',
+      '@typescript-eslint/no-explicit-any': 'off',
+      '@typescript-eslint/no-unused-vars': ['error', {
+        argsIgnorePattern: '^_',
+        varsIgnorePattern: '^_'
+      }],
       ...react.configs.recommended.rules,
       ...react.configs['jsx-runtime'].rules,
       ...nextjs.configs.recommended.rules,

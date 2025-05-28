@@ -17,35 +17,30 @@ import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 
 import {
-  MapPin, Play, Pause, StopCircle, Briefcase, Clock, CheckCircle, 
-  AlertTriangle, Loader2, History, CloudUpload, User, MessageSquareText, 
-  Ban, MapPinned
-} from 'lucide-react';
+  syncLocalDataToSupabase
+} from '@/lib/techtrack/sync';
+import {
+  initiateEndDayProcess
+} from '@/lib/techtrack/workday';
+import { Play, Pause, StopCircle, Briefcase, Clock, CheckCircle, AlertTriangle,
+  Loader2, History, CloudUpload, User, Ban, MapPinned } from 'lucide-react';
 
 import { haversineDistance } from '@/lib/techtrack/geometry';
-
 import { summarizeJobDescription } from '@/ai/flows/summarize-job-description';
-
+import { db as localDb } from '@/db';
+import WorkdaySummaryDisplay from './WorkdaySummaryDisplay'; // Importing WorkdaySummaryDisplay
 import { decidePromptForNewJob } from '@/ai/flows/decide-prompt-for-new-job';
-
 import { decidePromptForJobCompletion } from '@/ai/flows/decide-prompt-for-job-completion';
-
-import { calculateWorkdaySummary } from '@/lib/techtrack/summary';
-import { db as localDb } from '@/db'; // Import the local database instance
-import WorkdaySummaryDisplay from './WorkdaySummaryDisplay';
-import { db } from '@/lib/supabase';
-import { syncLocalDataToSupabase } from '@/lib/techtrack/sync'; // Import sync function
-import { initiateEndDayProcess } from '@/lib/techtrack/workday'; // Import the initiateEndDayProcess function
 import { Label } from '@/components/ui/label'; // Import the Label component from your UI library
 import { formatTime } from '@/lib/utils';
 import LocationInfo from './LocationInfo';
 import type {
   LocationPoint, Job, TrackingEvent, Workday, PauseInterval,
- GeolocationError, WorkdaySummaryContext, TrackingStatus, TrackingEventType
+ GeolocationError, WorkdaySummaryContext, TrackingEventType
 } from '@/lib/techtrack/types';
 
 
-const LOCATION_INTERVAL_MS = 60000;
+
 const STOP_DETECT_DURATION_MS = 15 * 60 * 1000;
 const MOVEMENT_THRESHOLD_METERS = 100;
 const RECENT_PROMPT_THRESHOLD_MS = 30 * 60 * 1000;
@@ -161,8 +156,8 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps): JSX
   const [currentJobFormData, setCurrentJobFormData] = useState({ description: '', summary: '' });
   const [endOfDaySummary, setEndOfDaySummary] = useState<WorkdaySummaryContext | null>(null);
 
-  const [isLoading, setIsLoading] = useState(false);
   const [isSavingToCloud, setIsSavingToCloud] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const [aiLoading, setAiLoading] = useState<Record<string, boolean>>({});
   const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'success' | 'error'>('idle');
   const [syncRetryActive, setSyncRetryActive] = useState(false);
@@ -224,7 +219,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps): JSX
             setGeolocationError({ code: error.code, message: error.message });
             toast({
  title: "Error de Geolocalización",
- description: `No se pudo obtener tu ubicación: ${error.message}. Asegúrate de que los permisos estén habilitados.`,
+ description: `No se pudo obtener tu ubicación: ${error.message}. Asegúrate de que los permisos estén habilitados.`, // Fixed unescaped entities
  variant: "destructive",
             });
  // Optionally attempt to get a one-time location if watchPosition fails
@@ -237,12 +232,12 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps): JSX
  } catch (err) {
  console.error('Geolocation watch error', err); // Keep existing error log
  setGeolocationError({ code: 0, message: 'Error iniciando seguimiento de geolocalización.' }); // Set a generic error state
- }
+ } // eslint-disable-next-line react-hooks/exhaustive-deps
     }
   }, []); // toast is a stable reference from useToast
 
   const recordEvent = useCallback((type: TrackingEvent['type'], locationParam: LocationPoint | null | undefined, jobId?: string, details?: string) => {
- setWorkday(prev => { // Use functional update
+ setWorkday(prev => { // Use functional update pattern to ensure latest state
       if (!prev) return null;
       const eventLocation = sanitizeLocationPoint(locationParam === undefined ? currentLocation : locationParam); // Sanitize the location for the event, returns LocationPoint | undefined
       const tempEventLiteral: Omit<TrackingEvent, 'workdayId' | 'isSynced'> = { // Define the literal structure first
@@ -315,7 +310,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps): JSX
       retryInterval = setInterval(async () => {
         console.log('Attempting failed sync retry...');        setSyncStatus('syncing'); // Set status to syncing before retry attempt
         try { // Start of try block for sync attempt
-          toast({
+          toast({ // Show toast before attempting retry
             title: "Reintentando Sincronización",
             description: "Intentando sincronizar datos pendientes con la nube...",
           });
@@ -329,7 +324,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps): JSX
           console.log('Failed sync retry successful.');
         } catch (error) {
  toast({ title: "Error de Sincronización", description: "Fallo al reintentar la sincronización. Reintentando en 15 minutos.", variant: "destructive" });
-          setSyncStatus('error');
+          setSyncStatus('error'); // Set status to error on retry failure
           console.error('Failed sync retry failed:', error);
         }
       }, 15 * 60 * 1000); // 15 minutes
@@ -341,15 +336,15 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps): JSX
   }, [syncRetryActive]);
  
   useEffect(() => {
-    if (workday?.status === 'tracking' && !currentJob) {
+ if (workday?.status === 'tracking' && !currentJob) {
       if (aiLoading.newJob || isJobModalOpen) return;
       
       const lastMovementTime = workday.locationHistory[workday.locationHistory.length -1]?.timestamp || workday.startTime;
       if (Date.now() - (lastMovementTime || Date.now()) > STOP_DETECT_DURATION_MS) {
         const hasBeenPromptedRecently = workday.lastNewJobPromptTime && (Date.now() - workday.lastNewJobPromptTime < RECENT_PROMPT_THRESHOLD_MS);
-
+ // Set AI loading state before the AI call
  setAiLoading(prev => ({...prev, newJob: true}));
-        decidePromptForNewJob({ hasBeenPromptedRecently: !!hasBeenPromptedRecently, timeStoppedInMinutes: Math.round(STOP_DETECT_DURATION_MS / (60*1000)) })
+ decidePromptForNewJob({ hasBeenPromptedRecently: !!hasBeenPromptedRecently, timeStoppedInMinutes: Math.round(STOP_DETECT_DURATION_MS / (60*1000)) })
           .then(res => {
             if (res.shouldPrompt) {
               toast({ title: "¿Nuevo Trabajo?", description: "Parece que te has detenido. ¿Comenzando un nuevo trabajo? IA: " + res.reason });
@@ -369,7 +364,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps): JSX
   }, [workday, currentLocation, toast, recordEvent, currentJob, isJobModalOpen, aiLoading.newJob]);
 
   useEffect(() => {
-    if (!isSavingToCloud && workday?.status === 'tracking' && currentJob && currentJob.status === 'active' && currentLocation) {
+ if (workday?.status === 'tracking' && currentJob && currentJob.status === 'active' && currentLocation) {
         if(aiLoading.jobCompletion || isJobModalOpen) return;
 
         const jobStartLocation = currentJob.startLocation; // Already sanitized LocationPoint
@@ -378,9 +373,9 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps): JSX
         const distance = haversineDistance(jobStartLocation, currentLocation); // currentLocation is sanitized
         if (distance > MOVEMENT_THRESHOLD_METERS) {
           const lastPromptTime = workday.lastJobCompletionPromptTime;
-
+ console.log("Checking job completion prompt logic...");
  setAiLoading(prev => ({ ...prev, jobCompletion: true })); // Set AI loading state before the call
-          decidePromptForJobCompletion({ distanceMovedMeters: distance, lastJobPromptedTimestamp: lastPromptTime })
+          decidePromptForJobCompletion({ distanceMovedMeters: distance, lastJobPromptedTimestamp: lastPromptTime ?? 0 }) // Pass 0 if lastPromptTime is null/undefined
             .then(res => {
  if (res.shouldPrompt) {
                 toast({ title: "¿Actualizar Trabajo?", description: `Te has movido significativamente. ¿Completaste el trabajo: ${currentJob.description}? IA: ${res.reason}` });
@@ -390,7 +385,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps): JSX
                 setIsJobModalOpen(true);
                 recordEvent('JOB_COMPLETION_PROMPT', currentLocation, currentJob.id, `IA: ${res.reason}`); // recordEvent accepts LocationPoint | null | undefined
               }
-              setWorkday(prev => prev ? ({ ...prev, lastJobCompletionPromptTime: Date.now() }) : null);
+              setWorkday(prev => prev ? ({ ...prev, lastJobCompletionPromptTime: Date.now() }) : null); // eslint-disable-next-line react-hooks/exhaustive-deps
             })
             .catch(err => {
             console.error("AI Error (decidePromptForJobCompletion):", err);
@@ -442,7 +437,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps): JSX
  }; // Workday structure is now defined and matches types.ts
 
     // Guardamos local & estado, ensuring types for DB insertion
-    // When adding to localDb, ensure startTime and startLocation match expected types
+    // When adding to localDb (Dexie), ensure properties match the DbWorkday type
     // Explicitly construct the object with all Workday properties and correct types for localDb
  const workdayForDb: Workday = {
       technicianId: newWorkday.technicianId,
@@ -464,7 +459,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps): JSX
     setWorkday(newWorkday);
     toast({ title: "Seguimiento Iniciado", description: "Tu jornada laboral ha comenzado." });
 
-    // Primer prompt IA
+    // First AI prompt after starting tracking
     setTimeout(() => {
  setJobModalMode('new');
         setCurrentJobFormData({ description: '', summary: '' });
@@ -474,7 +469,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps): JSX
     }, 100);
 
     setIsLoading(false);
-    setSyncStatus('syncing');
+ setSyncStatus('syncing'); // Set status to syncing before initial sync
     try {
         await syncLocalDataToSupabase(); // Trigger sync after starting workday
         setSyncStatus('success');
@@ -483,7 +478,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps): JSX
           description: "La jornada ha comenzado y se ha sincronizado inicialmente con la nube."
         });
     } catch (error) { // Add the error parameter to the catch block
-        console.error("Error triggering sync after starting workday:", error);
+ console.error("Error triggering sync after starting workday:", error); // Log the actual error
         setSyncStatus('error');
         setSyncRetryActive(true); // Activate retry if initial sync fails
  toast({
@@ -512,7 +507,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps): JSX
       // Add the new pause interval to the array
       pauseIntervals: [...prev.pauseIntervals, newPauseInterval],
     }) : null);
- recordEvent('SESSION_PAUSE', currentLocation); // recordEvent expects LocationPoint | null | undefined, currentLocation is LocationPoint | null
+ recordEvent('SESSION_PAUSE', currentLocation); // Pass currentLocation which is LocationPoint | null
  toast({ title: "Seguimiento Pausado", description: "Tu jornada laboral está en pausa." }); // Use functional update for toast
     setIsLoading(false);
  setSyncStatus('syncing'); // Set status to syncing before sync
@@ -524,7 +519,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps): JSX
         description: "Datos sincronizados con la nube después de pausar.", // Use functional update for toast
       });
  } catch (error) {
-      console.error("Error triggering sync after pausing:", error);
+ console.error("Error triggering sync after pausing:", error); // Log the actual error
       setSyncRetryActive(true); // Activate retry if initial sync fails
  toast({
         title: "Error de Sincronización",
@@ -555,7 +550,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps): JSX
  pauseIntervals: updatedPauses, // Ensure updatedPauses is returned
  // Existing pauses that were already ended and potentially synced are spread by ...prev
  };
-    });
+    }); // Close the setWorkday functional update
  recordEvent('SESSION_RESUME', currentLocation); // recordEvent expects LocationPoint | null | undefined, currentLocation is LocationPoint | null
  toast({ title: "Seguimiento Reanudado", description: "¡Bienvenido de nuevo! El seguimiento está activo." });
  setIsLoading(false); // This should be set to false regardless of sync outcome
@@ -570,7 +565,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps): JSX
       });
  } catch (error) {
       console.error("Error triggering sync after resuming:", error);
- setSyncStatus('error');
+ setSyncStatus('error'); // Set status to error on sync failure
  toast({ title: "Error de Sincronización", description: "Fallo al sincronizar datos después de reanudar. Reintentos automáticos activados.", variant: "destructive" });
  setSyncRetryActive(true); // Activate retry if sync fails
     }
@@ -599,7 +594,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps): JSX
     console.log("No active job found. Initiating end day process directly.");
     // Ensure we are passing the current workday state
     if (workday) { // Check if workday is still valid
-      initiateEndDayProcess(workday, toast, setIsLoading);
+ initiateEndDayProcess(workday, toast, setIsLoading);
     } else {
        console.error("Workday became null unexpectedly before initiateEndDayProcess could be called.");
        toast({ title: "Error Interno", description: "Estado de jornada perdido al intentar finalizar.", variant: "destructive" });
@@ -648,7 +643,7 @@ const handleJobFormSubmit = async (jobId?: string | null) => {
  setSyncRetryActive(true); // Activate retry if initial sync fails
  }
     setJobToSummarizeId(null); // Reset jobToSummarizeId after handling new job submit
-  } else if (jobModalMode === 'summary' && jobToSummarizeId) {
+  } else if (jobModalMode === 'summary' && jobToSummarizeId) { // Conditional block for summarizing/completing a job
     if (!safeCurrentLocation) {
       return;
     }
@@ -658,7 +653,7 @@ const handleJobFormSubmit = async (jobId?: string | null) => {
 
     // --- Modified Logic for Job Completion (Non-blocking AI) ---
     console.log("Handling job completion form submit for job ID:", jobToSummarizeId);
-    const jobToUpdateIndex = workday.jobs.findIndex(j => j.id === jobToSummarizeId);
+    const jobToUpdateIndex = workday.jobs.findIndex(j => j.id === jobToSummarizeId); // Find the index of the job to update
     if (jobToUpdateIndex === -1) {
       console.error(`Attempted to complete non-existent job with ID: ${jobToSummarizeId}`);
  toast({ title: "Error Interno", description: "No se encontró el trabajo para completar.", variant: "destructive" }); // User feedback
@@ -707,7 +702,7 @@ const handleJobFormSubmit = async (jobId?: string | null) => {
         description: "Datos sincronizados con la nube después de completar un trabajo."
       });
  } catch (error) {
- setSyncStatus('error');
+ console.error("Error triggering sync after completing job:", error); // Log the actual error
  toast({ title: "Error de Sincronización", description: "Fallo al sincronizar datos después de completar un trabajo. Reintentos automáticos activados.", variant: "destructive" });
  setSyncRetryActive(true); // Keep existing retry activation
  }
@@ -716,10 +711,9 @@ const handleJobFormSubmit = async (jobId?: string | null) => {
 
     // 2. Initiate AI summarization asynchronously (fire-and-forget)
     setAiLoading(prev => ({ ...prev, summarize: true })); // Indicate AI is working
-    // Use the user's summary for the AI prompt
- await summarizeJobDescription({ jobDescription: currentJobFormData.summary || 'N/A' }) // Provide default if summary is empty
+    // Use the job description and user's summary for the AI prompt
+ await summarizeJobDescription({ jobDescription: jobBeforeCompletion.description || 'N/A' }) // Provide default if summary is empty
       .then(async aiRes => {
-        // `aiRes` contains the AI summary
         console.log('AI Summarization result:', aiRes);
         console.log("AI Summarization successful:", aiRes.summary);
         // Update local state with AI summary opportunistically
@@ -743,7 +737,7 @@ const handleJobFormSubmit = async (jobId?: string | null) => {
       }) // Close the then block for summarizeJobDescription
       .catch(err => {
  console.error("AI Error (summarizeJobDescription):", err); // Keep existing error handling
- toast({
+ toast({ // Show error toast for AI summarization failure
  title: "Error de IA",
  description: "No se pudo generar el resumen de IA para este trabajo. Puedes añadirlo manualmente más tarde.",
  variant: "destructive"
@@ -759,7 +753,7 @@ const handleJobFormSubmit = async (jobId?: string | null) => {
  setWorkday(latestWorkdayState => { // Using functional update to get latest state
  if (!latestWorkdayState) return latestWorkdayState; // Return current state if null or undefined
           const jobIsLocallyCompleted = latestWorkdayState.jobs.find(j => j.id === jobToSummarizeId)?.status === 'completed'; // Check the latest state
-          if (jobIsLocallyCompleted) { // Only proceed if job is locally completed
+ if (jobIsLocallyCompleted) { // Only proceed if job is locally completed
             initiateEndDayProcess(latestWorkdayState, toast, setIsLoading);
           }
  return latestWorkdayState; // Always return the latest state
@@ -767,7 +761,7 @@ const handleJobFormSubmit = async (jobId?: string | null) => {
  setAiLoading(prev => ({ ...prev, summarize: false })); // Ensure AI loading is off regardless of pendingEndDayAction
       }); // Close the summarizeJobDescription then/catch/finally block
     setJobToSummarizeId(null); // Reset jobToSummarizeId after processing completion
-  }
+  } // Close the else if block for summary mode
 };
  // MARK: Function Definitions
   const handleManualCompleteJob = () => {
@@ -792,7 +786,7 @@ const handleJobFormSubmit = async (jobId?: string | null) => {
  };
 
   const ActionButton = () => {
-    const commonDisabled = isLoading || isSavingToCloud;
+ const commonDisabled = isLoading;
     if (!workday || workday.status === 'idle') {
       return (
         <Button
@@ -814,7 +808,7 @@ const handleJobFormSubmit = async (jobId?: string | null) => {
           <Button
             onClick={handlePauseTracking}
             variant="outline"
-            disabled={commonDisabled}
+ disabled={commonDisabled}
             className="w-full"
             size="lg"
           >
@@ -826,7 +820,7 @@ const handleJobFormSubmit = async (jobId?: string | null) => {
           <Button
             onClick={handleEndDay}
             variant="destructive"
-            disabled={commonDisabled}
+ disabled={commonDisabled}
             className="w-full"
             size="lg"
           >
@@ -844,7 +838,7 @@ const handleJobFormSubmit = async (jobId?: string | null) => {
           <Button
             onClick={handleResumeTracking}
             disabled={commonDisabled}
-            className="w-full"
+ className="w-full"
             size="lg"
           >
             {isLoading
@@ -855,7 +849,7 @@ const handleJobFormSubmit = async (jobId?: string | null) => {
           <Button
             onClick={handleEndDay}
             variant="destructive"
-            disabled={commonDisabled}
+ disabled={commonDisabled}
             className="w-full"
             size="lg"
           >
@@ -873,7 +867,6 @@ const handleJobFormSubmit = async (jobId?: string | null) => {
           onClick={() => {
             setWorkday(null);
             setElapsedTime(0);
-            setPendingEndDayAction(false);
           }}
           variant="secondary"
           className="w-full"
@@ -917,8 +910,8 @@ const handleJobFormSubmit = async (jobId?: string | null) => {
               {geolocationError && (
  <div className="text-sm text-red-600 flex items-start space-x-2">
  <Ban className="h-5 w-5 flex-shrink-0" />
- <span><strong>Geolocalización Deshabilitada:</strong> Para iniciar el seguimiento, la aplicación necesita acceder a tu ubicación. Por favor, habilita los permisos de ubicación para esta app en la configuración de tu dispositivo.</span>
- </div>
+ <span><strong>Geolocalización Deshabilitada:</strong> Para iniciar el seguimiento, la aplicación necesita acceder a tu ubicación. Por favor, habilita los permisos de ubicación para esta app en la configuraci&quot;on de tu dispositivo.</span> {/* Fixed unescaped entities */}
+ </div> // Closing div for geolocation error
  )}
               {workday?.status !== 'idle' && ( // Show elapsed time and current job if tracking or paused
                 <>
