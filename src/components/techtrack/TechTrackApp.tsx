@@ -70,90 +70,11 @@ export const sanitizeLocationPoint = (location?: LocationPoint | null | undefine
   return undefined;
 };
 
-interface CurrentStatusDisplayProps {
-  workday: Workday | null;
-  endOfDaySummary: WorkdaySummaryContext | null;
-  isSavingToCloud: boolean;
-}
+const CurrentStatusDisplay = (): JSX.Element => (
+ <div>Placeholder Display</div>
+);
 
-const CurrentStatusDisplay = ({ workday, endOfDaySummary, isSavingToCloud }: CurrentStatusDisplayProps) => {
-  if (!workday) {
- return <p className="text-muted-foreground">Presiona "Iniciar Seguimiento" para comenzar tu día.</p>;
-  }
-
-  let statusText = "Desconocido";
-  let IconComponent = AlertTriangle;
-
-  switch (workday.status) {
-    case 'idle': {
- statusText = "Listo para Empezar";
- IconComponent = Play;
- return (
- <div className="flex items-center space-x-2">
- <IconComponent className={`h-5 w-5 text-accent ${IconComponent === Loader2 ? 'animate-spin' : ''}`} />
- <span>{statusText}</span>
- </div>
- );
-    }
-    case 'tracking': {
- statusText = "Seguimiento Activo";
- IconComponent = Clock;
- return (
- <div className="flex items-center space-x-2">
- <IconComponent className={`h-5 w-5 text-accent ${IconComponent === Loader2 ? 'animate-spin' : ''}`} />
- <span>{statusText}</span>
- </div>
- );
-    }
-    case 'paused': {
-      if (isSavingToCloud && workday.endTime) {
- statusText = "Finalizando jornada...";
- IconComponent = Loader2;
- return (
- <div className="flex items-center space-x-2">
- <IconComponent className={`h-5 w-5 text-accent ${IconComponent === Loader2 ? 'animate-spin' : ''}`} />
- <span>{statusText}</span>
- </div>
- );
-      } else {
- statusText = "Seguimiento Pausado";
- IconComponent = Pause;
- return (
- <div className="flex items-center space-x-2">
- <IconComponent className={`h-5 w-5 text-accent ${IconComponent === Loader2 ? 'animate-spin' : ''}`} />
- <span>{statusText}</span>
- </div>
- );
-      }
-    }
-    case 'ended': {
- if (endOfDaySummary) {
- return <WorkdaySummaryDisplay summary={endOfDaySummary} />;
- }
- statusText = "Día Finalizado";
- IconComponent = StopCircle;
- return (<div className="flex items-center space-x-2">
- <IconComponent className={`h-5 w-5 text-accent ${IconComponent === Loader2 ? 'animate-spin' : ''}`} />
- <span>{statusText}</span>
- </div>
- );
-    }
-    default: {
- return (<div className="flex items-center space-x-2 text-muted-foreground">
- <AlertTriangle className="h-5 w-5" />
- <span>Estado Desconocido</span>
- </div>
- );
-    }
-  }
-};
-// Explicitly define the return type as JSX.Element
-CurrentStatusDisplay.propTypes = {
-  workday: PropTypes.object, // More specific shape can be defined if needed
-  endOfDaySummary: PropTypes.object, // More specific shape can be defined if needed
-  isSavingToCloud: PropTypes.bool.isRequired,
-};
-export default function TechTrackApp({ technicianName }: TechTrackAppProps): JSX.Element {
+function TechTrackApp({ technicianName }: TechTrackAppProps): JSX.Element {
   const [workday, setWorkday] = useState<Workday | null>(null);
   const [currentLocation, setCurrentLocation] = useState<LocationPoint | null>(null);
   const [geolocationError, setGeolocationError] = useState<GeolocationError | null>(null); // Keep this for user feedback
@@ -408,14 +329,11 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps): JSX
 
   const handleStartTracking = async () => {
     const safeCurrentLocation = sanitizeLocationPoint(currentLocation); // sanitizeLocationPoint returns LocationPoint | undefined
- if (!safeCurrentLocation) { // Check if sanitized location is undefined
- toast({
-        title: "Sin Geolocalización",
-        description: "No se pudo obtener tu ubicación. Iniciando jornada sin coordenadas precisas.",
- variant: "default" // Changed to default as the variant "warning" does not exist
- }); // Changed to default as the variant "warning" does not exist
+ if (!currentLocation) { // Use currentLocation state directly to check if we ever got a location
+      toast({ title: "Esperando Ubicación", description: "Aún no se ha obtenido tu ubicación. Iniciando jornada sin coordenadas iniciales.", variant: "default" });
     }
     setIsLoading(true);
+    setGeolocationError(null); // Clear any previous location errors on start
     setEndOfDaySummary(null);
     const startTime = Date.now(); // Ensure startTime is a number (epoch milliseconds)
     const workdayId = crypto.randomUUID(); // Declare workdayId
@@ -428,7 +346,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps): JSX
       date: getCurrentFormattedDate(),
       startTime: startTime, // Assign the number directly
  startLocation: safeCurrentLocation, // Use the sanitized location (LocationPoint | undefined)
- status: 'tracking',
+ status: 'tracking', // Always set status to tracking
  locationHistory: safeCurrentLocation ? [safeCurrentLocation] : [],
       events: [{ // Initialize events array
         id: crypto.randomUUID(),
@@ -659,7 +577,7 @@ const handleJobFormSubmit = async (jobId?: string | null) => {
     setJobToSummarizeId(null); // Reset jobToSummarizeId after handling new job submit
   } else if (jobModalMode === 'summary' && jobToSummarizeId) {
     // This block is for job completion/summarization
- console.log(jobToSummarizeId);
+    console.log(jobToSummarizeId);
 
     // --- Modified Logic for Job Completion (Non-blocking AI) ---
     console.log("Handling job completion form submit for job ID:", jobToSummarizeId);
@@ -801,7 +719,7 @@ const handleJobFormSubmit = async (jobId?: string | null) => {
     if (!workday || workday.status === 'idle') {
       return (
         <Button
-          onClick={handleStartTracking}
+          onClick={handleStartTracking} // Ensure this uses handleStartTracking
           disabled={!currentLocation || commonDisabled}
           className="w-full"
           size="lg"
@@ -890,8 +808,9 @@ const handleJobFormSubmit = async (jobId?: string | null) => {
     return null;
   };
 
-  // Main render function for the component
-  return ( // Start of return statement for JSX
+
+ return ( // Start of return statement for JSX
+
     <div className="flex justify-center items-center min-h-screen p-4">
       <Card className="w-full max-w-md shadow-xl">
         <CardHeader>
@@ -903,13 +822,9 @@ const handleJobFormSubmit = async (jobId?: string | null) => {
             Sistema de Seguimiento Técnico
           </CardDescription>
         </CardHeader>
-        <CardContent className="flex flex-col space-y-4"> {/* Changed to flex-col for better layout control */}
- <CurrentStatusDisplay
- workday={workday}
- endOfDaySummary={endOfDaySummary}
- isSavingToCloud={isSavingToCloud}
- /> {/* Ensure this is rendered */}
-
+        <CardContent className="flex flex-col space-y-4"> {/* Changed to flex-col for better layout control */}          {workday && (
+            <CurrentStatusDisplay />
+          )}
           {workday?.status !== 'ended' && ( // Hide location and time info after day ends
             <>
               <LocationInfo
@@ -1021,5 +936,5 @@ const handleJobFormSubmit = async (jobId?: string | null) => {
       </Dialog>
     </div>
   );
-}; // Closing brace for the TechTrackApp component
+}
 }
