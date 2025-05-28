@@ -4,6 +4,7 @@ import type { WorkdaySummaryContext, LocationPoint, PauseInterval } from '@/lib/
 import { formatTime } from '@/lib/utils';
 import LocationInfo from './LocationInfo';
 import { CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { sanitizeLocationPoint } from './TechTrackApp';
 
 interface WorkdaySummaryDisplayProps {
   summary: WorkdaySummaryContext;
@@ -22,8 +23,8 @@ export default function WorkdaySummaryDisplay({ summary, showTitle = true }: Wor
         </CardHeader>
       )}
       <div className="space-y-1 text-sm">        
-        {summary.startLocation && <LocationInfo location={summary.startLocation} label="Workday Started:" time={summary.startTime} getGoogleMapsLink={getGoogleMapsLink} />}
-        <LocationInfo location={summary.endLocation} label="Workday Ended:" time={summary.endTime} getGoogleMapsLink={getGoogleMapsLink} />
+        {summary.startLocation && <LocationInfo location={sanitizeLocationPoint(summary.startLocation)} label="Workday Started:" time={summary.startTime} getGoogleMapsLink={getGoogleMapsLink} />}
+        <LocationInfo location={sanitizeLocationPoint(summary.endLocation)} label="Workday Ended:" time={summary.endTime} getGoogleMapsLink={getGoogleMapsLink} />
       </div>
       
       <p><strong>Total Active Time:</strong> {formatTime(summary.totalActiveTime)}</p>

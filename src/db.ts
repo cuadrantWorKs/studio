@@ -1,21 +1,6 @@
 import Dexie, { Table } from 'dexie';
-import { Job, PauseInterval, TrackingEvent, LocationPoint, TrackingStatus } from './lib/techtrack/types';
+import { Workday, LocationPoint, Job, TrackingEvent, PauseInterval, TrackingStatus } from './lib/techtrack/types';
 
-export interface Workday {
-  id: string; // Primary key (UUID)
-  technicianId: string; // Assuming you still want to keep this or map from userId
-  userId: string; // Added based on error
-  date: string; // Added based on error
-  startTime: number; 
-  endTime?: number; 
-  isSynced: boolean; // To track synchronization status
-  startLocation: LocationPoint | null; 
-  endLocation?: LocationPoint | null; 
-  status: TrackingStatus; 
-  jobs: Job[];
-  events: TrackingEvent[];
-  pauseIntervals: PauseInterval[];
-}
 export interface Location {
   id?: number; // Primary key
   workdayId: string; // Foreign key to Workday (changed to string to match Workday ID)
@@ -35,9 +20,12 @@ export interface Technician {
 // Assuming these types are defined elsewhere in your project
 
 export class LocalDatabase extends Dexie {
-  workdays!: Table<Workday>;
+  workdays!: Table<Workday, string>;
   locations!: Table<Location>;
   technicians!: Table<Technician>;
+  jobs!: Table<Job, string>;
+  events!: Table<TrackingEvent, string>;
+  pauseIntervals!: Table<PauseInterval, string>;
 
   constructor() {
     super('TechTrackLocalDB'); // Database name
@@ -46,7 +34,6 @@ export class LocalDatabase extends Dexie {
       locations: '++id, workdayId, timestamp, isSynced', // Added workdayId for indexing
       jobs: '&id, workdayId, isSynced, status',
       events: '&id, workdayId, isSynced, type', // Added based on schema
-      pauseIntervals: '&id, workdayId, isSynced', // Added based on schema
       technicians: '++id, name',
     });
   }

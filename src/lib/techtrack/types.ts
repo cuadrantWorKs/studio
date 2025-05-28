@@ -1,5 +1,3 @@
-// types.ts
-
 export interface LocationPoint {
   latitude: number;
   longitude: number;
@@ -13,8 +11,8 @@ export interface Job {
   id: string;
   workdayId: string;
   description: string;
-  startTime: number;
-  startLocation?: LocationPoint;
+  startTime?: number;
+  startLocation?: LocationPoint | undefined;
   endTime?: number;
   endLocation?: LocationPoint;
   summary?: string;    // Technician's summary
@@ -47,7 +45,7 @@ export interface TrackingEvent {
   id: string;
   workdayId: string;
   timestamp: number;
-  location?: LocationPoint;
+  location?: LocationPoint | undefined;
   jobId?: string;
   details?: string;
   isSynced: boolean;
@@ -58,15 +56,15 @@ export interface PauseInterval {
   id: string;
   workdayId: string;
   startTime: number | null;
-  endTime?: number | null;
-  startLocation?: LocationPoint | null;
-  endLocation?: LocationPoint | null;
+  endTime?: number | undefined;
+  startLocation?: LocationPoint | undefined;
+  endLocation?: LocationPoint | undefined;
   isSynced: boolean;
 }
 
 export interface Workday {
   id: string; 
-  userId: string;
+  userId?: string;
  technicianId: string; // Added technicianId
   date: string;                        // YYYY-MM-DD
   startTime?: number;
@@ -76,7 +74,7 @@ export interface Workday {
   status: TrackingStatus;
   locationHistory: LocationPoint[];
   jobs: Job[];
-  events: TrackingEvent[];
+ events: TrackingEvent[];  // Assuming events is an array
   pauseIntervals: PauseInterval[];
   lastNewJobPromptTime?: number;
   lastJobCompletionPromptTime?: number;

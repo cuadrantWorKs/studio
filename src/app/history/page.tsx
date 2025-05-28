@@ -3,7 +3,8 @@
 import { useState, useEffect } from 'react';
 import { db as localDb } from '@/db'; // Import local Dexie DB
 import { Button } from '@/components/ui/button';
-import type { Workday, LocationPoint } from '@/lib/techtrack/types';
+import { deserializePauseInterval } from "@/lib/techtrack/utils"; // Import the utility function
+import type { Workday, LocationPoint, PauseInterval } from '@/lib/techtrack/types';
 
 import { syncLocalDataToSupabase } from '@/lib/techtrack/sync';
 export default function HistoryPage() {
@@ -27,15 +28,24 @@ export default function HistoryPage() {
       }, {} as Record<string, Location[]>); // Correct initial value and type assertion
 
       // Attach location history to workdays and ensure type compatibility
-      const workdaysWithHistory: Workday[] = allWorkdays.map(workday => ({
-        ...workday,
-        id: workday.id?.toString() || '', // Convert number id from db to string id in type
-      // @ts-ignore
- locationHistory: (locationsByWorkdayId[workday.id?.toString() || ''] || []).map((loc: import('@/db').Location) => ({ latitude: loc.latitude, longitude: loc.longitude, timestamp: loc.timestamp.getTime() })),
-      }));
-
- setWorkdays(workdaysWithHistory); // Update state with workdays including location history
+      // Assuming pauseIntervals is already stored as PauseInterval[] in the database
+      const workdaysWithHistory: Workday[] = allWorkdays.map(workday => {
+        // No need to parse JSON if pauseIntervals is stored as an array
+        // const rawPauses: any[] = JSON.parse(workday.pauseIntervals as string || '[]'); 
+        return {
+          ...workday,
+          id: workday.id?.toString() || '', // Convert number id from db to string id in type
+          // If pauseIntervals was stored as string, you would deserialize here:
+          // pauseIntervals: deserializePauseInterval(workday.pauseIntervals as any) 
+          // But assuming it's stored as PauseInterval[] directly
+          pauseIntervals: workday.pauseIntervals || [], // Ensure pauseIntervals is always an array
+        };
+      });
+      setWorkdays(workdaysWithHistory); // Update state with workdays including location history
     } catch (error) { // Add catch block to handle errors
+      console.error("Error fetching workdays:", error);
+    }
+  };
 
   useEffect(() => {
     fetchWorkdays();
@@ -56,6 +66,7 @@ export default function HistoryPage() {
 
   return (
     <div className="container mx-auto p-4">
+      {/* Import and use Button if needed */}
       <h1 className="text-2xl font-bold mb-4">Historial de Jornadas Laborales</h1>
       <Button onClick={handleManualSync} disabled={isSyncing}>
         {isSyncing ? 'Sincronizando...' : 'Sincronizar Ahora'}
@@ -69,11 +80,23 @@ export default function HistoryPage() {
             {workday.startTime && <p>Inicio: {new Date(workday.startTime).toLocaleString()}</p>}
             {workday.endTime && <p>Fin: {workday.endTime ? new Date(workday.endTime).toLocaleString() : 'In Progress'}</p>}
             <p>Sincronizado: {workday.isSynced ? 'Sí' : 'No'}</p>
+            {/* Display pause intervals */}
+            {workday.pauseIntervals && workday.pauseIntervals.length > 0 && (
+              <div>
+                <p>Intervalos de Pausa:</p>
+                <ul>
+                  {workday.pauseIntervals.map((pause, index) => (
+                    <li key={index} className="ml-4 text-sm">
+                      {pause.startTime && `Desde: ${new Date(pause.startTime).toLocaleTimeString()}`}
+                      {pause.endTime && ` Hasta: ${new Date(pause.endTime).toLocaleTimeString()}`}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </li>
         ))}
       </ul>
     </div>
   );
-}
-}
 }

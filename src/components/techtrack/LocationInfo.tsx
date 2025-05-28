@@ -4,7 +4,7 @@ import type { LocationPoint, GeolocationError } from '@/lib/techtrack/types';
 import { MapPin } from 'lucide-react';
 
 interface LocationInfoProps {
-  location?: LocationPoint;
+  location?: LocationPoint | null;
   label: string;
   time?: number;
   error?: GeolocationError | null;
