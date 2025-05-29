@@ -548,7 +548,6 @@ export function TechTrackApp({ technicianName }: TechTrackAppProps): JSX.Element
  * Manages local state updates, event recording, triggering AI summarization (for completion), and initiating sync.
  * @param jobId - The ID of the job being completed/summarized (only relevant in 'summary' mode).
  */
-  const handleJobFormSubmit = async (jobId?: string | null) => {
   const handleJobFormSubmit = async (jobId?: string | null, isEndingDaySubmit: boolean = false) => {
  // If these conditions are not met, log an error and return early.
 
@@ -821,14 +820,12 @@ export function TechTrackApp({ technicianName }: TechTrackAppProps): JSX.Element
           </Button>
         );
     }
-
     return null;
   };
 
 
   return (
     <>
-      <div className="flex justify-center items-center min-h-screen p-4"> {/* Container for Card, ensures centering */}
         <Card className="w-full max-w-md shadow-xl">
           {/* CardHeader and following sections are now correctly nested inside Card */}
           <CardHeader>
@@ -963,8 +960,7 @@ export function TechTrackApp({ technicianName }: TechTrackAppProps): JSX.Element
             </DialogFooter>
           </DialogContent>
         </Dialog>
-      </div> {/* Closing div for centering container */}
     </>
   );
-}
-}
+
+};
