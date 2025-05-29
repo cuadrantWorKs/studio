@@ -30,6 +30,11 @@ export async function syncLocalDataToSupabase() {
         end_time: typeof workday.endTime === 'number' ? new Date(workday.endTime).toISOString() : null,
         end_location: workday.endLocation ?? null,
         status: workday.status,
+        // Exclude array fields as they are synced separately
+        // jobs: workday.jobs,
+        // events: workday.events,
+        // pauseIntervals: workday.pauseIntervals,
+        // locationHistory: workday.locationHistory,
         is_synced: true, // Mark as synced in the data being sent
       }));
       const { error: workdayError } = await supabaseDb.from('workdays').upsert(workdaysToUpsert, { onConflict: 'id' });

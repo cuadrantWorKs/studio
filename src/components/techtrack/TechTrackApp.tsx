@@ -15,11 +15,9 @@ import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 
 import {
-  syncLocalDataToSupabase
+  syncLocalDataToSupabase,
 } from '@/lib/techtrack/sync';
-import {
-  initiateEndDayProcess
-} from '@/lib/techtrack/workday';
+import { initiateEndDayProcess} from '@/lib/techtrack/workday';
 import { Play, Pause, StopCircle, Briefcase, Clock, CheckCircle, AlertTriangle,
   Loader2, History, CloudUpload, User, Ban, MapPinned } from 'lucide-react';
 
@@ -161,8 +159,8 @@ export function TechTrackApp({ technicianName }: TechTrackAppProps): JSX.Element
             setGeolocationError(null); // Clear any previous error on success
           },
           (error) => { // Geolocation error handler
-            console.error('Geolocation error:', error); // Keep existing error log
-            setGeolocationError({ code: error.code, message: error.message });
+            console.error('Geolocation error:', { code: error.code ?? 'N/A', message: error.message ?? 'Unknown error' }); // Keep existing error log
+            setGeolocationError({ code: error.code, message: error.message }); // Set the geolocation error state
             toast({
               title: "Error de Geolocalización",
               description: `No se pudo obtener tu ubicación: ${error.message}. Asegúrate de que los permisos estén habilitados.`, // Fixed unescaped entities
@@ -197,7 +195,7 @@ export function TechTrackApp({ technicianName }: TechTrackAppProps): JSX.Element
       };
       return { ...prev, events: [...prev.events, {...tempEventLiteral, workdayId: prev.id, isSynced: false}] };
     });
-  }, [currentLocation]);
+  }, [currentLocation]); // Closing brace for recordEvent useCallback
 
 
   useEffect(() => {
@@ -268,17 +266,17 @@ export function TechTrackApp({ technicianName }: TechTrackAppProps): JSX.Element
           setSyncRetryActive(false); // Sync succeeded, stop retries
           toast({
             title: "Sincronización Exitosa",
-            description: "Datos pendientes sincronizados correctamente.",
+ description: "Datos pendientes sincronizados correctamente.",
           });
           console.log('Failed sync retry successful.');
         } catch (error) {
           toast({ title: "Error de Sincronización", description: "Fallo al reintentar la sincronización. Reintentando en 15 minutos.", variant: "destructive" });
           setSyncStatus('error'); // Set status to error on retry failure
-          console.error('Failed sync retry failed:', error);
-        } // Close the catch block for sync attempt
+          console.error('Failed sync retry failed:', error); // Add error parameter to catch block
+        }
       }, 15 * 60 * 1000); // 15 minutes
     }
- // Cleanup interval on component unmount or when retry becomes inactive
+// Cleanup interval on component unmount or when retry becomes inactive
     return () => {
       if (retryInterval) clearInterval(retryInterval);
     };
@@ -304,11 +302,11 @@ export function TechTrackApp({ technicianName }: TechTrackAppProps): JSX.Element
             setWorkday(prev => prev ? ({...prev, lastNewJobPromptTime: Date.now()}) : null);
           })
           .catch(err => {
-            console.error("AI Error (decidePromptForNewJob):", err);
-            toast({ title: "Error de IA", description: "No se pudo verificar si hay un nuevo trabajo.", variant: "destructive" });
-          })
+ console.error("AI Error (decidePromptForNewJob):", err);
+ toast({ title: "Error de IA", description: "No se pudo verificar si hay un nuevo trabajo.", variant: "destructive" });
+ })
           .finally(() => setAiLoading(prev => ({...prev, newJob: false})));
-      }
+      } // Closing brace for the stop detect duration check logic
     }
   }, [workday, currentLocation, toast, recordEvent, currentJob, isJobModalOpen, aiLoading.newJob]);
 
@@ -338,10 +336,10 @@ export function TechTrackApp({ technicianName }: TechTrackAppProps): JSX.Element
             })
             .catch(err => {
             console.error("AI Error (decidePromptForJobCompletion):", err);
-              toast({ title: "Error de IA", description: "No se pudo verificar la finalización del trabajo. Por favor, finaliza/inicia trabajos manualmente si es necesario.", variant: "destructive" });
-            })
+ toast({ title: "Error de IA", description: "No se pudo verificar la finalización del trabajo. Por favor, finaliza/inicia trabajos manualmente si es necesario.", variant: "destructive" }); // Ensure variant is literal
+ })
             .finally(() => setAiLoading(prev => ({...prev, jobCompletion: false})));
-        }
+        } // Closing brace for distance check logic
     } // No dependencies on toast or recordEvent needed here
   }, [workday, currentJob, currentLocation, toast, recordEvent, isJobModalOpen, aiLoading.jobCompletion]);
 
@@ -349,8 +347,8 @@ export function TechTrackApp({ technicianName }: TechTrackAppProps): JSX.Element
   const handleStartTracking = async () => {
     const safeCurrentLocation = sanitizeLocationPoint(currentLocation); // sanitizeLocationPoint returns LocationPoint | undefined
     if (!currentLocation) { // Use currentLocation state directly to check if we ever got a location
-      toast({ title: "Esperando Ubicación", description: "Aún no se ha obtenido tu ubicación. Iniciando jornada sin coordenadas iniciales.", variant: "default" });
-    }
+      toast({ title: "Esperando Ubicación", description: "Aún no se ha obtenido tu ubicación. Iniciando jornada sin coordenadas iniciales." }); // Show informative toast
+    } // Closing brace for location check before showing toast
     setIsLoading(true);
     setGeolocationError(null); // Clear any previous location errors on start
     setEndOfDaySummary(null);
@@ -426,11 +424,11 @@ export function TechTrackApp({ technicianName }: TechTrackAppProps): JSX.Element
     } catch (error) { // Add the error parameter to the catch block
       console.error("Error triggering sync after starting workday:", error); // Log the actual error in catch block
       setSyncStatus('error');
-      setSyncRetryActive(true); // Activate retry if initial sync fails
+      setSyncRetryActive(true); // Activate retry if sync fails
       toast({
         title: "Error de Sincronización Inicial",
         description: "Fallo al sincronizar la jornada con la nube. Reintentos automáticos activados.",
-        variant: "destructive"
+ variant: "destructive",
       });
     }
   };
@@ -453,26 +451,27 @@ export function TechTrackApp({ technicianName }: TechTrackAppProps): JSX.Element
       // Add the new pause interval to the array
       pauseIntervals: [...prev.pauseIntervals, newPauseInterval],
     }) : null);
-    recordEvent('SESSION_PAUSE', currentLocation); // Pass currentLocation which is LocationPoint | null
+    recordEvent('SESSION_PAUSE', currentLocation); // recordEvent expects LocationPoint | null | undefined, currentLocation is LocationPoint | null
     toast({ title: "Seguimiento Pausado", description: "Tu jornada laboral está en pausa." }); // Use functional update for toast
     setIsLoading(false);
     setSyncStatus('syncing'); // Set status to syncing before sync
-    try {
-      syncLocalDataToSupabase(); // Trigger sync after pausing
-      setSyncStatus('success'); // Set status to success on successful sync
-      toast({
+    syncLocalDataToSupabase() // Trigger sync after pausing
+      .then(() => {
+        setSyncStatus('success'); // Set status to success on successful sync
+        toast({
         title: "Sincronización Exitosa",
         description: "Datos sincronizados con la nube después de pausar.", // Use functional update for toast
-      });
-    } catch (error) {
-      console.error("Error triggering sync after pausing:", error); // Log the actual error in catch block
-      setSyncRetryActive(true); // Activate retry if initial sync fails
-      toast({
+        });
+      })
+      .catch((error) => {
+        console.error("Error triggering sync after pausing:", error); // Log the actual error in catch block
+        setSyncRetryActive(true); // Activate retry if initial sync fails
+        toast({
         title: "Error de Sincronización",
         description: "Fallo al sincronizar datos después de pausar. Reintentos automáticos activados.",
-        variant: "destructive"
-      }); // Use functional update for toast
-    }
+ variant: "destructive",
+      } as const); // Ensure variant is one of the literal types
+    });
   };
 
   const handleResumeTracking = () => {
@@ -500,28 +499,28 @@ export function TechTrackApp({ technicianName }: TechTrackAppProps): JSX.Element
     recordEvent('SESSION_RESUME', currentLocation); // recordEvent expects LocationPoint | null | undefined, currentLocation is LocationPoint | null
     toast({ title: "Seguimiento Reanudado", description: "¡Bienvenido de nuevo! El seguimiento está activo." });
     setIsLoading(false); // This should be set to false regardless of sync outcome
-    setSyncStatus('syncing'); // Set status to syncing before sync attempt
-    try {
-      // Trigger sync after resuming
-      syncLocalDataToSupabase();
-      setSyncStatus('success');
-      toast({ // Use functional update for toast
+ setSyncStatus('syncing'); // Set status to syncing before sync attempt
+ syncLocalDataToSupabase() // Trigger sync after resuming
+      .then(() => {
+        setSyncStatus('success');
+        toast({ // Use functional update for toast
         title: "Sincronización Exitosa",
-        description: "Datos sincronizados con la nube después de reanudar."
-      });
-    } catch (error) {
-      console.error("Error triggering sync after resuming:", error);
-      setSyncStatus('error'); // Set status to error on sync failure after logging
-      toast({ title: "Error de Sincronización", description: "Fallo al sincronizar datos después de reanudar. Reintentos automáticos activados.", variant: "destructive" });
-      setSyncRetryActive(true); // Activate retry if sync fails
-    }
+        description: "Datos sincronizados con la nube después de reanudar.",
+        });
+      })
+      .catch((error) => {
+ console.error("Error triggering sync after resuming:", error); // Log the error
+ setSyncStatus('error'); // Set status to error on sync failure
+        setSyncRetryActive(true); // Activate retry if sync fails
+ toast({ title: "Error de Sincronización", description: "Fallo al sincronizar datos después de reanudar. Reintentos automáticos activados.", variant: "destructive" } as const); // Ensure variant is literal type and cast
+    });
   };
 
   const handleEndDay = async () => {
     if (!workday) {
         toast({ title: "Error", description: "No se puede finalizar el día sin una jornada activa.", variant: "destructive" });
-        return;
-    }
+ return;
+ }
     const activeJob = workday.jobs.find(j => j.id === workday.currentJobId && j.status === 'active');
 
     if (activeJob) {
@@ -531,23 +530,28 @@ export function TechTrackApp({ technicianName }: TechTrackAppProps): JSX.Element
       setIsJobModalOpen(true);
       recordEvent('JOB_COMPLETION_PROMPT', currentLocation, activeJob.id, "Prompt al finalizar el día");
       return; // Stop here, the process will continue after the job form submit
-    }
+ }
 
  // If no active job, proceed directly to initiating the end day process
     // Call initiateEndDayProcess with the current state of the workday.
-    // This is safe because initiateEndDayProcess will make a copy.
-    // The state updates (like setting status to 'ended') will happen inside finalizeWorkdayAndSave.
-    console.log("No active job found. Initiating end day process directly.");
-    // Ensure we are passing the current workday state
-    if (workday) { // Check if workday is still valid
-      initiateEndDayProcess(workday, toast, setIsLoading);
-    } else {
+    // This is safe because initiateEndDayProcess will make a shallow copy, but for state updates it's better to use functional updates.
+    // The state updates (like setting status to 'ended') will happen inside initiateEndDayProcess.
+    if (!workday) {
       console.error("Workday became null unexpectedly before initiateEndDayProcess could be called.");
-      toast({ title: "Error Interno", description: "Estado de jornada perdido al intentar finalizar.", variant: "destructive" });
-    }
-  };
+ toast({ title: "Error Interno", description: "Estado de jornada perdido al intentar finalizar.", variant: "destructive" });
+ } // Ensure variant is literal
+ initiateEndDayProcess(workday, toast, setIsLoading, setWorkday, setEndOfDaySummary, setSyncStatus, setSyncRetryActive);
+ };
 
+  /**
+ * Handles the submission of the job form, used for both starting a new job and completing/summarizing an existing one.
+ * Manages local state updates, event recording, triggering AI summarization (for completion), and initiating sync.
+ * @param jobId - The ID of the job being completed/summarized (only relevant in 'summary' mode).
+ */
   const handleJobFormSubmit = async (jobId?: string | null) => {
+    // Ensure workday exists and, in summary mode, that there is a job to summarize.
+ // If these conditions are not met, log an error and return early.
+
     if (!workday || (jobModalMode === 'summary' && !jobToSummarizeId)) {
       return;
     }
@@ -558,8 +562,8 @@ export function TechTrackApp({ technicianName }: TechTrackAppProps): JSX.Element
 
     if (jobModalMode === 'new') {
       if (!safeCurrentLocation) {
-        toast({ title: "Ubicación Requerida", description: "No se puede iniciar un nuevo trabajo sin una ubicación válida.", variant: "destructive" }); // Show toast
-        return; // Return early if location is not available
+        toast({ title: "Ubicación Requerida", description: "No se puede iniciar un nuevo trabajo sin una ubicación válida.", variant: "destructive" }); // Show toast, ensure variant is literal
+ return;
       }
       const newJob: Job = { // Define the newJob object here with proper type annotation
         id: crypto.randomUUID(), // Assign a new UUID
@@ -589,8 +593,8 @@ export function TechTrackApp({ technicianName }: TechTrackAppProps): JSX.Element
       } catch (error) { // Add the error parameter to the catch block.
         console.error("Error triggering sync after starting new job:", error); // Log the actual error in catch block
         setSyncStatus('error'); // Set status to error on failure
-        toast({ title: "Error de Sincronización", description: "Fallo al sincronizar datos después de iniciar un trabajo. Reintentos automáticos activados.", variant: "destructive" }); // Add toast on sync failure
-      } finally {
+ toast({ title: "Error de Sincronización", description: "Fallo al sincronizar datos después de iniciar un trabajo. Reintentos automáticos activados.", variant: "destructive" });
+ } finally {
         setIsSavingToCloud(false); // Ensure saving state is turned off regardless of sync outcome or error
       } // Close the finally block for the initial sync attempt
       setJobToSummarizeId(null); // Reset jobToSummarizeId after handling new job submit
@@ -603,8 +607,8 @@ export function TechTrackApp({ technicianName }: TechTrackAppProps): JSX.Element
       const jobToUpdateIndex = workday.jobs.findIndex(j => j.id === jobToSummarizeId); // Find the index of the job to update
       if (jobToUpdateIndex === -1) {
         console.error(`Attempted to complete non-existent job with ID: ${jobToSummarizeId}`);
-        toast({ title: "Error Interno", description: "No se encontró el trabajo para completar.", variant: "destructive" }); // Add toast for user feedback
-
+        toast({ title: "Error Interno", description: "No se encontró el trabajo para completar.", variant: "destructive" } as const);
+ setSyncRetryActive(true); // Ensure variant is literal type
         setCurrentJobFormData({ description: '', summary: '' });
         setJobToSummarizeId(null);
         return; // Return early if the job is not found
@@ -650,9 +654,9 @@ export function TechTrackApp({ technicianName }: TechTrackAppProps): JSX.Element
       } catch (error) { // Add the error parameter to the catch block
         console.error("Error triggering sync after completing job:", error); // Log the actual error in catch block
         toast({ title: "Error de Sincronización", description: "Fallo al sincronizar datos después de completar un trabajo. Reintentos automáticos activados.", variant: "destructive" });
-        setSyncRetryActive(true); // Keep existing retry activation
+ setSyncRetryActive(true); // Keep existing retry activation, ensure variant is literal type
       } finally {
-        // This will be set to false after the *initial* save attempt for the job summary (user input).
+ setIsSavingToCloud(false); // isSavingToCloud is set to false inside this block's finally.
         // AI summarization will have its own loading state.
         setCurrentJobFormData({ description: '', summary: '' }); // Reset form data
 
@@ -689,8 +693,8 @@ export function TechTrackApp({ technicianName }: TechTrackAppProps): JSX.Element
             toast({ // Show error toast for AI summarization failure
               title: "Error de IA",
               description: "No se pudo generar el resumen de IA para este trabajo. Puedes añadirlo manualmente más tarde.",
-              variant: "destructive"
-            });
+ variant: "destructive",
+ });
         // The local state already has the user's summary, so no change needed there.
           }) // Closing brace for summarizeJobDescription then block
           .finally(() => { // Ensure proper closing brace for .finally()
@@ -700,11 +704,10 @@ export function TechTrackApp({ technicianName }: TechTrackAppProps): JSX.Element
               if (!latestWorkdayState) return null; // Return null if latest state is null or undefined
               // Fix: Check if the job is locally completed before initiating the end day process.
               const jobIsLocallyCompleted = latestWorkdayState.jobs.find(j => j.id === jobToSummarizeId)?.status === 'completed'; // Check the latest state
-              if (jobIsLocallyCompleted) { // Only proceed if job is locally completed
-                initiateEndDayProcess(latestWorkdayState, toast, setIsLoading);
-              }
-              return latestWorkdayState; // Always return the latest state
-            }); // Close the setWorkday functional update call
+        if (jobIsLocallyCompleted) { // Only proceed if job is locally completed
+          initiateEndDayProcess(latestWorkdayState, toast, setIsLoading, setWorkday, setEndOfDaySummary, setSyncStatus, setSyncRetryActive);
+        } return latestWorkdayState; // Always return the latest state
+ }); // Use functional update to ensure latest state is checked for end day process
             setAiLoading(prev => ({ ...prev, summarize: false })); // Ensure AI loading is off regardless of pendingEndDayAction
           }); // Close the summarizeJobDescription then/catch/finally block
       } // Closing brace for handleJobFormSubmit (summary mode try/finally)
@@ -723,7 +726,7 @@ export function TechTrackApp({ technicianName }: TechTrackAppProps): JSX.Element
       toast({
         title: "Error",
         description: "No hay un trabajo activo para completar manualmente.",
-        variant: "destructive",
+ variant: "destructive",
       });
     }
   };
@@ -732,7 +735,7 @@ export function TechTrackApp({ technicianName }: TechTrackAppProps): JSX.Element
     const safeCurrentLocation = sanitizeLocationPoint(currentLocation);
     if (!safeCurrentLocation) {
       toast({ title: "Ubicación Requerida", description: "No se puede iniciar un nuevo trabajo sin una ubicación válida.", variant: "destructive" });
-      return;
+ return;
     }
     setJobModalMode('new' as 'new' | 'summary'); // Explicitly cast to literal type
     setCurrentJobFormData({ description: '', summary: '' }); // Set initial form data
@@ -749,7 +752,7 @@ export function TechTrackApp({ technicianName }: TechTrackAppProps): JSX.Element
       return (
         <Button
           onClick={() => handleStartTracking()}
-          disabled={commonDisabled || !currentLocation} // Disable if loading/saving or no location
+        disabled={commonDisabled} // <- quitamos "|| !currentLocation"
           variant="default" // Primary button for starting
           className="w-full"
           size="lg"
@@ -764,7 +767,6 @@ export function TechTrackApp({ technicianName }: TechTrackAppProps): JSX.Element
       );
     }
 
-    // Display button based on workday status
     switch (workday.status) {
       case 'tracking':
         return (

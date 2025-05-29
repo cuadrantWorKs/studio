@@ -1,77 +1,71 @@
 // src/lib/techtrack/workday.ts
 import type { Workday } from './types';
-import { calculateWorkdaySummary } from './summary';
 import { syncLocalDataToSupabase } from './sync';
 import { db as localDb } from '@/db';
-
-// Assuming Toast and SetIsLoading types are imported or defined elsewhere
-// For now, we'll use any for simplicity, but ideally, use proper types
-// import type { Toast } from '@/hooks/use-toast';
-// import type { SetStateAction, Dispatch } from 'react';
+import { Dispatch, SetStateAction } from 'react'; // Import Dispatch and SetStateAction from react
 
 export const initiateEndDayProcess = async (
-  currentWorkday: Workday,
-  toast: any, // Replace with proper Toast type
-  setIsLoading: any // Replace with proper Dispatch<SetStateAction<boolean>> type
+  workday: Workday,
+  toast: (opts: { title: string; description: string; variant?: "default" | "destructive" | null | undefined }) => void,
+  setIsLoading: (loading: boolean) => void,
+  setWorkday: Dispatch<SetStateAction<Workday | null>>,
+  setEndOfDaySummary: Dispatch<SetStateAction<any>>,  // Ajusta el tipo si tienes uno definido
+  setSyncStatus: Dispatch<SetStateAction<'idle'|'syncing'|'success'|'error'>>,
+  setSyncRetryActive: Dispatch<SetStateAction<boolean>>,
 ) => {
-  if (currentWorkday.status === 'ended') {
-    console.log("Workday already ended.");
-    return;
-  }
-
-  setIsLoading(true); // Indicate that an asynchronous process is starting
-  const endTime = Date.now();
-
   // 1. Update workday status and end time/location locally
-  const updatedWorkday = {
-    ...currentWorkday,
-    status: 'ended' as const,
-    endTime: endTime,
-    // endLocation will ideally be the last known location from state in TechTrackApp before calling this function
-    // Need to pass endLocation as a parameter, or access it from a shared state/context
-    // For now, let's assume we pass it as a parameter
-    // endLocation: latestLocation // This needs to be passed in
-    isSynced: false, // Mark as unsynced as we modified it
-  };
+  setSyncStatus('syncing');
 
+  // 1. Marca localmente la jornada como “ended”
+  await localDb.workdays.update(workday.id, {
+    status: 'ended',
+    endTime: Date.now(),
+    endLocation: workday.locationHistory.slice(-1)[0] || null,
+    isSynced: false,
+  });
+
+  // 2. Ejecuta la sincronización final
   try {
-    // Update the workday in the local database
-    await localDb.workdays.update(updatedWorkday.id, updatedWorkday);
-    console.log("Workday status updated to ended locally.");
-
-    // 2. Calculate summary based on the finalized workday data
-    // Need to re-fetch or use the latest data including all events and locations
-    // For simplicity now, let's use the updatedWorkday, but a more robust approach might fetch from DB
-    const workdayForSummary = await localDb.workdays.get(updatedWorkday.id);
-    const endOfDaySummary = await calculateWorkdaySummary(workdayForSummary || updatedWorkday);
-    console.log("Workday summary calculated.", endOfDaySummary);
-
-    // 3. Trigger final sync to ensure all data, including the 'ended' status and summary, is uploaded
-    console.log("Triggering final sync after ending workday.");
     await syncLocalDataToSupabase();
-    console.log("Final sync completed.");
-
-    // 4. Update the state in TechTrackApp (This needs to be handled by the caller)
-    // The calling component (TechTrackApp) should update its workday state and set endOfDaySummary
-    // This function should potentially return the updated workday and summary, or take state setters as parameters
-
-    // For now, let's just ensure local DB is updated and sync is triggered.
-    // The state update in TechTrackApp will happen based on a listener or explicit call after this.
-
+    setSyncStatus('success');
     toast({
-      title: "Jornada Finalizada",
-      description: "Tu jornada laboral ha sido finalizada y los datos están sincronizados.",
+      title: 'Jornada Finalizada',
+      description: 'Tu jornada se cerró correctamente y se sincronizó con la nube.',
     });
-
   } catch (error) {
-    console.error("Error during initiateEndDayProcess:", error);
+    console.error('Error sincronizando al finalizar jornada:', error);
+    setSyncStatus('error');
+    // Evitamos apagar el spinner aquí para que no quede “sincronizando…” después
     toast({
-      title: "Error al Finalizar Jornada",
-      description: "Hubo un error al finalizar tu jornada. Algunos datos pueden no haberse sincronizado.",
-      variant: "destructive",
+      title: 'Error al Finalizar Jornada',
+      description: 'Hubo un error al sincronizar la jornada. Se cerró localmente de todas formas.',
+      variant: 'destructive',
     });
-    // Optionally re-throw the error or handle partial success/failure
   } finally {
-    setIsLoading(false); // Ensure loading state is turned off
+    // 3. Estado final de la UI: siempre “ended”
+    setWorkday(prev => prev
+      ? {
+          ...prev,
+          status: 'ended',
+          endTime: Date.now(),
+          endLocation: prev.locationHistory.slice(-1)[0] || undefined,
+        }
+      : null // Ensure to handle the null case
+    );
+
+    // 4. Genera o extrae acá tu resumen de fin de día (puedes reutilizar la lógica existente)
+    const summary = {
+ totalTime: (workday.endTime ?? Date.now()) - (workday.startTime ?? 0), // Provide default 0 if startTime is undefined
+      totalJobs: workday.jobs.length,
+      // …otros totales que manejes…
+    };
+    setEndOfDaySummary(summary);
+
+    // 5. Limpieza de flags
+    setIsLoading(false);
+    setSyncRetryActive(false);
+    // 6. Borra el localStorage para que al recargar quede listo para un nuevo día
+    const key = `TECHTRACK_CURRENT_WORKDAY_${workday.userId}`;
+    localStorage.removeItem(key);
   }
 };
