@@ -967,4 +967,3 @@ export function TechTrackApp({ technicianName }: TechTrackAppProps): JSX.Element
     </>
   );
 }
-}
