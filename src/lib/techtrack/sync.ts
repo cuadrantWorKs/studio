@@ -1,5 +1,5 @@
 // src/lib/techtrack/sync.ts
-import { db as localDb } from '@/db'; // Import your local Dexie database instance
+import { db } from '@/db'; // Import the database instance
 import { db as supabaseDb } from '@/lib/supabase'; // Import your Supabase client instance
 import type { Workday, Job, TrackingEvent, PauseInterval, LocationPoint } from './types'; // Import types from types.ts
 
@@ -11,13 +11,13 @@ export async function syncLocalDataToSupabase() {
     return;
   }
   console.log('Starting local data synchronization to Supabase...');
-  // Add logging to inspect localDb and its properties
-  console.log('localDb:', localDb);
-  console.log('localDb.workdays:', localDb.workdays);
 
   try {
+    // Access the database instance directly
+    const localDb = db;
+
     // Sync Workdays
-    const unsyncedWorkdays = await localDb.workdays.filter(item => !item.isSynced).toArray();
+    const unsyncedWorkdays = await localDb.workdays.filter((item: Workday) => !item.isSynced).toArray();
     if (unsyncedWorkdays.length > 0) {
       console.log(`Attempting to sync ${unsyncedWorkdays.length} unsynced workdays.`);
       const workdaysToUpsert = unsyncedWorkdays.map((workday: Workday) => ({
@@ -48,7 +48,7 @@ export async function syncLocalDataToSupabase() {
     }
 
     // Sync Locations
-    const unsyncedLocations = await localDb.locations.filter(item => !item.isSynced).toArray();
+    const unsyncedLocations = await localDb.locations.filter((item: LocationPoint & { workdayId: string, isSynced: boolean, id?: number }) => !item.isSynced).toArray();
     if (unsyncedLocations.length > 0) {
       console.log(`Attempting to sync ${unsyncedLocations.length} unsynced locations.`);
       const locationsToInsert = unsyncedLocations.map((location: LocationPoint & { workdayId: string, isSynced: boolean, id?: number }) => ({
@@ -74,7 +74,7 @@ export async function syncLocalDataToSupabase() {
     }
 
     // Sync Jobs
-    const unsyncedJobs = await localDb.jobs.filter(item => !item.isSynced).toArray();
+    const unsyncedJobs = await localDb.jobs.filter((item: Job) => !item.isSynced).toArray();
     if (unsyncedJobs.length > 0) {
       console.log(`Attempting to sync ${unsyncedJobs.length} unsynced jobs.`);
       const jobsToUpsert = unsyncedJobs.map((job: Job) => ({
@@ -105,7 +105,7 @@ export async function syncLocalDataToSupabase() {
     }
 
     // Sync Pause Intervals
-    const unsyncedPauseIntervals = await localDb.pauseIntervals.filter(item => !item.isSynced).toArray();
+    const unsyncedPauseIntervals = await localDb.pauseIntervals.filter((item: PauseInterval) => !item.isSynced).toArray();
     if (unsyncedPauseIntervals.length > 0) {
       console.log(`Attempting to sync ${unsyncedPauseIntervals.length} unsynced pause intervals.`);
       const pauseIntervalsToUpsert = unsyncedPauseIntervals.map((pauseInterval: PauseInterval) => ({
@@ -132,7 +132,7 @@ export async function syncLocalDataToSupabase() {
     }
 
     // Sync Events
-    const unsyncedEvents = await localDb.events.filter(item => !item.isSynced).toArray();
+    const unsyncedEvents = await localDb.events.filter((item: TrackingEvent) => !item.isSynced).toArray();
     if (unsyncedEvents.length > 0) {
       console.log(`Attempting to sync ${unsyncedEvents.length} unsynced events.`);
       const eventsToUpsert = unsyncedEvents.map((event: TrackingEvent) => ({
