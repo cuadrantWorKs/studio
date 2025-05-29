@@ -541,7 +541,7 @@ export function TechTrackApp({ technicianName }: TechTrackAppProps): JSX.Element
  toast({ title: "Error Interno", description: "Estado de jornada perdido al intentar finalizar.", variant: "destructive" });
  } // Ensure variant is literal
  initiateEndDayProcess(workday, toast, setIsLoading, setWorkday, setEndOfDaySummary, setSyncStatus, setSyncRetryActive);
- };
+ }; // Closing brace for handleEndDay
 
   /**
  * Handles the submission of the job form, used for both starting a new job and completing/summarizing an existing one.
@@ -549,7 +549,7 @@ export function TechTrackApp({ technicianName }: TechTrackAppProps): JSX.Element
  * @param jobId - The ID of the job being completed/summarized (only relevant in 'summary' mode).
  */
   const handleJobFormSubmit = async (jobId?: string | null) => {
-    // Ensure workday exists and, in summary mode, that there is a job to summarize.
+  const handleJobFormSubmit = async (jobId?: string | null, isEndingDaySubmit: boolean = false) => {
  // If these conditions are not met, log an error and return early.
 
     if (!workday || (jobModalMode === 'summary' && !jobToSummarizeId)) {
@@ -702,10 +702,14 @@ export function TechTrackApp({ technicianName }: TechTrackAppProps): JSX.Element
             console.log("AI summarize finally block: Pending end day action detected. Checking latest state...");
             setWorkday(latestWorkdayState => { // Using functional update to get the absolutely latest state
               if (!latestWorkdayState) return null; // Return null if latest state is null or undefined
-              // Fix: Check if the job is locally completed before initiating the end day process.
-              const jobIsLocallyCompleted = latestWorkdayState.jobs.find(j => j.id === jobToSummarizeId)?.status === 'completed'; // Check the latest state
-        if (jobIsLocallyCompleted) { // Only proceed if job is locally completed
-          initiateEndDayProcess(latestWorkdayState, toast, setIsLoading, setWorkday, setEndOfDaySummary, setSyncStatus, setSyncRetryActive);
+
+              // Only initiate end day process if this submit was triggered by the End Day action
+              if (isEndingDaySubmit) {
+                // Ensure the job is actually completed locally before initiating the end day process
+                const jobIsLocallyCompleted = latestWorkdayState.jobs.find(j => j.id === jobToSummarizeId)?.status === 'completed';
+                if (jobIsLocallyCompleted) {
+                  initiateEndDayProcess(latestWorkdayState, toast, setIsLoading, setWorkday, setEndOfDaySummary, setSyncStatus, setSyncRetryActive);
+                }
         } return latestWorkdayState; // Always return the latest state
  }); // Use functional update to ensure latest state is checked for end day process
             setAiLoading(prev => ({ ...prev, summarize: false })); // Ensure AI loading is off regardless of pendingEndDayAction
@@ -962,4 +966,5 @@ export function TechTrackApp({ technicianName }: TechTrackAppProps): JSX.Element
       </div> {/* Closing div for centering container */}
     </>
   );
+}
 }
