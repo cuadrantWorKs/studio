@@ -142,8 +142,8 @@ export function TechTrackApp({ technicianName }: TechTrackAppProps): JSX.Element
             });
             setGeolocationError({
               code: error.code ?? 0, // Ensure code is a number
-              message: error.message ?? 'Error de geolocalización desconocido.'
- });
+              message: error.message ?? 'Error de geolocalización desconocido.',
+            });
           },
           {
             enableHighAccuracy: true,
@@ -152,11 +152,11 @@ export function TechTrackApp({ technicianName }: TechTrackAppProps): JSX.Element
           }
         );
   
-        // cleanup on unmount
+        // cleanup on unmount or when watchId changes
         return () => {
           if (watchId !== undefined) {
             navigator.geolocation.clearWatch(watchId);
-          }
+ }
         };
       } catch (err) {
         // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-explicit-any
@@ -164,8 +164,7 @@ export function TechTrackApp({ technicianName }: TechTrackAppProps): JSX.Element
           message: 'Error iniciando seguimiento de geolocalización.'
         });
       }
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    } // Closing brace for the if (typeof navigator !== 'undefined' && navigator.geolocation) block
   }, [toast]); // Include toast as a dependency
   const recordEvent = useCallback((type: TrackingEvent['type'], locationParam: LocationPoint | null | undefined, jobId?: string, details?: string) => {
     setWorkday(prev => { // Use functional update pattern to ensure latest state
@@ -175,14 +174,14 @@ export function TechTrackApp({ technicianName }: TechTrackAppProps): JSX.Element
         id: crypto.randomUUID(),
         type,
  timestamp: Date.now(), // Ensure timestamp is a number
-        jobId: jobId ?? undefined, // Ensure jobId is undefined if null
+ jobId: jobId ?? undefined, // Ensure jobId is undefined if null
         details: details ?? undefined, // Ensure details is undefined if null
         location: eventLocation, // sanitizeLocationPoint returns LocationPoint | undefined, which matches TrackingEvent type
       };
       return { ...prev, events: [...prev.events, {...tempEventLiteral, workdayId: prev.id, isSynced: false}] };
     });
   }, [currentLocation]); // Dependency array for recordEvent
- // No dependencies on toast or recordEvent needed here
+
 
   useEffect(() => {
     let intervalId: NodeJS.Timeout | undefined = undefined;
@@ -227,41 +226,39 @@ export function TechTrackApp({ technicianName }: TechTrackAppProps): JSX.Element
         if (safeCurrentLocation) { // Check if sanitizeLocationPoint returned a LocationPoint (not null)
           setWorkday(prev => prev ? ({ ...prev, locationHistory: [...(prev.locationHistory || []), safeCurrentLocation] }) : null); // Add sanitized location to history
           recordEvent('LOCATION_UPDATE', safeCurrentLocation, undefined, "Actualización periódica de 1 min"); // recordEvent expects LocationPoint | null | undefined
- } // Closing brace for safeCurrentLocation check
-      }, 60 * 1000); // Changed to 1 minute
-    }
-
-    return () => { if (intervalId) clearInterval(intervalId); };
+        } // This brace closes the if (safeCurrentLocation) block
+      }, 60 * 1000); // Changed to 1 minute // Closing brace for the setInterval call
+ }
+ // This brace closes the if (workday?.status === 'tracking' && currentLocation) block
+ return () => { if (intervalId) clearInterval(intervalId); };
   }, [workday?.status, currentLocation, recordEvent]);
   useEffect(() => {
-    let retryInterval: NodeJS.Timeout | undefined = undefined; // Declare retryInterval here
- if (syncRetryActive) {
- console.log('Sync retry active. Setting up interval.'); // Keep this log
- retryInterval = setInterval(async () => {
- console.log('Attempting failed sync retry...');
- setSyncStatus('syncing'); // Set status to syncing before retry attempt
- try { // Start of try block for sync attempt
- await syncLocalDataToSupabase();
- setSyncStatus('success'); // Set status to success on successful retry
- setSyncRetryActive(false); // Sync succeeded, stop retries
- toast({
- title: "Sincronización Exitosa",
- description: "Datos pendientes sincronizados correctamente.",
- variant: "success"
- });
-        } catch (error) { // Add error parameter to catch block
- console.error('Failed sync retry failed:', error);
- } // Closing brace for catch block
- }, 15 * 60 * 1000); // 15 minutes
+    let retryInterval: NodeJS.Timeout | undefined = undefined;
+
+    if (syncRetryActive) {
+      console.log('Sync retry active. Setting up interval.');
+      retryInterval = setInterval(async () => {
+        console.log('Attempting failed sync retry...');
+        setSyncStatus('syncing');
+        try {
+          await syncLocalDataToSupabase();
+          setSyncStatus('success');
+          setSyncRetryActive(false);
+          toast({
+            title: "Sincronización Exitosa",
+            description: "Datos pendientes sincronizados correctamente.",
+            variant: "success",
+          });
+        } catch (error) {
+          console.error('Failed sync retry failed:', error);
+ setSyncStatus('error');
+        }
+      }, 60000); // Retry every 60 seconds (adjust as needed)
     }
     // Cleanup interval on component unmount or when retry becomes inactive
-    return () => {
-      if (retryInterval) clearInterval(retryInterval);
+    return () => { if (retryInterval) clearInterval(retryInterval);
     };
-
-  }, [syncRetryActive, toast]); // Include toast as it's used in the interval function
-
-useEffect(() => {
+ }, [syncRetryActive, toast]); // Include toast as it's used in the interval function
   if (workday?.status === 'tracking' && !currentJob) {
     if (aiLoading.newJob || isJobModalOpen) return;
 
@@ -274,17 +271,15 @@ useEffect(() => {
           if (res.shouldPrompt) {
             // No toast here, rely on status indicators
             setJobModalMode('new' as 'new' | 'summary');
-            setIsJobModalOpen(true);
-              recordEvent('NEW_JOB_PROMPT', currentLocation, undefined, `IA: ${res.reason}`);
-            }
-            setWorkday(prev => prev ? ({...prev, lastNewJobPromptTime: Date.now()}) : null);
- }) // Closing brace for then block
-          .catch(err => {
- console.error("AI Error (decidePromptForNewJob):", err); // Add logging for the error
- toast({ title: "Error de IA", description: "No se pudo verificar si hay un nuevo trabajo.", variant: "destructive" });
-      } // Closing brace for the stop detect duration check logic
-    }
- }, [workday, currentLocation, toast, recordEvent, currentJob, isJobModalOpen, aiLoading.newJob]);
+ setIsJobModalOpen(true);
+ recordEvent('NEW_JOB_PROMPT', currentLocation, undefined, `IA: ${res.reason}`);
+ }
+ setWorkday(prev => prev ? ({...prev, lastNewJobPromptTime: Date.now()}) : null);
+ })
+ .catch((err: any) => { // Add catch block for AI decision errors with parameter
+ toast({ title: "Error de IA", description: "No se pudo verificar si hay un nuevo trabajo.", variant: "destructive" }); }).finally(() => setAiLoading(prev => ({...prev, newJob: false}))); // Ensure AI loading is off in all cases
+    } // This brace closes the stop detect duration check logic
+ }, [workday, currentLocation, toast, recordEvent, currentJob, isJobModalOpen, aiLoading.newJob]);;
 
   useEffect(() => {
     if (workday?.status === 'tracking' && currentJob && currentJob.status === 'active' && currentLocation) {
@@ -306,14 +301,12 @@ useEffect(() => {
                 setIsJobModalOpen(true);
                 recordEvent('JOB_COMPLETION_PROMPT', currentLocation, currentJob.id, `IA: ${res.reason}`); // recordEvent accepts LocationPoint | null | undefined
               }
-              setWorkday(prev => prev ? ({ ...prev, lastJobCompletionPromptTime: Date.now() }) : null);
- }) // Closing brace for then block (decidePromptForJobCompletion)
-            .catch(err => {
-            console.error("AI Error (decidePromptForJobCompletion):", err);
- toast({ title: "Error de IA", description: "No se pudo verificar la finalización del trabajo. Por favor, finaliza/inicia trabajos manualmente si es necesario.", variant: "destructive" }); // Ensure variant is literal as const
-            }).finally(() => setAiLoading(prev => ({...prev, jobCompletion: false}))); // Ensure finally is attached to the catch block
- } // Closing brace for distance check logic
-  }, [workday, currentJob, currentLocation, toast, recordEvent, isJobModalOpen, aiLoading.jobCompletion]);
+ setWorkday(prev => prev ? ({ ...prev, lastJobCompletionPromptTime: Date.now() }) : null);
+            })
+ .catch(err => { // Add catch block for AI decision errors with parameter
+ toast({ title: "Error de IA", description: "No se pudo verificar la finalización del trabajo. Por favor, finaliza/inicia trabajos manualmente si es necesario.", variant: "destructive" }); }).finally(() => setAiLoading(prev => ({ ...prev, jobCompletion: false }))); // Ensure finally is attached to the catch block
+ } // Closing brace for the distance check logic (if block)
+  }, [workday, currentJob, currentLocation, toast, recordEvent, isJobModalOpen, aiLoading.jobCompletion, isJobModalOpen, aiLoading]); // Dependency array for this useEffect
 
 
  const handleStartTracking = async () => {
@@ -355,39 +348,30 @@ useEffect(() => {
  toast({ title: "Seguimiento Iniciado", description: "Tu jornada laboral ha comenzado." });
       // First AI prompt after starting tracking (non-blocking)
       setTimeout(() => {
- setJobModalMode('new' as 'new' | 'summary'); // Explicitly cast to literal type
- setCurrentJobFormData({ description: '', summary: '' });
- setIsJobModalOpen(true);
+        setJobModalMode('new' as 'new' | 'summary'); // Explicitly cast
+        setCurrentJobFormData({ description: '', summary: '' });
+        setIsJobModalOpen(true);
  // Add the recordEvent call here as planned
- recordEvent('NEW_JOB_PROMPT', safeCurrentLocation, undefined, "Prompt inicial después del inicio de sesión");
+        recordEvent('NEW_JOB_PROMPT', safeCurrentLocation, undefined, "Prompt inicial después del inicio de sesión");
       }, 100); // Small delay to ensure state updates before prompting
 
  setIsSavingToCloud(false); // Reset saving state
  setSyncStatus('syncing'); // Set status to syncing before initial sync
- try { // Add the try block for the sync operation
+      try { // Add the try block for the sync operation
         await syncLocalDataToSupabase(); // Trigger sync after starting workday
-      setSyncStatus('success');
- } catch (error: any) { // Add the error parameter to the catch block
- console.error("Error triggering sync after starting workday:", error); // Log the actual error in catch block
- setSyncRetryActive(true); // Activate retry if initial sync fails
- setSyncStatus('error'); // Set status to error on failure
-    } // Close the sync try-catch block
-    catch (dbError) { // Catch errors from local DB add operation
+ setSyncStatus('success');
+      } catch (error: any) { // Add the error parameter to the catch block.
+ console.error("Error triggering sync after starting workday:", error); setSyncRetryActive(true); setSyncStatus('error'); // Set status to error on failure
+ }
+    } catch (dbError: any) { // Catch errors from local DB add operation with parameter
  console.error("Error saving new workday to local DB:", dbError);
  toast({ title: "Error Local", description: "No se pudo guardar la jornada en tu dispositivo.", variant: "destructive" } as const);
- setIsLoading(false); // Ensure loading state is turned off
- setIsSavingToCloud(false); // Ensure saving state is turned off
- // Decide if you want to proceed with a non-saved local state or stop
- // For now, we'll stop and let the user retry
  setWorkday(null); // Revert state as local save failed
  return; // Stop execution if local save fails
-    } // Close the local DB add catch block
- setIsLoading(false); // Turn off loading state after local save and state update
- };
-
- const handlePauseTracking = () => {
-    if (!workday) return;
-    setIsLoading(true);
+ }
+    setIsLoading(false); // Turn off loading state after local save and state update
+ }; // Closing brace for handleStartTracking
+  const handlePauseTracking = () => {
     const now = Date.now();
     const newPauseInterval: PauseInterval = { // Define the newPauseInterval object here with proper type annotation
       id: crypto.randomUUID(), // Assign a new UUID
@@ -407,20 +391,18 @@ useEffect(() => {
  });
 
  recordEvent('SESSION_PAUSE', currentLocation); // recordEvent expects LocationPoint | null | undefined, currentLocation is LocationPoint | null
+    setIsLoading(true);
  toast({ title: "Seguimiento Pausado", description: "Tu jornada laboral está en pausa." });
- setIsLoading(false); // Ensure loading state is turned off
+    // Start sync after UI updates and event recording
     setSyncStatus('syncing'); // Set status to syncing before sync
-    syncLocalDataToSupabase()
-      .then(() => {
-        setSyncStatus('success'); // Set status to success on successful sync
-      }) // Closing brace for then block
-      .catch((error) => { // Add the error parameter to the catch block
- console.error("Error triggering sync after pausing:", error);
+ syncLocalDataToSupabase()
+ .then(() => { setSyncStatus('success');}) // Set status to success on successful sync
+ .catch((error: any) => { // Add the error parameter to the catch block.
+ console.error("Error triggering sync after pausing:", error); // Log the actual error // Closing brace for the catch block
         setSyncRetryActive(true); // Activate retry if initial sync fails
- setSyncStatus('error'); // Set status to error on failure
- };
-
- const handleResumeTracking = () => {
+ setSyncStatus('error'); // Set status to error on failure // Closing brace for the catch block
+ };;
+  const handleResumeTracking = () => {
     if (!workday) return;
     setIsLoading(true);
     const now = Date.now();
@@ -441,22 +423,19 @@ useEffect(() => {
         pauseIntervals: updatedPauses, // Ensure updatedPauses is returned
       };
     }); // Close the setWorkday functional update
-    recordEvent('SESSION_RESUME', currentLocation);
+ recordEvent('SESSION_RESUME', currentLocation); // recordEvent accepts LocationPoint | null | undefined, currentLocation is LocationPoint | null
  toast({ title: "Seguimiento Reanudado", description: "¡Bienvenido de nuevo! El seguimiento está activo." });
     setIsLoading(false);
- setSyncStatus('syncing');
+    setSyncStatus('syncing');
     syncLocalDataToSupabase()
-      .then(() => { setSyncStatus('success'); }) // Close then block
+      .then(() => { setSyncStatus('success'); })
       .catch((error: any) => {
- console.error("Error triggering sync after resuming:", error); // Log the actual error
- setSyncRetryActive(true); // Activate retry if sync fails
- setSyncStatus('error'); // Set status to error
+ console.error("Error triggering sync after resuming:", error); setSyncRetryActive(true); setSyncStatus('error'); // Closing brace for the catch block
+      }); // Closing brace for the catch block
  };
-
  const handleJobFormSubmit = async (jobToSummarizeId: string | null, isEndingDaySubmit: boolean = false) => {
     if (!workday) {
- return; // Return early if workday is null
-    }
+ return;}
  const safeCurrentLocation = sanitizeLocationPoint(currentLocation);
       // --- Logic for Starting a New Job ---
       setIsSavingToCloud(true);
@@ -475,32 +454,30 @@ useEffect(() => {
         isSynced: false,
       };
       setWorkday(prev => prev ? { // Use functional update to get the latest state
-        ...prev, // Spread previous state
+ ...prev, // Spread previous state
  jobs: [...prev.jobs, newJob],
         currentJobId: newJob.id, // Ensure id is treated as string | null
  } : null); // If prev is null, return null
       recordEvent('JOB_START', safeCurrentLocation, newJob.id, `Nuevo trabajo iniciado: ${newJob.description}`); // Record job start event
- toast({ title: "Nuevo Trabajo Iniciado", description: `Trabajo: "${currentJobFormData.description}"` }); // Add description to toast message
+ toast({ title: "Nuevo Trabajo Iniciado", description: `Trabajo: "${currentJobFormData.description}"` });
       setIsJobModalOpen(false);
       setSyncStatus('syncing'); // Set status to syncing before sync
-      try { // Add the try block
+      try {
         await syncLocalDataToSupabase(); // Trigger sync after starting a new job
         setSyncStatus('success'); // Set status to success on successful sync
       } catch (error: any) { // Add the error parameter to the catch block.
         console.error("Error triggering sync after starting new job:", error); // Log the actual error in catch block
-        setSyncStatus('error'); // Set status to error on failure
+ setSyncStatus('error'); // Set status to error on failure
         setSyncRetryActive(true);
         setIsSavingToCloud(false); // Ensure saving state is off on sync failure
       }
- if (jobModalMode === 'summary' && jobToSummarizeId) {
-      // --- Logic for Completing and Summarizing a Job ---
       setIsSavingToCloud(true);
       console.log("Handling job completion form submit for job ID:", jobToSummarizeId);
       const jobToUpdateIndex = workday.jobs.findIndex(j => j.id === jobToSummarizeId); // Find the index of the job to update
- if (jobToUpdateIndex === -1) {
+      if (jobToUpdateIndex === -1) {
  toast({ title: "Error Interno", description: "No se encontró el trabajo para completar.", variant: "destructive" }); // Ensure variant is literal type
  setSyncRetryActive(true); // Activate retry if the job is not found locally
-        setSyncStatus('error'); // Set status to error on failure
+        setSyncStatus('error');
         setCurrentJobFormData({ description: '', summary: '' });
  setJobToSummarizeId(null); // Reset job ID if job is not found
         setIsSavingToCloud(false); // Ensure saving state is off on error
@@ -516,7 +493,7 @@ useEffect(() => {
           ...jobBeforeCompletion, // Use data before AI call
           summary: currentJobFormData.summary, // Ensure user summary is saved as string
           status: 'completed', // Set status to completed explicitly
-          endTime: Date.now(), // Ensure endTime is a number
+ endTime: Date.now(), // Ensure endTime is a number
  endLocation: safeCurrentLocation, // Ensure endLocation is undefined if geolocation is not available or sanitize returned undefined
           isSynced: false, // Mark the updated job as unsynced
         };
@@ -565,13 +542,12 @@ useEffect(() => {
  toast({ title: "Resumen IA", description: "Resumen automático del trabajo añadido." });
  setSyncStatus('syncing'); // Set status to syncing before sync for the AI summary
             // Trigger sync after AI summary is added to state (non-blocking)
- await syncLocalDataToSupabase(); // Trigger sync after completing a job (user summary saved)
+ await syncLocalDataToSupabase(); // Trigger sync after AI summary update
  setSyncStatus('success'); // Set status to success on successful sync after AI summary
           })
           .catch(err => { // Add catch block for AI summarization errors with parameter
- console.error("AI Summarization failed:", err); // eslint-disable-next-line @typescript-eslint/no-unused-vars
-            setSyncStatus('error'); // Set status to error if AI fails
-          })
+            console.error("AI Summarization failed:", err);setSyncStatus('error'); // Set status to error if AI fails
+          }) // Closing brace for AI summarization catch block
  .finally(() => { // Finally block after AI attempt
             setWorkday(latestWorkdayState => {
               // Only initiate end day process if this submit was triggered by the End Day action AND the job is completed locally
@@ -584,22 +560,15 @@ useEffect(() => {
               }
               return latestWorkdayState; // Always return the latest state
             });
-            // This finally block runs whether AI succeeds or fails.
+ // This finally block runs whether AI succeeds or fails.
             setAiLoading(prev => ({ ...prev, summarize: false })); // Ensure AI loading is off
-          });
-      }
- } // Closing brace for handleJobFormSubmit (summary mode if)
-  }; // Closing brace for handleJobFormSubmit
+ });
+ }; // Closing brace for the handleJobFormSubmit function
+ const handleEndDay = async () => {
+ if (!workday) return; // Cannot end day if no workday exists
+    const activeJob = workday.jobs.find(j => j.id === workday.currentJobId && j.status === 'active'); // Find the active job
 
-  const handleEndDay = async () => {
-    if (!workday) {
- toast({ title: "Error", description: "No se puede finalizar el día sin una jornada activa.", variant: "destructive" });
- return;
-    }
-    const activeJob = workday.jobs.find(j => j.id === workday.currentJobId && j.status === 'active');
-
- if (activeJob) {
-      setJobToSummarizeId(activeJob.id); // Ensure this sets the ID to the active job's ID
+ if (activeJob) { // If there is an active job, open the summary modal for that job first
       setJobModalMode('summary' as 'new' | 'summary'); // Explicitly cast
       setCurrentJobFormData({ description: activeJob.description || '', summary: '' });
       setIsJobModalOpen(true);
@@ -614,10 +583,9 @@ useEffect(() => {
     if (!workday) {
  console.error("Workday became null unexpectedly before initiateEndDayProcess could be called.");
  toast({ title: "Error Interno", description: "Estado de jornada perdido al intentar finalizar.", variant: "destructive" }); // Ensure variant is literal
-    } // Close the null workday check
-    initiateEndDayProcess(workday, toast, setIsLoading, setWorkday, setEndOfDaySummary, setSyncStatus, setSyncRetryActive);
+    }
+    initiateEndDayProcess(workday, toast, setIsLoading, setWorkday, setEndOfDaySummary, setSyncStatus, setSyncRetryActive); // Added semicolon
  };
-
 
   const handleManualCompleteJob = () => {
     // Only proceed if there is an active job
@@ -654,33 +622,31 @@ useEffect(() => {
 
     if (!workday || workday.status === 'idle') {
       // Render start button if no workday exists or workday status is idle
-      return (
-        <Button
-          onClick={() => handleStartTracking()}
-        disabled={commonDisabled} // <- quitamos "|| !currentLocation"
-          variant="default"
-          className="w-full"
-          size="lg"
-        >
-          {commonDisabled ? (
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-          ) : (
-            <Play className="mr-2 h-4 w-4" /> // Play icon for starting
-          )}
+ return (
+ <Button
+ onClick={() => handleStartTracking()}
+ disabled={commonDisabled} // <- quitamos "|| !currentLocation"
+ variant="default" // Primary button for starting // Added semicolon
+ className="w-full" // Added semicolon
+ size="lg"
+ >
+ {commonDisabled ? (
+ <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+ ) : (
+ <Play className="mr-2 h-4 w-4" /> // Play icon for starting
+ )}
           Iniciar Seguimiento
-        </Button>
-      );
-    }
+ </Button>
+ }
 
-    switch (workday.status) {
+ switch (workday?.status) {
       case 'tracking':
         return (
-          <div className="flex space-x-2 w-full">
-            <Button onClick={handlePauseTracking} disabled={commonDisabled} variant="secondary" className="flex-1">
-              {commonDisabled ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Pause className="mr-2 h-4 w-4" />}
-              Pausar
+          <div className="flex space-x-2 w-full"> {/* Use a div for spacing */}
+ <Button onClick={handlePauseTracking} disabled={commonDisabled} variant="secondary" className="flex-1"> {/* Corrected closing tag */}
+ {commonDisabled ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Pause className="mr-2 h-4 w-4" />} Pausar
             </Button>
-            <Button onClick={handleEndDay} disabled={commonDisabled} variant="destructive" className="flex-1">
+            <Button onClick={handleEndDay} disabled={commonDisabled || (currentJob && aiLoading.summarize) } variant="destructive" className="flex-1"> {/* Disable End Day if AI is summarizing an active job */}
               {commonDisabled ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <StopCircle className="mr-2 h-4 w-4" />}
               Finalizar Día
             </Button>
@@ -692,9 +658,8 @@ useEffect(() => {
           <div className="flex space-x-2 w-full"> {/* Use a div for spacing */}
             <Button onClick={handleResumeTracking} disabled={commonDisabled} variant="default" className="flex-1">
               {commonDisabled ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Play className="mr-2 h-4 w-4" />}
- Reanudar
- </Button> {/* Corrected closing tag */}
- {/* Add a spacer or another button here if needed */}
+ Reanudar </Button>\
+ {/* Add a spacer or another button here if needed */ }
             <Button onClick={handleEndDay} disabled={commonDisabled} variant="destructive" className="flex-1">
               {commonDisabled ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <StopCircle className="mr-2 h-4 w-4" />}
               Finalizar Día
@@ -710,7 +675,7 @@ useEffect(() => {
                   setElapsedTime(0);
                   setEndOfDaySummary(null);
  localStorage.removeItem(getLocalStorageKey());
- toast({ title: "Día Finalizado", description: "Puedes comenzar un nuevo día de seguimiento." }); // Toast message for day ended
+ toast({ title: "Día Finalizado", description: "Puedes comenzar un nuevo día de seguimiento." });
                 }}
             disabled={commonDisabled}
             variant="default" // Primary button for starting a new day
@@ -769,7 +734,7 @@ useEffect(() => {
                 )}
               </>
  )}
- {/* Current Status Display (Show unless day ended) */} {/* Moved closing comment */}
+ {/* Current Status Display (Show unless day ended) */}
             {workday && workday.status !== 'ended' && (
               <CurrentStatusDisplay
                 workday={workday}
@@ -828,7 +793,7 @@ useEffect(() => {
 
             {/* Job Management Buttons (Show only when tracking and not loading/saving) */}
             {workday?.status === 'tracking' && !currentJob && !isLoading && !isSavingToCloud && ( // Corrected the condition to apply to the entire block
-              <div className="flex space-x-2 w-full">
+              <div className="flex space-x-2 w-full"> {/* Use a div for spacing */}
                 <Button onClick={handleManualStartNewJob} variant="secondary" size="sm" className="flex-1">
                   <Briefcase className="mr-1 h-4 w-4" /> Nuevo Trabajo
                 </Button>
@@ -850,7 +815,6 @@ useEffect(() => {
                 </span>
               </div>
             )}
-
             {/* Link to History */}
             <Link href="/history" passHref legacyBehavior>
               <Button variant="ghost" className="w-full">
@@ -890,5 +854,3 @@ useEffect(() => {
         </Dialog>
     </>
   );
-
-}
