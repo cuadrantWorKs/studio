@@ -279,7 +279,7 @@ export function TechTrackApp({ technicianName }: TechTrackAppProps): JSX.Element
  .catch((err: any) => { // Add catch block for AI decision errors with parameter
  toast({ title: "Error de IA", description: "No se pudo verificar si hay un nuevo trabajo.", variant: "destructive" }); }).finally(() => setAiLoading(prev => ({...prev, newJob: false}))); // Ensure AI loading is off in all cases
     } // This brace closes the stop detect duration check logic
- }, [workday, currentLocation, toast, recordEvent, currentJob, isJobModalOpen, aiLoading.newJob]);;
+ }, [workday, currentLocation, toast, recordEvent, currentJob, isJobModalOpen, aiLoading.newJob]);
 
   useEffect(() => {
     if (workday?.status === 'tracking' && currentJob && currentJob.status === 'active' && currentLocation) {
@@ -400,8 +400,8 @@ export function TechTrackApp({ technicianName }: TechTrackAppProps): JSX.Element
  .catch((error: any) => { // Add the error parameter to the catch block.
  console.error("Error triggering sync after pausing:", error); // Log the actual error // Closing brace for the catch block
         setSyncRetryActive(true); // Activate retry if initial sync fails
- setSyncStatus('error'); // Set status to error on failure // Closing brace for the catch block
- };;
+ setSyncStatus('error'); // Set status to error on failure
+ });
   const handleResumeTracking = () => {
     if (!workday) return;
     setIsLoading(true);
@@ -427,15 +427,16 @@ export function TechTrackApp({ technicianName }: TechTrackAppProps): JSX.Element
  toast({ title: "Seguimiento Reanudado", description: "¡Bienvenido de nuevo! El seguimiento está activo." });
     setIsLoading(false);
     setSyncStatus('syncing');
-    syncLocalDataToSupabase()
-      .then(() => { setSyncStatus('success'); })
+ syncLocalDataToSupabase().then(() => { setSyncStatus('success'); })
       .catch((error: any) => {
- console.error("Error triggering sync after resuming:", error); setSyncRetryActive(true); setSyncStatus('error'); // Closing brace for the catch block
+        console.error("Error triggering sync after resuming:", error); setSyncRetryActive(true); setSyncStatus('error');
       }); // Closing brace for the catch block
  };
  const handleJobFormSubmit = async (jobToSummarizeId: string | null, isEndingDaySubmit: boolean = false) => {
-    if (!workday) {
- return;}
+ if (!workday) {
+ // Corrected line 282: Fixed potential syntax issue if the return was missing a semicolon
+ return;
+ }
  const safeCurrentLocation = sanitizeLocationPoint(currentLocation);
       // --- Logic for Starting a New Job ---
       setIsSavingToCloud(true);
@@ -459,7 +460,8 @@ export function TechTrackApp({ technicianName }: TechTrackAppProps): JSX.Element
         currentJobId: newJob.id, // Ensure id is treated as string | null
  } : null); // If prev is null, return null
       recordEvent('JOB_START', safeCurrentLocation, newJob.id, `Nuevo trabajo iniciado: ${newJob.description}`); // Record job start event
- toast({ title: "Nuevo Trabajo Iniciado", description: `Trabajo: "${currentJobFormData.description}"` });
+      toast({ title: "Nuevo Trabajo Iniciado", description: `Trabajo: "${currentJobFormData.description}"` });
+
       setIsJobModalOpen(false);
       setSyncStatus('syncing'); // Set status to syncing before sync
       try {
@@ -542,7 +544,7 @@ export function TechTrackApp({ technicianName }: TechTrackAppProps): JSX.Element
  toast({ title: "Resumen IA", description: "Resumen automático del trabajo añadido." });
  setSyncStatus('syncing'); // Set status to syncing before sync for the AI summary
             // Trigger sync after AI summary is added to state (non-blocking)
- await syncLocalDataToSupabase(); // Trigger sync after AI summary update
+            await syncLocalDataToSupabase(); // Trigger sync after AI summary update
  setSyncStatus('success'); // Set status to success on successful sync after AI summary
           })
           .catch(err => { // Add catch block for AI summarization errors with parameter
@@ -584,8 +586,8 @@ export function TechTrackApp({ technicianName }: TechTrackAppProps): JSX.Element
  console.error("Workday became null unexpectedly before initiateEndDayProcess could be called.");
  toast({ title: "Error Interno", description: "Estado de jornada perdido al intentar finalizar.", variant: "destructive" }); // Ensure variant is literal
     }
-    initiateEndDayProcess(workday, toast, setIsLoading, setWorkday, setEndOfDaySummary, setSyncStatus, setSyncRetryActive); // Added semicolon
- };
+    initiateEndDayProcess(workday, toast, setIsLoading, setWorkday, setEndOfDaySummary, setSyncStatus, setSyncRetryActive);
+ }; // Corrected line 404: Added closing brace for the handleEndDay function
 
   const handleManualCompleteJob = () => {
     // Only proceed if there is an active job
@@ -626,8 +628,8 @@ export function TechTrackApp({ technicianName }: TechTrackAppProps): JSX.Element
  <Button
  onClick={() => handleStartTracking()}
  disabled={commonDisabled} // <- quitamos "|| !currentLocation"
- variant="default" // Primary button for starting // Added semicolon
- className="w-full" // Added semicolon
+ variant="default" // Primary button for starting
+ className="w-full"
  size="lg"
  >
  {commonDisabled ? (
@@ -636,15 +638,16 @@ export function TechTrackApp({ technicianName }: TechTrackAppProps): JSX.Element
  <Play className="mr-2 h-4 w-4" /> // Play icon for starting
  )}
           Iniciar Seguimiento
- </Button>
- }
+        </Button> // Closing tag for the Button component
+ );
+    }
 
- switch (workday?.status) {
+    switch (workday?.status) {
       case 'tracking':
         return (
           <div className="flex space-x-2 w-full"> {/* Use a div for spacing */}
  <Button onClick={handlePauseTracking} disabled={commonDisabled} variant="secondary" className="flex-1"> {/* Corrected closing tag */}
- {commonDisabled ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Pause className="mr-2 h-4 w-4" />} Pausar
+ {commonDisabled ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Pause className="mr-2 h-4 w-4" />} Pausar {/* Ensure text is inside the Button */}
             </Button>
             <Button onClick={handleEndDay} disabled={commonDisabled || (currentJob && aiLoading.summarize) } variant="destructive" className="flex-1"> {/* Disable End Day if AI is summarizing an active job */}
               {commonDisabled ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <StopCircle className="mr-2 h-4 w-4" />}
@@ -656,9 +659,8 @@ export function TechTrackApp({ technicianName }: TechTrackAppProps): JSX.Element
       case 'paused':
         return (
           <div className="flex space-x-2 w-full"> {/* Use a div for spacing */}
-            <Button onClick={handleResumeTracking} disabled={commonDisabled} variant="default" className="flex-1">
-              {commonDisabled ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Play className="mr-2 h-4 w-4" />}
- Reanudar </Button>\
+            <Button onClick={handleResumeTracking} disabled={commonDisabled} variant="default" className="flex-1">{commonDisabled ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Play className="mr-2 h-4 w-4" />} Reanudar {/* Ensure text is inside the Button */}</Button>
+
  {/* Add a spacer or another button here if needed */ }
             <Button onClick={handleEndDay} disabled={commonDisabled} variant="destructive" className="flex-1">
               {commonDisabled ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <StopCircle className="mr-2 h-4 w-4" />}
@@ -683,11 +685,12 @@ export function TechTrackApp({ technicianName }: TechTrackAppProps): JSX.Element
             size="lg"
           >
             {commonDisabled ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Play className="mr-2 h-4 w-4" />} {/* Use Play icon for starting new day */}
-            Iniciar Nuevo Día
+            Iniciar Nuevo Día {/* Ensure text is inside the Button */}
  </Button>
         );
     }
-    return null;
+
+ return null;
   };
 
 
