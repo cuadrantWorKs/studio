@@ -1,4 +1,7 @@
-import { LocationPoint } from '../../lib/techtrack/types'; // Assuming LocationPoint is defined here
+import type { WorkdaySummaryContext } from '@/lib/techtrack/types';
+import type { LocationPoint } from '../../lib/techtrack/types'; // Assuming LocationPoint is defined here
+
+export { WorkdaySummaryContext, LocationPoint };
 
 export interface Workday {
   id: string;
@@ -32,4 +35,9 @@ export interface PauseInterval {
   workdayId: string;
   startTime: number; // Timestamp
   endTime?: number; // Timestamp
+}
+
+export interface CurrentStatusDisplayProps {
+  workday: Workday;
+  endOfDaySummary: WorkdaySummaryContext | null;
 }

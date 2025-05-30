@@ -13,7 +13,8 @@
     "format": "prettier --write .",
     "e2e": "playwright test --retries=1 --reporter=dot",
     "typecheck": "tsc --noEmit",
-    "gemini": "npm run typecheck && npm run lint:fix && npm run format && npm run e2e"
+    "gemini": "npm run typecheck && npm run lint:fix && npm run format && npm run e2e",
+    "analyze": "echo \"=== ESLint: estilo y errores ===\" && npx eslint \"src/**/*.{ts,tsx,js,jsx}\" && echo && echo \"=== TypeScript: chequeo de tipos ===\" && npx tsc --noEmit && echo && echo \"=== Madge: grafo de dependencias ===\" && npx madge --json src && echo \"✅ Análisis completo.\""
   },
   "dependencies": {
     "@genkit-ai/googleai": "^1.8.0",

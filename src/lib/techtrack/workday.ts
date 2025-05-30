@@ -1,7 +1,6 @@
 // src/lib/techtrack/workday.ts
 import type { Workday } from './types';
-import { syncLocalDataToSupabase } from './sync';
-import { db as localDb } from '@/db';
+import { db as localDb } from '@/db'; // Keep this import
 import { Dispatch, SetStateAction } from 'react'; // Import Dispatch and SetStateAction from react
 
 export const initiateEndDayProcess = async (
@@ -68,4 +67,13 @@ export const initiateEndDayProcess = async (
     const key = `TECHTRACK_CURRENT_WORKDAY_${workday.userId}`;
     localStorage.removeItem(key);
   }
+};
+
+// Moved from TechTrackApp for better organization and export
+export async function syncLocalDataToSupabase() {
+  // Dummy implementation - replace with your actual sync logic
+  console.log('Attempting to sync local data to Supabase...');
+  // Example: Fetch unsynced data, upload to Supabase, update local data as synced
+  await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate network delay
+  console.log('Sync complete.');
 };
