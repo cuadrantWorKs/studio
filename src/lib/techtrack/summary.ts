@@ -1,26 +1,40 @@
-'use server';
+"use server";
 
-import type { Workday, WorkdaySummaryContext, PauseInterval, LocationPoint } from './types';
-import { calculateTotalDistance } from './geometry';
+import type {
+  Workday,
+  WorkdaySummaryContext,
+  PauseInterval,
+  LocationPoint,
+} from "./types";
+import { calculateTotalDistance } from "./geometry";
 
-export async function calculateWorkdaySummary(workday: Workday | null): Promise<WorkdaySummaryContext | null> {
-  if (!workday || workday.status !== 'ended' || !workday.startTime || !workday.endTime) {
+export async function calculateWorkdaySummary(
+  workday: Workday | null,
+): Promise<WorkdaySummaryContext | null> {
+  if (
+    !workday ||
+    workday.status !== "ended" ||
+    !workday.startTime ||
+    !workday.endTime
+  ) {
     return null;
   }
 
   let totalActiveTime = workday.endTime - workday.startTime;
-  
+
   let totalPausedTimeCalc = 0;
   workday.pauseIntervals.forEach((p: PauseInterval) => {
-    if (p.endTime && p.startTime) { // Ensure both startTime and endTime are defined
-      totalPausedTimeCalc += (p.endTime - p.startTime);
+    if (p.endTime && p.startTime) {
+      // Ensure both startTime and endTime are defined
+      totalPausedTimeCalc += p.endTime - p.startTime;
     }
   });
   totalActiveTime -= totalPausedTimeCalc;
   if (totalActiveTime < 0) totalActiveTime = 0;
 
-
-  const totalDistanceKm = calculateTotalDistance(workday.locationHistory as LocationPoint[]);
+  const totalDistanceKm = calculateTotalDistance(
+    workday.locationHistory as LocationPoint[],
+  );
 
   return {
     ...workday,

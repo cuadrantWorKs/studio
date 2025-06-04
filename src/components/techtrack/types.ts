@@ -1,5 +1,5 @@
-import type { WorkdaySummaryContext } from '@/lib/techtrack/types';
-import type { LocationPoint } from '../../lib/techtrack/types'; // Assuming LocationPoint is defined here
+import type { WorkdaySummaryContext } from "@/lib/techtrack/types";
+import type { LocationPoint } from "../../lib/techtrack/types"; // Assuming LocationPoint is defined here
 
 export { WorkdaySummaryContext, LocationPoint };
 
@@ -10,7 +10,7 @@ export interface Workday {
   date: string; // YYYY-MM-DD
   startTime: number; // Timestamp
   endTime?: number; // Timestamp
-  status: 'active' | 'paused' | 'ended';
+  status: "active" | "paused" | "ended";
   currentJobId: string | null;
   jobs: Job[];
   pauseIntervals: (PauseInterval | null)[]; // Changed to allow null
@@ -26,7 +26,7 @@ export interface Job {
   startTime: number; // Timestamp
   endTime?: number; // Timestamp
   summary?: string;
-  status: 'active' | 'completed';
+  status: "active" | "completed";
   location?: LocationPoint | null; // Nullable location
 }
 

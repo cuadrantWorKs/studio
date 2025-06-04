@@ -1,4 +1,4 @@
-'use server';
+"use server";
 
 /**
  * @fileOverview A flow that uses GenAI to intelligently decide if the user should be prompted for job completion details, taking into account if the user has been prompted recently.
@@ -8,18 +8,18 @@
  * - DecidePromptForJobCompletionOutput - The return type for the decidePromptForJobCompletion function.
  */
 
-import {ai} from '@/ai/genkit';
-import {z} from 'genkit';
+import { ai } from "@/ai/genkit";
+import { z } from "genkit";
 
 const DecidePromptForJobCompletionInputSchema = z.object({
   distanceMovedMeters: z
     .number()
-    .describe('The distance the technician has moved in meters.'),
+    .describe("The distance the technician has moved in meters."),
   lastJobPromptedTimestamp: z
     .number()
     .optional()
     .describe(
-      'The timestamp of the last time the user was prompted for job details. Unix epoch time in milliseconds. If undefined, the user has not been prompted yet.'
+      "The timestamp of the last time the user was prompted for job details. Unix epoch time in milliseconds. If undefined, the user has not been prompted yet.",
     ),
 });
 export type DecidePromptForJobCompletionInput = z.infer<
@@ -30,12 +30,12 @@ const DecidePromptForJobCompletionOutputSchema = z.object({
   shouldPrompt: z
     .boolean()
     .describe(
-      'Whether or not the user should be prompted for job completion details.'
+      "Whether or not the user should be prompted for job completion details.",
     ),
   reason: z
     .string()
     .describe(
-      'The reason for the decision, to be used for debugging and logging.'
+      "The reason for the decision, to be used for debugging and logging.",
     ),
 });
 export type DecidePromptForJobCompletionOutput = z.infer<
@@ -43,16 +43,17 @@ export type DecidePromptForJobCompletionOutput = z.infer<
 >;
 
 export async function decidePromptForJobCompletion(
-  input: DecidePromptForJobCompletionInput
+  input: DecidePromptForJobCompletionInput,
 ): Promise<DecidePromptForJobCompletionOutput> {
   return decidePromptForJobCompletionFlow(input);
 }
 
 const prompt = ai.definePrompt({
-  name: 'decidePromptForJobCompletionPrompt', // Keep name at the top level
+  name: "decidePromptForJobCompletionPrompt", // Keep name at the top level
   input: { schema: DecidePromptForJobCompletionInputSchema }, // Keep input at the top level
   output: { schema: DecidePromptForJobCompletionOutputSchema }, // Keep output at the top level
-  config: { // Add the config object
+  config: {
+    // Add the config object
     template: `
     Here's the available information:
     - Distance moved: {{distanceMovedMeters}} meters
@@ -74,25 +75,25 @@ const prompt = ai.definePrompt({
     Here's how the current date/time looks (it's only for display):
     {{formatNow}}
     `, // Move template inside config
-    templateHelpers: { // Move templateHelpers inside config
+    templateHelpers: {
+      // Move templateHelpers inside config
       formatEpoch: (time: number) => new Date(time).toLocaleString(),
       formatNow: () => new Date().toLocaleString(),
     },
   },
 });
 
-
 const decidePromptForJobCompletionFlow = ai.defineFlow(
   {
-    name: 'decidePromptForJobCompletionFlow',
+    name: "decidePromptForJobCompletionFlow",
     inputSchema: DecidePromptForJobCompletionInputSchema,
     outputSchema: DecidePromptForJobCompletionOutputSchema,
   },
-  async input => {
-    console.log('Entering decidePromptForJobCompletionFlow');
-    console.log('decidePromptForJobCompletionFlow input:', input);
-    const {output} = await prompt(input);
-    console.log('decidePromptForJobCompletionFlow output:', output);
+  async (input) => {
+    console.log("Entering decidePromptForJobCompletionFlow");
+    console.log("decidePromptForJobCompletionFlow input:", input);
+    const { output } = await prompt(input);
+    console.log("decidePromptForJobCompletionFlow output:", output);
     return output!;
-  }
+  },
 );

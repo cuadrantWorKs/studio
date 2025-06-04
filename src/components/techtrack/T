@@ -1,0 +1,113 @@
+"use client";
+
+import { useState, useEffect, useCallback, useMemo } from "react";
+
+import Link from "next/link";
+
+import { Button } from "@/components/ui/button";
+
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogClose,
+} from "@/components/ui/dialog";
+
+import { Textarea } from "@/components/ui/textarea";
+ 
+import WorkdaySummaryDisplay from "./WorkdaySummaryDisplay"; // Importing WorkdaySummaryDisplay
+// Import the function from your workday library
+import {
+  // Import the function from your workday library
+  syncLocalDataToSupabase,
+  initiateEndDayProcess,
+} from "@/lib/techtrack/workday";
+import {
+  Play,
+  Pause,
+  StopCircle,
+  Briefcase,
+  Clock,
+  CheckCircle,
+  AlertTriangle,
+  Loader2,
+  History,
+  CloudUpload,
+  User,
+  Ban,
+  MapPinned,
+} from "lucide-react";
+
+import { haversineDistance } from "@/lib/techtrack/geometry";
+import { summarizeJobDescription } from "@/ai/flows/summarize-job-description";
+import { db as localDb } from "@/db";
+import { decidePromptForNewJob } from "@/ai/flows/decide-prompt-for-new-job";
+import { decidePromptForJobCompletion } from "@/ai/flows/decide-prompt-for-job-completion";
+import CurrentStatusDisplay from "./CurrentStatusDisplay"; // Import the new component
+
+import { Label } from "@/components/ui/label"; // Import the Label component from your UI library
+import { formatTime } from "@/lib/utils";
+import LocationInfo from "./LocationInfo";
+import type {
+  LocationPoint,
+  Job,
+  TrackingEvent,
+  Workday,
+  PauseInterval,  
+  GeolocationError,
+  WorkdaySummaryContext,
+  TrackingEventType,
+} from "@/lib/techtrack/types";
+import { useToast } from "@/hooks/use-toast";
+
+const STOP_DETECT_DURATION_MS = 15 * 60 * 1000;
+const MOVEMENT_THRESHOLD_METERS = 100;
+const RECENT_PROMPT_THRESHOLD_MS = 30 * 60 * 1000;
+const LOCAL_STORAGE_CURRENT_WORKDAY_KEY_PREFIX = "TECHTRACK_CURRENT_WORKDAY_";
+interface TechTrackAppProps {
+  technicianName: string;
+}
+// Placeholder for CurrentStatusDisplay
+// Helper function to sanitize location point data - Ensures numeric types are valid numbers
+/**
+ * Devuelve un LocationPoint válido si latitude, longitude y timestamp
+ * son números no-NaN. En caso contrario, devuelve undefined.
+ */
+export const sanitizeLocationPoint = (
+  location?: LocationPoint | null | undefined,
+): LocationPoint | undefined => {
+  if (
+    location &&
+    typeof location.latitude === "number" &&
+    !isNaN(location.latitude) &&
+    typeof location.longitude === "number" &&
+    !isNaN(location.longitude) &&
+    typeof location.timestamp === "number" &&
+    !isNaN(location.timestamp)
+  ) {
+    const sanitized: LocationPoint = {
+      latitude: location.latitude,
+
+      longitude: location.longitude,
+      timestamp: location.timestamp,
+    };
+    if (typeof location.accuracy === "number" && !isNaN(location.accuracy)) {
+      sanitized.accuracy = location.accuracy;
+    }
+    return sanitized;
+  }
+};
+export function TechTrackApp({ technicianName }: TechTrackAppProps) {
+}

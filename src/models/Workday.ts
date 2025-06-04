@@ -1,6 +1,6 @@
-import { PauseInterval } from '../types';
-import { Job } from '../types';
-import { LocationPoint } from '../types';
+import { PauseInterval } from "../types";
+import { Job } from "../types";
+import { LocationPoint } from "../types";
 
 export interface Workday {
   id: string;

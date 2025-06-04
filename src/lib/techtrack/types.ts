@@ -5,7 +5,7 @@ export interface LocationPoint {
   accuracy?: number;
 }
 
-export type JobStatus = 'active' | 'completed' | 'cancelled';
+export type JobStatus = "active" | "completed" | "cancelled";
 
 export interface Job {
   id: string;
@@ -15,31 +15,31 @@ export interface Job {
   startLocation?: LocationPoint | undefined;
   endTime?: number;
   endLocation?: LocationPoint;
-  summary?: string;    // Technician's summary
-  aiSummary?: string;  // AI-generated summary
+  summary?: string; // Technician's summary
+  aiSummary?: string; // AI-generated summary
   status: JobStatus;
   isSynced: boolean;
 }
 
-export type TrackingStatus = 'idle' | 'tracking' | 'paused' | 'ended';
+export type TrackingStatus = "idle" | "tracking" | "paused" | "ended";
 
 export type TrackingEventType =
-  | 'SESSION_START'
-  | 'WORKDAY_START'
-  | 'WORKDAY_END'
-  | 'PAUSE_START'
-  | 'PAUSE_END'
-  | 'SESSION_PAUSE'
-  | 'SESSION_RESUME'
-  | 'SESSION_END'
-  | 'LOCATION_UPDATE'
-  | 'JOB_START'
-  | 'JOB_DETAILS_UPDATED'
-  | 'JOB_COMPLETION_PROMPT'
-  | 'JOB_COMPLETED'
-  | 'NEW_JOB_PROMPT'
-  | 'USER_ACTION'
-  | 'ERROR';
+  | "SESSION_START"
+  | "WORKDAY_START"
+  | "WORKDAY_END"
+  | "PAUSE_START"
+  | "PAUSE_END"
+  | "SESSION_PAUSE"
+  | "SESSION_RESUME"
+  | "SESSION_END"
+  | "LOCATION_UPDATE"
+  | "JOB_START"
+  | "JOB_DETAILS_UPDATED"
+  | "JOB_COMPLETION_PROMPT"
+  | "JOB_COMPLETED"
+  | "NEW_JOB_PROMPT"
+  | "USER_ACTION"
+  | "ERROR";
 
 export interface TrackingEvent {
   id: string;
@@ -63,10 +63,10 @@ export interface PauseInterval {
 }
 
 export interface Workday {
-  id: string; 
+  id: string;
   userId?: string;
- technicianId: string; // Added technicianId
-  date: string;                        // YYYY-MM-DD
+  technicianId: string; // Added technicianId
+  date: string; // YYYY-MM-DD
   startTime?: number;
   startLocation?: LocationPoint | null;
   endTime?: number;
@@ -74,19 +74,19 @@ export interface Workday {
   status: TrackingStatus;
   locationHistory: LocationPoint[];
   jobs: Job[];
- events: TrackingEvent[];  // Assuming events is an array
+  events: TrackingEvent[]; // Assuming events is an array
   pauseIntervals: PauseInterval[];
   lastNewJobPromptTime?: number;
   lastJobCompletionPromptTime?: number;
   currentJobId?: string | null;
- isSynced: boolean; // Added isSynced
-   
+  isSynced: boolean; // Added isSynced
+
   [key: string]: any;
 }
 
 export interface WorkdaySummaryContext extends Workday {
-  totalActiveTime: number;   // en ms
-  totalPausedTime: number;   // en ms
+  totalActiveTime: number; // en ms
+  totalPausedTime: number; // en ms
   totalDistanceKm: number;
 }
 

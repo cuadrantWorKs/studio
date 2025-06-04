@@ -1,23 +1,22 @@
+"use client";
 
-'use client';
-
-import { useState, useEffect } from 'react';
-import Link from 'next/link';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import type { Workday, WorkdaySummaryContext } from '@/lib/techtrack/types';
-import { calculateWorkdaySummary } from '@/lib/techtrack/summary';
-import WorkdaySummaryDisplay from './WorkdaySummaryDisplay';
-import { ArrowLeft, Loader2, AlertTriangle } from 'lucide-react'; // Added AlertTriangle
-import { db } from '@/lib/firebase';
-import { collection, getDocs, query, orderBy } from 'firebase/firestore';
-
+import { useState, useEffect } from "react";
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import type { Workday, WorkdaySummaryContext } from "@/lib/techtrack/types";
+import { calculateWorkdaySummary } from "@/lib/techtrack/summary";
+import WorkdaySummaryDisplay from "./WorkdaySummaryDisplay";
+import { ArrowLeft, Loader2, AlertTriangle } from "lucide-react"; // Added AlertTriangle
+import { db } from "@/lib/firebase";
+import { collection, getDocs, query, orderBy } from "firebase/firestore";
 
 export default function HistoryView() {
   const [pastWorkdays, setPastWorkdays] = useState<Workday[]>([]);
   const [selectedWorkday, setSelectedWorkday] = useState<Workday | null>(null);
-  const [displayedSummary, setDisplayedSummary] = useState<WorkdaySummaryContext | null>(null);
+  const [displayedSummary, setDisplayedSummary] =
+    useState<WorkdaySummaryContext | null>(null);
   const [isLoadingHistory, setIsLoadingHistory] = useState(true);
   const [isLoadingSummary, setIsLoadingSummary] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -37,7 +36,9 @@ export default function HistoryView() {
         setPastWorkdays(fetchedWorkdays);
       } catch (err) {
         console.error("Error fetching history from Firestore:", err);
-        setError("Failed to load history. Please check your Firebase setup and network connection.");
+        setError(
+          "Failed to load history. Please check your Firebase setup and network connection.",
+        );
       } finally {
         setIsLoadingHistory(false);
       }
@@ -49,13 +50,16 @@ export default function HistoryView() {
   useEffect(() => {
     if (selectedWorkday) {
       setIsLoadingSummary(true);
-      setDisplayedSummary(null); 
+      setDisplayedSummary(null);
       calculateWorkdaySummary(selectedWorkday)
-        .then(summary => {
+        .then((summary) => {
           setDisplayedSummary(summary);
         })
-        .catch(error => {
-          console.error("Error calculating summary for selected workday:", error);
+        .catch((error) => {
+          console.error(
+            "Error calculating summary for selected workday:",
+            error,
+          );
           setError("Failed to calculate summary for the selected workday.");
         })
         .finally(() => {
@@ -80,15 +84,16 @@ export default function HistoryView() {
   }
 
   if (error) {
-     return (
+    return (
       <div className="flex flex-col min-h-screen items-center justify-center p-4 text-center">
-        <AlertTriangle className="h-12 w-12 text-destructive mb-4" /> {/* Added Icon */}
+        <AlertTriangle className="h-12 w-12 text-destructive mb-4" />{" "}
+        {/* Added Icon */}
         <p className="text-destructive text-xl mb-2">Error Loading History</p>
         <p className="text-muted-foreground mb-4">{error}</p>
         <Link href="/" passHref legacyBehavior>
-            <Button variant="outline">
-                <ArrowLeft className="mr-2 h-4 w-4" /> Back to Tracking
-            </Button>
+          <Button variant="outline">
+            <ArrowLeft className="mr-2 h-4 w-4" /> Back to Tracking
+          </Button>
         </Link>
       </div>
     );
@@ -102,14 +107,18 @@ export default function HistoryView() {
             <CardTitle className="text-2xl">Workday History (Cloud)</CardTitle>
             <Link href="/" passHref legacyBehavior>
               <Button variant="outline" size="sm" asChild>
-                <a><ArrowLeft className="mr-2 h-4 w-4" /> Back to Tracking</a>
+                <a>
+                  <ArrowLeft className="mr-2 h-4 w-4" /> Back to Tracking
+                </a>
               </Button>
             </Link>
           </div>
         </CardHeader>
         <CardContent>
           {pastWorkdays.length === 0 ? (
-            <p className="text-muted-foreground">No past workdays found in the cloud.</p>
+            <p className="text-muted-foreground">
+              No past workdays found in the cloud.
+            </p>
           ) : (
             <div className="grid md:grid-cols-3 gap-6">
               <ScrollArea className="h-[60vh] md:col-span-1 pr-3">
@@ -117,18 +126,28 @@ export default function HistoryView() {
                   {pastWorkdays.map((wd) => (
                     <Button
                       key={wd.id}
-                      variant={selectedWorkday?.id === wd.id ? "default" : "outline"}
+                      variant={
+                        selectedWorkday?.id === wd.id ? "default" : "outline"
+                      }
                       className="w-full justify-start text-left h-auto py-2"
                       onClick={() => handleSelectWorkday(wd)}
                     >
                       <div className="flex flex-col">
                         <span>
-                            {wd.date ? new Date(wd.date).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' }) : 'Date N/A'}
+                          {wd.date
+                            ? new Date(wd.date).toLocaleDateString(undefined, {
+                                year: "numeric",
+                                month: "long",
+                                day: "numeric",
+                              })
+                            : "Date N/A"}
                         </span>
                         <span className="text-xs text-muted-foreground">
-                            {wd.startTime ? `Started: ${new Date(wd.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : 'Start Time N/A'}
+                          {wd.startTime
+                            ? `Started: ${new Date(wd.startTime).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
+                            : "Start Time N/A"}
                         </span>
-                       </div>
+                      </div>
                     </Button>
                   ))}
                 </div>
@@ -140,7 +159,10 @@ export default function HistoryView() {
                     <p className="text-muted-foreground">Loading summary...</p>
                   </div>
                 ) : displayedSummary ? (
-                  <WorkdaySummaryDisplay summary={displayedSummary} showTitle={false} />
+                  <WorkdaySummaryDisplay
+                    summary={displayedSummary}
+                    showTitle={false}
+                  />
                 ) : (
                   <p className="text-muted-foreground h-full flex items-center justify-center">
                     Select a workday from the list to view its summary.
@@ -154,4 +176,3 @@ export default function HistoryView() {
     </div>
   );
 }
-

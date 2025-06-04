@@ -1,4 +1,4 @@
-'use server';
+"use server";
 
 /**
  * @fileOverview An AI agent that determines whether the user should be prompted for new job details.
@@ -8,16 +8,16 @@
  * - DecidePromptForNewJobOutput - The return type for the decidePromptForNewJob function.
  */
 
-import {ai} from '@/ai/genkit';
-import {z} from 'genkit';
+import { ai } from "@/ai/genkit";
+import { z } from "genkit";
 
 const DecidePromptForNewJobInputSchema = z.object({
   hasBeenPromptedRecently: z
     .boolean()
-    .describe('Whether the user has been prompted for job details recently.'),
+    .describe("Whether the user has been prompted for job details recently."),
   timeStoppedInMinutes: z
     .number()
-    .describe('The amount of time the user has been stopped in minutes.'),
+    .describe("The amount of time the user has been stopped in minutes."),
 });
 export type DecidePromptForNewJobInput = z.infer<
   typeof DecidePromptForNewJobInputSchema
@@ -27,24 +27,24 @@ const DecidePromptForNewJobOutputSchema = z.object({
   shouldPrompt: z
     .boolean()
     .describe(
-      'Whether the user should be prompted to enter information for a new job.'
+      "Whether the user should be prompted to enter information for a new job.",
     ),
-  reason: z.string().describe('The reason for the decision.'),
+  reason: z.string().describe("The reason for the decision."),
 });
 export type DecidePromptForNewJobOutput = z.infer<
   typeof DecidePromptForNewJobOutputSchema
 >;
 
 export async function decidePromptForNewJob(
-  input: DecidePromptForNewJobInput
+  input: DecidePromptForNewJobInput,
 ): Promise<DecidePromptForNewJobOutput> {
   return decidePromptForNewJobFlow(input);
 }
 
 const prompt = ai.definePrompt({
-  name: 'decidePromptForNewJobPrompt',
-  input: {schema: DecidePromptForNewJobInputSchema},
-  output: {schema: DecidePromptForNewJobOutputSchema},
+  name: "decidePromptForNewJobPrompt",
+  input: { schema: DecidePromptForNewJobInputSchema },
+  output: { schema: DecidePromptForNewJobOutputSchema },
   prompt: `You are an AI assistant that helps determine whether a technician should be prompted to enter information about a new job.
 
   The technician has stopped moving for {{timeStoppedInMinutes}} minutes.
@@ -57,12 +57,12 @@ const prompt = ai.definePrompt({
 
 const decidePromptForNewJobFlow = ai.defineFlow(
   {
-    name: 'decidePromptForNewJobFlow',
+    name: "decidePromptForNewJobFlow",
     inputSchema: DecidePromptForNewJobInputSchema,
     outputSchema: DecidePromptForNewJobOutputSchema,
   },
-  async input => {
-    const {output} = await prompt(input);
+  async (input) => {
+    const { output } = await prompt(input);
     return output!;
-  }
+  },
 );

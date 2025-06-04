@@ -1,20 +1,37 @@
-'use client';
+"use client";
 
-import { useState } from 'react';
-import Link from 'next/link';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { History, User, PlayCircle } from 'lucide-react';
+import { useState } from "react";
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { History, User, PlayCircle } from "lucide-react";
 
 interface TechnicianSelectionProps {
   onTechnicianSelect: (technicianName: string) => void;
 }
 
-const technicians = [{ id: 'RICARDO', name: 'RICARDO' }]; // Por ahora, solo Ricardo
+const technicians = [{ id: "RICARDO", name: "RICARDO" }]; // Por ahora, solo Ricardo
 
-export default function TechnicianSelection({ onTechnicianSelect }: TechnicianSelectionProps) {
-  const [selectedTechnician, setSelectedTechnician] = useState<string>(technicians[0].id);
+export default function TechnicianSelection({
+  onTechnicianSelect,
+}: TechnicianSelectionProps) {
+  const [selectedTechnician, setSelectedTechnician] = useState<string>(
+    technicians[0].id,
+  );
 
   const handleContinue = () => {
     onTechnicianSelect(selectedTechnician);
@@ -25,15 +42,26 @@ export default function TechnicianSelection({ onTechnicianSelect }: TechnicianSe
       <Card className="w-full max-w-md shadow-xl">
         <CardHeader className="text-center">
           <User className="mx-auto h-16 w-16 text-primary mb-4" />
-          <CardTitle className="text-3xl font-bold text-primary">Bienvenido a TechTrack</CardTitle>
-          <CardDescription>Seleccione su perfil para iniciar la jornada.</CardDescription>
+          <CardTitle className="text-3xl font-bold text-primary">
+            Bienvenido a TechTrack
+          </CardTitle>
+          <CardDescription>
+            Seleccione su perfil para iniciar la jornada.
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6 pt-2">
           <div className="space-y-2">
-            <label htmlFor="technician-select" className="text-sm font-medium text-foreground">
+            <label
+              htmlFor="technician-select"
+              className="text-sm font-medium text-foreground"
+            >
               Técnico
             </label>
-            <Select value={selectedTechnician} onValueChange={setSelectedTechnician} disabled>
+            <Select
+              value={selectedTechnician}
+              onValueChange={setSelectedTechnician}
+              disabled
+            >
               <SelectTrigger id="technician-select" className="w-full">
                 <div className="flex items-center">
                   <User className="mr-2 h-4 w-4 text-muted-foreground" />
@@ -56,11 +84,14 @@ export default function TechnicianSelection({ onTechnicianSelect }: TechnicianSe
           </Button>
         </CardContent>
         <CardFooter className="flex justify-center pt-4">
-            <Link href="/history" passHref legacyBehavior>
-              <Button variant="outline" size="sm" asChild>
-                <a><History className="mr-2 h-4 w-4" /> Consultar historial de la empresa</a>
-              </Button>
-            </Link>
+          <Link href="/history" passHref legacyBehavior>
+            <Button variant="outline" size="sm" asChild>
+              <a>
+                <History className="mr-2 h-4 w-4" /> Consultar historial de la
+                empresa
+              </a>
+            </Button>
+          </Link>
         </CardFooter>
       </Card>
     </div>

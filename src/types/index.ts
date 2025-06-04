@@ -27,7 +27,7 @@ export interface Workday {
   date: string; // YYYY-MM-DD format
   startTime: number; // Timestamp
   endTime?: number | null; // Timestamp
-  status: 'started' | 'paused' | 'ended';
+  status: "started" | "paused" | "ended";
   locationHistory: LocationPoint[];
   jobs: Job[];
   pauseIntervals: (PauseInterval | null)[]; // Changed to allow null

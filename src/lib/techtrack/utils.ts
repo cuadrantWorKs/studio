@@ -17,12 +17,18 @@ export function deserializePauseInterval(jsonString: string): PauseInterval[] {
   }
 }
 
-export function sanitizeLocationPoint(location: LocationPoint | null | undefined): LocationPoint | null {
+export function sanitizeLocationPoint(
+  location: LocationPoint | null | undefined,
+): LocationPoint | null {
   if (location === undefined || location === null) {
     return null;
   }
   // Basic check to ensure it has required properties, adjust as needed
-  if (typeof location.latitude === 'number' && typeof location.longitude === 'number' && typeof location.timestamp === 'number') {
+  if (
+    typeof location.latitude === "number" &&
+    typeof location.longitude === "number" &&
+    typeof location.timestamp === "number"
+  ) {
     return location;
   }
   console.warn("Sanitizing invalid LocationPoint:", location);

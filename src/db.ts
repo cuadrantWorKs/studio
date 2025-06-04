@@ -1,5 +1,10 @@
-import Dexie, { Table } from 'dexie';
-import { Workday, Job, TrackingEvent, PauseInterval } from './lib/techtrack/types';
+import Dexie, { Table } from "dexie";
+import {
+  Workday,
+  Job,
+  TrackingEvent,
+  PauseInterval,
+} from "./lib/techtrack/types";
 
 export interface Location {
   id?: number; // Primary key
@@ -8,7 +13,7 @@ export interface Location {
   latitude: number;
   longitude: number;
   isSynced: boolean; // To track synchronization status
-  accuracy: number; 
+  accuracy: number;
 }
 
 export interface Technician {
@@ -28,13 +33,14 @@ export class LocalDatabase extends Dexie {
   pauseIntervals!: Table<PauseInterval, string>;
 
   constructor() {
-    super('TechTrackLocalDB'); // Database name
+    super("TechTrackLocalDB"); // Database name
     this.version(1).stores({
-      workdays: '&id, technicianId, userId, date, startTime, endTime, isSynced, status',
-      locations: '++id, workdayId, timestamp, isSynced', // Added workdayId for indexing
-      jobs: '&id, workdayId, isSynced, status',
-      events: '&id, workdayId, isSynced, type', // Added based on schema
-      technicians: '++id, name',
+      workdays:
+        "&id, technicianId, userId, date, startTime, endTime, isSynced, status",
+      locations: "++id, workdayId, timestamp, isSynced", // Added workdayId for indexing
+      jobs: "&id, workdayId, isSynced, status",
+      events: "&id, workdayId, isSynced, type", // Added based on schema
+      technicians: "++id, name",
     });
   }
 }

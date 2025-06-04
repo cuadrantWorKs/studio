@@ -1,22 +1,20 @@
-import React from 'react';
-import { WorkdaySummaryContext, Workday } from '@/lib/techtrack/types';
+import React from "react";
+import { Job } from "@/lib/techtrack/types";
 
 export interface CurrentStatusDisplayProps {
-  workday: Workday;
-  endOfDaySummary: WorkdaySummaryContext | null;
+  status: "tracking" | "paused";
+  currentJob: Job | null;
+  aiLoading: Record<string, boolean>;
 }
 
-const CurrentStatusDisplay: React.FC<CurrentStatusDisplayProps> = ({ 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  workday, 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  endOfDaySummary 
+const CurrentStatusDisplay: React.FC<CurrentStatusDisplayProps> = ({
+  status,
+  currentJob,
+  aiLoading,
 }) => {
-  return (
-    <div>
-      Current Status Display
-    </div>
-  );
+  return <div>Current Status Display</div>;
 };
+
+
 
 export default CurrentStatusDisplay;

@@ -1,6 +1,7 @@
-import Dexie, { Table } from 'dexie';
+import Dexie, { Table } from "dexie";
 
-export interface Workday { // Represents a technician's work session
+export interface Workday {
+  // Represents a technician's work session
   id?: number; // Primary key
   technicianId: string;
   startTime: Date;
@@ -9,7 +10,8 @@ export interface Workday { // Represents a technician's work session
   isSynced: boolean; // To track synchronization status
 }
 
-export interface Location { // Represents a technician's location at a specific time
+export interface Location {
+  // Represents a technician's location at a specific time
   id?: number; // Primary key
   workdayId: number; // Foreign key to Workday
   timestamp: Date;
@@ -19,7 +21,8 @@ export interface Location { // Represents a technician's location at a specific 
   isSynced: boolean; // To track synchronization status
 }
 
-export interface Technician { // Represents a field technician
+export interface Technician {
+  // Represents a field technician
   id?: number; // Primary key
   name: string;
   // Add other technician properties here
@@ -31,11 +34,11 @@ export class LocalDatabase extends Dexie {
   technicians!: Table<Technician>;
 
   constructor() {
-    super('TechTrackLocalDB'); // Database name
+    super("TechTrackLocalDB"); // Database name
     this.version(1).stores({
-      workdays: '++id, technicianId, startTime, endTime, isSynced',
-      locations: '++id, workdayId, timestamp, isSynced',
-      technicians: '++id, name',
+      workdays: "++id, technicianId, startTime, endTime, isSynced",
+      locations: "++id, workdayId, timestamp, isSynced",
+      technicians: "++id, name",
     });
   }
 }
