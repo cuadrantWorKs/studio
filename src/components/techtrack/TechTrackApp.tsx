@@ -110,7 +110,8 @@ export const sanitizeLocationPoint = (
     return sanitized;
   }
 };
-export function TechTrackApp({ technicianName }: TechTrackAppProps) {
+export default function TechTrackApp({ technicianName }: TechTrackAppProps): JSX.Element {
+  return <div>Bienvenido, {technicianName}</div>;
   const [currentLocation, setCurrentLocation] = useState<LocationPoint | null>(null);    const [geolocationError, setGeolocationError] = useState<GeolocationError | null>(null); // Keep this for user feedback
 
     const [elapsedTime, setElapsedTime] = useState(0);

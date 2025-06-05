@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { TechTrackApp } from "@/components/techtrack/TechTrackApp";
+import TechTrackApp from "@/components/techtrack/TechTrackApp";
 import {
   Card,
   CardContent,
