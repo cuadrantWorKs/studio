@@ -89,15 +89,9 @@ interface TechTrackAppProps {
 export const sanitizeLocationPoint = (
   location?: LocationPoint | null | undefined,
 ): LocationPoint | undefined => {
-  if (
-    location &&
-    typeof location.latitude === "number" &&
-    !isNaN(location.latitude) &&
-    typeof location.longitude === "number" &&
-    !isNaN(location.longitude) &&
-    typeof location.timestamp === "number" &&
-    !isNaN(location.timestamp)
-  ) {
+  if (location && typeof location.latitude === "number" && !isNaN(location.latitude) &&
+    typeof location.longitude === "number" && !isNaN(location.longitude) &&
+    typeof location.timestamp === "number" && !isNaN(location.timestamp)) {
     const sanitized: LocationPoint = {
       latitude: location.latitude,
 
@@ -110,8 +104,7 @@ export const sanitizeLocationPoint = (
     return sanitized;
   }
 };
-export default function TechTrackApp({ technicianName }: TechTrackAppProps): JSX.Element {
-  return <div>Bienvenido, {technicianName}</div>;
+export default function TechTrackApp({ technicianName }: TechTrackAppProps): JSX.Element | null {
   const [currentLocation, setCurrentLocation] = useState<LocationPoint | null>(null);    const [geolocationError, setGeolocationError] = useState<GeolocationError | null>(null); // Keep this for user feedback
 
     const [elapsedTime, setElapsedTime] = useState(0);
@@ -383,69 +376,49 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps): JSX
         if (retryInterval) clearInterval(retryInterval);
       };
     }, [syncRetryActive, toast]); // Include toast as it's used in the interval function
-    if (workday?.status === "tracking" && !currentJob) {
-      // Use useEffect for side effects like prompting for a new job
-      useEffect(() => {
-        if (workday?.status === "tracking" && !currentJob) {
-          if (aiLoading.newJob || isJobModalOpen) return;
+    // Move useEffect outside of the conditional if
+    useEffect(() => {
+      // Place the conditional logic inside the useEffect callback
+      if (workday?.status === "tracking" && !currentJob) {
+        if (aiLoading.newJob || isJobModalOpen) return;
 
-          const lastMovementTime =
-            workday.locationHistory?.[workday.locationHistory.length - 1]
-              ?.timestamp || workday.startTime;
-          if (
-            Date.now() - (lastMovementTime || Date.now()) >
-            STOP_DETECT_DURATION_MS
-          ) {
-            const hasBeenPromptedRecently =
-              (workday.lastNewJobPromptTime || 0) > 0 &&
-              Date.now() - (workday.lastNewJobPromptTime || 0) <
-                RECENT_PROMPT_THRESHOLD_MS;
-            setAiLoading((prev) => ({ ...prev, newJob: true }));
-            decidePromptForNewJob({
-              hasBeenPromptedRecently: !!hasBeenPromptedRecently,
-              timeStoppedInMinutes: Math.round(
-                STOP_DETECT_DURATION_MS / (60 * 1000),
-              ),
+        const lastMovementTime =
+          workday.locationHistory?.[workday.locationHistory.length - 1]?.timestamp || workday.startTime;
+        if (
+          Date.now() - (lastMovementTime || Date.now()) > STOP_DETECT_DURATION_MS
+        ) {
+          const hasBeenPromptedRecently =
+            (workday.lastNewJobPromptTime || 0) > 0 &&
+            Date.now() - (workday.lastNewJobPromptTime || 0) <RECENT_PROMPT_THRESHOLD_MS;
+          setAiLoading((prev) => ({ ...prev, newJob: true }));
+          decidePromptForNewJob({
+            hasBeenPromptedRecently: !!hasBeenPromptedRecently,
+            timeStoppedInMinutes: Math.round(STOP_DETECT_DURATION_MS / (60 * 1000)),
+          })
+            .then((res) => {
+              if (res.shouldPrompt) {
+                setJobModalMode("new" as "new" | "summary");
+                setIsJobModalOpen(true);
+                recordEvent("NEW_JOB_PROMPT", currentLocation, undefined, `IA: ${res.reason}`);
+              }
+              setWorkday((prev) => prev ? { ...prev, lastNewJobPromptTime: Date.now() } : null);
             })
-              .then((res) => {
-                if (res.shouldPrompt) {
-                  // No toast here, rely on status indicators
-                  setJobModalMode("new" as "new" | "summary");
-                  setIsJobModalOpen(true);
-                  recordEvent(
-                    "NEW_JOB_PROMPT",
-                    currentLocation,
-                    undefined,
-                    `IA: ${res.reason}`,
-                  );
-                }
-                setWorkday((prev) =>
-                  prev ? { ...prev, lastNewJobPromptTime: Date.now() } : null,
-                );
-              })
-              .catch((err: any) => {
-                // Add catch block for AI decision errors with parameter
-                toast({
-                  title: "Error de IA",
-                  description: "No se pudo verificar si hay un nuevo trabajo.",
-                  variant: "destructive",
-                });
-              })
-              .finally(() =>
-                setAiLoading((prev) => ({ ...prev, newJob: false })),
-              ); // Ensure AI loading is off in all cases
-          }
+            .catch((err: any) => {
+              toast({ title: "Error de IA", description: "No se pudo verificar si hay un nuevo trabajo.", variant: "destructive" });
+            })
+            .finally(() => setAiLoading((prev) => ({ ...prev, newJob: false }))); // Ensure AI loading is off in all cases
         }
-      }, [
-        workday,
-        currentLocation,
-        toast,
-        recordEvent,
-        currentJob,
-        isJobModalOpen,
-        aiLoading.newJob,
-      ]);
-    } // Close the if block that wraps the useEffect
+      }
+    }, [
+      workday,
+      currentLocation,
+      toast,
+      recordEvent,
+      currentJob,
+      isJobModalOpen,
+      aiLoading.newJob,
+    ]);
+
 
     useEffect(() => {
       if (
@@ -586,7 +559,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps): JSX
           setSyncStatus("success");
         } catch (error: any) {
           // Add the error parameter to the catch block.
-          console.error("Error triggering sync after starting workday:", error);
+          console.error("Error triggering sync after starting workday:", error); // Closing brace for the catch block
           setSyncRetryActive(true);
           setSyncStatus("error"); // Set status to error on failure
         }
@@ -1025,8 +998,9 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps): JSX
         return; // Explicitly return void
       };
 
-  (
-    <TechTrackAppContent
+
+ return (
+ <TechTrackAppContent
       {...{
         workday,
         currentLocation,
@@ -1057,7 +1031,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps): JSX
         setJobToSummarizeId,
       }}
     />
-  );
+  ); // Return the component
 }
 interface TechTrackAppContentProps extends TechTrackAppProps {  workday: Workday | null;  currentLocation: LocationPoint | null; // Adjusted type for clarity as state is LocationPoint | null
   geolocationError: GeolocationError | null; // Keep this for user feedback
@@ -1091,7 +1065,7 @@ interface TechTrackAppContentProps extends TechTrackAppProps {  workday: Workday
   ) => Promise<void>;
   setJobToSummarizeId: (jobId: string | null) => void;}
 
-function TechTrackAppContent({
+function TechTrackAppContent({ // Change return type to allow null
         workday,
         currentLocation,
         geolocationError,
@@ -1121,13 +1095,14 @@ function TechTrackAppContent({
         handleJobFormSubmit,
         setJobToSummarizeId,
 }: TechTrackAppContentProps): JSX.Element {
+    let contentToRender: JSX.Element | null = null; // Initialize variable to hold JSX
+
   const getGoogleMapsLink = (location: LocationPoint | null | undefined) =>
     location
       ? `https://www.google.com/maps/search/?api=1&query=${location.latitude},${location.longitude}`
       : "#"; // Adjusted to accept null/undefined
-  const renderContent = (): JSX.Element | null => {
     if (!workday || workday.status === "idle") {
-      return (
+      return ( // Render content for idle state
         <div className="flex flex-col items-center justify-center h-full p-4">
           <Card className="w-full max-w-sm">
             <CardHeader>
@@ -1176,9 +1151,9 @@ function TechTrackAppContent({
           </Link>
         </div>
       );
-    }
+    } // Remove the return statement here
 
-    if (workday.status === "tracking" || workday.status === "paused") {
+    if (workday.status === "tracking" || workday.status === "paused") { // Render content for tracking or paused state
       const syncIndicator =
         syncStatus === "syncing" ? (
           <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
@@ -1421,7 +1396,7 @@ function TechTrackAppContent({
             </div>
           );
         }
-    if (workday.status === "ended") {
+    if (workday.status === "ended") { // Render content for ended state // Remove the return statement here
       const syncIndicator =
         syncStatus === "syncing" ? (
           <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
@@ -1472,10 +1447,8 @@ function TechTrackAppContent({
             </div>
           );
     } // Closing brace for renderContent function
-    return null;
-  }
-  const content = renderContent();
 
-  return <>{content}</>;
+    return null; // Should ideally not reach here if workday status is always one of the defined states
+  }
 }
-}
+// The function now implicitly returns JSX.Element or null based on the conditional blocks
