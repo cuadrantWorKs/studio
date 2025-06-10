@@ -74,10 +74,6 @@ const prompt = ai.definePrompt({
   Here's how the current date/time looks (it's only for display):
   {{formatNow}}
 `,
-  templateHelpers: {
-    formatEpoch: (time: number) => new Date(time).toLocaleString(),
-    formatNow: () => new Date().toLocaleString(),
-  },
 });
 
 const decidePromptForJobCompletionFlow = ai.defineFlow(
@@ -87,7 +83,12 @@ const decidePromptForJobCompletionFlow = ai.defineFlow(
     outputSchema: DecidePromptForJobCompletionOutputSchema,
   },
   async input => {
-    const {output} = await prompt(input);
-    return output!;
+    try {
+      const {output} = await prompt(input);
+      return output!;
+    } catch (error) {
+      console.error('Error in decidePromptForJobCompletionFlow:', error);
+      throw error; // Re-throw the error so it can be handled further up the call stack if needed
+    }
   }
 );

@@ -22,11 +22,11 @@ export default function WorkdaySummaryDisplay({ summary, showTitle = true }: Wor
         </CardHeader>
       )}
       <div className="space-y-1">
-        <LocationInfo location={summary.startLocation} label="Workday Started:" time={summary.startTime} getGoogleMapsLink={getGoogleMapsLink} />
-        <LocationInfo location={summary.endLocation} label="Workday Ended:" time={summary.endTime} getGoogleMapsLink={getGoogleMapsLink} />
+        <LocationInfo location={summary.startLocation} label="Workday Started:" time={summary.startTime ?? null} getGoogleMapsLink={getGoogleMapsLink} />
+        <LocationInfo location={summary.endLocation} label="Workday Ended:" time={summary.endTime ?? null} getGoogleMapsLink={getGoogleMapsLink} />
       </div>
       
-      <p><strong>Total Active Time:</strong> {formatTime(summary.totalActiveTime)}</p>
+      <p><strong>Total Active Time:</strong> {formatTime(summary.totalActiveTime ?? null)}</p>
       <p><strong>Total Paused Time:</strong> {formatTime(summary.totalPausedTime)}</p>
       <p><strong>Total Distance:</strong> {summary.totalDistanceKm.toFixed(2)} km</p>
       
@@ -37,7 +37,7 @@ export default function WorkdaySummaryDisplay({ summary, showTitle = true }: Wor
             <li key={job.id}>
               <div><strong>{job.description}</strong> ({job.status})</div>
               <LocationInfo location={job.startLocation} label="Started at" time={job.startTime} getGoogleMapsLink={getGoogleMapsLink}/>
-              {job.endTime && job.endLocation && (
+              {job.endTime && job.endLocation && ( // Check if end time and location exist
                  <LocationInfo location={job.endLocation} label="Ended at" time={job.endTime} getGoogleMapsLink={getGoogleMapsLink}/>
               )}
               {job.summary && <p className="text-xs text-muted-foreground mt-1">Summary: {job.summary}</p>}
@@ -53,9 +53,9 @@ export default function WorkdaySummaryDisplay({ summary, showTitle = true }: Wor
           {summary.pauseIntervals.filter(p => p.endTime && p.startTime).map((pause,idx) => (
             <li key={idx}>
               Paused from {new Date(pause.startTime!).toLocaleTimeString()} for {formatTime(pause.endTime! - pause.startTime!)}
-              <LocationInfo location={pause.startLocation} label="Paused at" getGoogleMapsLink={getGoogleMapsLink} />
+              <LocationInfo location={pause.startLocation} label="Paused at" time={pause.startTime} getGoogleMapsLink={getGoogleMapsLink} />
               {pause.endLocation && (
-                <LocationInfo location={pause.endLocation} label="Resumed at" getGoogleMapsLink={getGoogleMapsLink}/>
+                <LocationInfo location={pause.endLocation} label="Resumed at" time={pause.endTime} getGoogleMapsLink={getGoogleMapsLink}/>
               )}
             </li>
           ))}
