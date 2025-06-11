@@ -30,14 +30,14 @@ export default function WorkdaySummaryDisplay({ summary, showTitle = true }: Wor
       <p><strong>Total Paused Time:</strong> {formatTime(summary.totalPausedTime)}</p>
       <p><strong>Total Distance:</strong> {summary.totalDistanceKm.toFixed(2)} km</p>
       
-      <h4 className="font-semibold mt-2">Jobs ({summary.jobs.length}):</h4>
-      {summary.jobs.length > 0 ? (
+      <h4 className="font-semibold mt-2">Jobs ({summary.jobs?.length ?? 0}):</h4>
+      {summary.jobs?.length > 0 ? (
         <ul className="list-disc pl-5 space-y-2 text-sm">
-          {summary.jobs.map(job => (
+          {summary.jobs?.map(job => (
             <li key={job.id}>
               <div><strong>{job.description}</strong> ({job.status})</div>
               <LocationInfo location={job.startLocation} label="Started at" time={job.startTime} getGoogleMapsLink={getGoogleMapsLink}/>
-              {job.endTime && job.endLocation && ( // Check if end time and location exist
+              {job.endTime && job.endLocation && (
                  <LocationInfo location={job.endLocation} label="Ended at" time={job.endTime} getGoogleMapsLink={getGoogleMapsLink}/>
               )}
               {job.summary && <p className="text-xs text-muted-foreground mt-1">Summary: {job.summary}</p>}
@@ -53,9 +53,9 @@ export default function WorkdaySummaryDisplay({ summary, showTitle = true }: Wor
           {summary.pauseIntervals.filter(p => p.endTime && p.startTime).map((pause,idx) => (
             <li key={idx}>
               Paused from {new Date(pause.startTime!).toLocaleTimeString()} for {formatTime(pause.endTime! - pause.startTime!)}
-              <LocationInfo location={pause.startLocation} label="Paused at" time={pause.startTime} getGoogleMapsLink={getGoogleMapsLink} />
+              <LocationInfo location={pause.startLocation} label="Paused at" getGoogleMapsLink={getGoogleMapsLink} />
               {pause.endLocation && (
-                <LocationInfo location={pause.endLocation} label="Resumed at" time={pause.endTime} getGoogleMapsLink={getGoogleMapsLink}/>
+                <LocationInfo location={pause.endLocation} label="Resumed at" getGoogleMapsLink={getGoogleMapsLink}/>
               )}
             </li>
           ))}

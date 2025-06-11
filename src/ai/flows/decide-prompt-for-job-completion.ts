@@ -54,25 +54,24 @@ const prompt = ai.definePrompt({
   output: {schema: DecidePromptForJobCompletionOutputSchema},
   prompt: `You are an AI assistant helping to determine if a technician should be prompted to complete their current job, considering how far they have moved and when they were last prompted.
 
-  Here's the available information:
-  - Distance moved: {{distanceMovedMeters}} meters
-  - Last prompted time: {{#if lastJobPromptedTimestamp}}{{{lastJobPromptedTimestamp}}} ({{formatEpoch lastJobPromptedTimestamp}}){{else}}Never{{/if}}
+Here's the available information:
+- Distance moved: {{distanceMovedMeters}} meters
+- Last prompted time: {{#if lastJobPromptedFormatted}}{{lastJobPromptedFormatted}}{{else}}Never{{/if}}
 
-  Consider these factors:
-  - Prompt if the technician has moved a significant distance (more than 100 meters) since their last known location.
-  - Avoid prompting too frequently. If the technician was prompted recently (e.g., within the last 30 minutes), it might be disruptive to prompt again.
+Consider these factors:
+- Prompt if the technician has moved a significant distance (more than 100 meters) since their last known location.
+- Avoid prompting too frequently. If the technician was prompted recently (e.g., within the last 30 minutes), it might be disruptive to prompt again.
 
-  Reason your decision step by step, and return the answer in JSON format.
+Reason your decision step by step, and return the answer in JSON format.
 
-  Output:
-  - shouldPrompt: true or false
-  - reason: the explanation for the decision
+Output:
+- shouldPrompt: true or false
+- reason: the explanation for the decision
 
-  You must output a JSON object that conforms to this schema:
-  {{outputSchemaDescription}}
+You must output a JSON object that conforms to this schema:
+{{outputSchemaDescription}}
 
-  Here's how the current date/time looks (it's only for display):
-  {{formatNow}}
+Current date/time: {{currentTime}}
 `,
 });
 
@@ -83,12 +82,35 @@ const decidePromptForJobCompletionFlow = ai.defineFlow(
     outputSchema: DecidePromptForJobCompletionOutputSchema,
   },
   async input => {
-    try {
-      const {output} = await prompt(input);
-      return output!;
-    } catch (error) {
-      console.error('Error in decidePromptForJobCompletionFlow:', error);
-      throw error; // Re-throw the error so it can be handled further up the call stack if needed
+    const maxRetries = 3;
+    let retryCount = 0;
+    
+    while (retryCount < maxRetries) {
+      try {
+        const {output} = await prompt(input);
+        return output!;
+      } catch (error: any) {
+        if (error.status === 429 && retryCount < maxRetries - 1) {
+          const delay = Math.pow(2, retryCount) * 1000; // 1s, 2s, 4s
+          console.log(`Rate limited, retrying in ${delay}ms...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+          retryCount++;
+        } else {
+          throw error;
+        }
+      }
     }
+
+    // Pre-format the data before passing to prompt
+    const formattedInput = {
+      ...input,
+      lastJobPromptedFormatted: input.lastJobPromptedTimestamp 
+        ? new Date(input.lastJobPromptedTimestamp).toLocaleString()
+        : null,
+      currentTime: new Date().toLocaleString(),
+    };
+
+    const {output} = await prompt(formattedInput);
+    return output!;
   }
 );

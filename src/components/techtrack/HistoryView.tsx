@@ -10,8 +10,10 @@ import type { Workday, WorkdaySummaryContext } from '@/lib/techtrack/types';
 import { calculateWorkdaySummary } from '@/lib/techtrack/summary';
 import WorkdaySummaryDisplay from './WorkdaySummaryDisplay';
 import { ArrowLeft, Loader2, AlertTriangle } from 'lucide-react'; // Added AlertTriangle
-import { db } from '@/lib/firebase';
-import { collection, getDocs, query, orderBy } from 'firebase/firestore';
+import { toCamelCase } from '@/lib/utils';
+import { db } from '@/lib/supabase';
+
+
 
 
 export default function HistoryView() {
@@ -27,17 +29,30 @@ export default function HistoryView() {
       setIsLoadingHistory(true);
       setError(null);
       try {
-        const workdaysCollectionRef = collection(db, "workdays");
+const {data: workdays, error} = await db
+  .from('workdays')
+  .select(`
+    *,
+    jobs (*),
+    locationHistory:locations (*),
+    pause_intervals (*)
+  `)
+  .order('start_time', {ascending: false});
+
+        if (error) {
+          console.log('Error fetching supabase workdays:', error);
+        }else{
+          console.log('Workdays fetched with SUPABASE:', workdays);
+          const fetchedWorkdays: Workday[] = toCamelCase(workdays) || [];
+          setPastWorkdays(fetchedWorkdays);
+        }
+        /*const workdaysCollectionRef = collection(db, "workdays");
         const q = query(workdaysCollectionRef, orderBy("startTime", "desc"));
-        const querySnapshot = await getDocs(q);
-        const fetchedWorkdays: Workday[] = [];
-        querySnapshot.forEach((doc) => {
-          fetchedWorkdays.push({ id: doc.id, ...doc.data() } as Workday);
-        });
-        setPastWorkdays(fetchedWorkdays);
+        const querySnapshot = await getDocs(q);*/
+        
       } catch (err) {
-        console.error("Error fetching history from Firestore:", err);
-        setError("Failed to load history. Please check your Firebase setup and network connection.");
+        console.error("Error fetching history from SUPABASE:", err);
+        setError("Failed to load history. Please check your SUPABASE setup and network connection.");
       } finally {
         setIsLoadingHistory(false);
       }
@@ -48,6 +63,9 @@ export default function HistoryView() {
 
   useEffect(() => {
     if (selectedWorkday) {
+      console.log('selected workday', selectedWorkday);
+
+
       setIsLoadingSummary(true);
       setDisplayedSummary(null); 
       calculateWorkdaySummary(selectedWorkday)

@@ -55,6 +55,33 @@ const prompt = ai.definePrompt({
 `,
 });
 
+// Simple in-memory rate limiter
+class RateLimiter {
+  private requests: number[] = [];
+  private maxRequests: number;
+  private windowMs: number;
+
+  constructor(maxRequests: number, windowMs: number) {
+    this.maxRequests = maxRequests;
+    this.windowMs = windowMs;
+  }
+
+  async checkLimit(): Promise<void> {
+    const now = Date.now();
+    this.requests = this.requests.filter(time => now - time < this.windowMs);
+    
+    if (this.requests.length >= this.maxRequests) {
+      const oldestRequest = Math.min(...this.requests);
+      const waitTime = this.windowMs - (now - oldestRequest);
+      await new Promise(resolve => setTimeout(resolve, waitTime));
+    }
+    
+    this.requests.push(now);
+  }
+}
+
+const limiter = new RateLimiter(13, 60000); // 10 requests per minute
+
 const decidePromptForNewJobFlow = ai.defineFlow(
   {
     name: 'decidePromptForNewJobFlow',
@@ -62,6 +89,28 @@ const decidePromptForNewJobFlow = ai.defineFlow(
     outputSchema: DecidePromptForNewJobOutputSchema,
   },
   async input => {
+  await limiter.checkLimit();
+
+    const maxRetries = 3;
+    let retryCount = 0;
+    
+    while (retryCount < maxRetries) {
+      try {
+        const {output} = await prompt(input);
+        return output!;
+      } catch (error: any) {
+        if (error.status === 429 && retryCount < maxRetries - 1) {
+          const delay = Math.pow(2, retryCount) * 1000; // 1s, 2s, 4s
+          console.log(`Rate limited, retrying in ${delay}ms...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+          retryCount++;
+        } else {
+          throw error;
+        }
+      }
+    }
+ 
+
     const {output} = await prompt(input);
     return output!;
   }
