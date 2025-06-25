@@ -52,7 +52,7 @@ import { summarizeJobDescription } from "@/ai/flows/summarize-job-description";
 import { decidePromptForNewJob } from "@/ai/flows/decide-prompt-for-new-job";
 import { decidePromptForJobCompletion } from "@/ai/flows/decide-prompt-for-job-completion";
 import { calculateWorkdaySummary } from "@/lib/techtrack/summary";
-import { formatTime } from "@/lib/utils";
+import { formatDistance, formatTime } from "@/lib/utils";
 import WorkdaySummaryDisplay from "./WorkdaySummaryDisplay";
 import { db } from "@/lib/supabase";
 import LocationInfo from "./LocationInfo";
@@ -115,6 +115,152 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
   const [isSavingToCloud, setIsSavingToCloud] = useState(false);
   const [aiLoading, setAiLoading] = useState<Record<string, boolean>>({});
   const [pendingEndDayAction, setPendingEndDayAction] = useState(false);
+
+  // Add these state variables to your component
+  const [totalDistance, setTotalDistance] = useState(0);
+  const [previousLocation, setPreviousLocation] = useState(null);
+
+  //
+  const [distanceToFirstJob, setDistanceToFirstJob] = useState(0);
+  const [distanceFromLastJob, setDistanceFromLastJob] = useState(0);
+
+  /**
+   * Calculate straight-line distance between two points (Haversine formula)
+   * This is NOT the driving distance, but can be used as an approximation
+   */
+  function calculateStraightLineDistance(
+    lat1: number,
+    lng1: number,
+    lat2: number,
+    lng2: number
+  ): number {
+    const R = 6371000; // Earth's radius in meters
+    const φ1 = (lat1 * Math.PI) / 180;
+    const φ2 = (lat2 * Math.PI) / 180;
+    const Δφ = ((lat2 - lat1) * Math.PI) / 180;
+    const Δλ = ((lng2 - lng1) * Math.PI) / 180;
+
+    const a =
+      Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+      Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+    return R * c; // Distance in meters
+  }
+
+  /**
+   * Convert address to coordinates using a free geocoding service
+   * Using Nominatim (OpenStreetMap) - no API key required
+   */
+  async function geocodeAddress(address: string): Promise<GPSLocation> {
+    try {
+      const encodedAddress = encodeURIComponent(address);
+      const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodedAddress}&limit=1`;
+
+      const response = await fetch(url, {
+        headers: {
+          "User-Agent": "YourAppName/1.0 (your-email@example.com)", // Required by Nominatim
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Geocoding failed: ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      if (data.length === 0) {
+        throw new Error("Address not found");
+      }
+
+      return {
+        lat: parseFloat(data[0].lat),
+        lng: parseFloat(data[0].lon),
+      };
+    } catch (error) {
+      console.error("Geocoding error:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get approximate driving distance using OpenRouteService (free tier available)
+   * Limited requests per day without API key
+   */
+  async function getApproximateDrivingDistance(
+    startLat: number,
+    startLng: number,
+    endLat: number,
+    endLng: number
+  ): Promise<{ distance: number; duration: number }> {
+    try {
+      const url = `https://api.openrouteservice.org/v2/directions/driving-car?start=${startLng},${startLat}&end=${endLng},${endLat}`;
+
+      const response = await fetch(url, {
+        headers: {
+          Authorization:
+            "5b3ce3597851110001cf62482c9206ae2f4441bfa9dff796b047d18f",
+          Accept:
+            "application/json, application/geo+json, application/gpx+xml, img/png; charset=utf-8",
+        },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const route = data.features[0];
+
+        return {
+          distance: route.properties.segments[0].distance, // meters
+          duration: route.properties.segments[0].duration, // seconds
+        };
+      } else {
+        const straightDistance = calculateStraightLineDistance(
+          startLat,
+          startLng,
+          endLat,
+          endLng
+        );
+        return {
+          distance: straightDistance * 1.3, // Approximate 30% longer for roads
+          duration: (straightDistance * 1.3) / 13.89, // Assume ~50km/h average speed
+        };
+      }
+    } catch (error) {
+      console.error("Routing error:", error);
+      // Fallback to straight-line distance with approximation
+      const straightDistance = calculateStraightLineDistance(
+        startLat,
+        startLng,
+        endLat,
+        endLng
+      );
+      return {
+        distance: straightDistance * 1.3, // Approximate 30% longer for roads
+        duration: (straightDistance * 1.3) / 13.89, // Assume ~50km/h average speed
+      };
+    }
+  }
+
+  // Check if key exists
+  const sessionExists = (key: string): boolean => {
+    return sessionStorage.getItem(key) !== null;
+  };
+
+  // Save value
+  const sessionSave = (key: string, value: any) => {
+    if (typeof window !== "undefined") {
+      sessionStorage.setItem(key, JSON.stringify(value));
+    }
+  };
+
+  // Get value
+  const sessionGet = (key: string) => {
+    if (typeof window !== "undefined") {
+      const item = sessionStorage.getItem(key);
+      return item ? JSON.parse(item) : null;
+    }
+    return null;
+  };
 
   const { toast } = useToast();
 
@@ -188,6 +334,142 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
       return () => navigator.geolocation.clearWatch(watchId);
     }
   }, [toast]);
+
+  // Haversine formula to calculate distance between two GPS coordinates
+  const calculateDistance = (lat1, lon1, lat2, lon2) => {
+    const R = 6371000; // Earth's radius in meters
+    const dLat = ((lat2 - lat1) * Math.PI) / 180;
+    const dLon = ((lon2 - lon1) * Math.PI) / 180;
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos((lat1 * Math.PI) / 180) *
+        Math.cos((lat2 * Math.PI) / 180) *
+        Math.sin(dLon / 2) *
+        Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c; // Distance in meters
+  };
+
+  // Function to update distance when location changes
+  const updateDistance = useCallback(
+    (newLocation) => {
+      if (!newLocation || !newLocation.latitude || !newLocation.longitude)
+        return;
+
+      // Only calculate distance if we have a previous location and accuracy is reasonable
+      if (
+        previousLocation &&
+        previousLocation.latitude &&
+        previousLocation.longitude &&
+        newLocation.accuracy &&
+        newLocation.accuracy < 50
+      ) {
+        // Only count if accuracy is better than 50m
+
+        const distance = calculateDistance(
+          previousLocation.latitude,
+          previousLocation.longitude,
+          newLocation.latitude,
+          newLocation.longitude
+        );
+
+        // Only add distance if it's reasonable (between 1m and 1000m)
+        // This helps filter out GPS noise and unrealistic jumps
+        if (distance > 1 && distance < 1000) {
+          setTotalDistance((prev) => prev + distance);
+        }
+      }
+
+      setPreviousLocation({
+        latitude: newLocation.latitude,
+        longitude: newLocation.longitude,
+        timestamp: Date.now(),
+      });
+    },
+    [previousLocation]
+  );
+
+  // This effect runs whenever currentLocation changes
+  useEffect(() => {
+    if (currentLocation) {
+      console.log("Location updated:", currentLocation);
+      handleLocationUpdate(currentLocation);
+
+      /*       const fetchDistance = async () => {
+      setIsLoading(true);
+      console.log('fetching distance');
+      try {
+        console.log('trying');
+        const result = await getApproximateDrivingDistance(
+          currentLocation.latitude, 
+          currentLocation.longitude, 
+          -34.785000, -58.482134 // Palleros 607
+        );
+
+        setDistanceToHome(result.distance);
+        
+      } catch (err) {
+        console.error('Distance calculation error:', err);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+      fetchDistance(); */
+    }
+  }, [currentLocation]);
+
+  const handleLocationUpdate = (newLocation) => {
+    if (!sessionExists("initialLat")) {
+      sessionSave("initialLat", newLocation.latitude);
+      sessionSave("initialLng", newLocation.longitude);
+    }
+
+    console.log("previous location", previousLocation);
+    if (!previousLocation) {
+      setPreviousLocation({
+        latitude: newLocation.latitude,
+        longitude: newLocation.longitude,
+        timestamp: Date.now(),
+      });
+    }
+
+    if (!previousLocation) return;
+
+    if (!newLocation || !newLocation.latitude || !newLocation.longitude) return;
+    // Your custom logic when location updates
+    console.log("Handling location update:", newLocation);
+    const distance = calculateDistance(
+      previousLocation.latitude,
+      previousLocation.longitude,
+      newLocation.latitude,
+      newLocation.longitude
+    );
+
+    // Only add distance if it's reasonable (between 1m and 1000m)
+    // This helps filter out GPS noise and unrealistic jumps
+    //if (distance > 1 && distance < 1000) {
+    setTotalDistance((prev) => prev + distance);
+    setPreviousLocation({
+      latitude: newLocation.latitude,
+      longitude: newLocation.longitude,
+      timestamp: Date.now(),
+    });
+  };
+
+  /* // Call this function whenever currentLocation updates in your event handler
+useEffect(() => {
+  if (currentLocation && workday?.status === "tracking") {
+    updateDistance(currentLocation);
+  }
+}, [currentLocation, workday?.status, updateDistance]); */
+
+
+
+  // Function to reset distance (call when starting a new workday)
+  const resetDistance = () => {
+    setTotalDistance(0);
+    setPreviousLocation(null);
+  };
 
   const recordEvent = useCallback(
     (
@@ -422,6 +704,9 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
     aiLoading.jobCompletion,
   ]);
 
+  const [distInitialToJob, setDistInitialToJob] = useState(0);
+  const [distDefinedHomeToJob, setDistDefinedHomeToJob] = useState(0);
+
   const handleStartTracking = () => {
     const safeCurrentLocation = sanitizeLocationPoint(currentLocation);
     if (!safeCurrentLocation) {
@@ -434,6 +719,63 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
     }
     setIsLoading(true);
     setEndOfDaySummary(null);
+
+    var initialLat = sessionGet("initialLat");
+    var initialLng = sessionGet("initialLng");
+
+    const calculateAllDistances = async () => {
+      setIsLoading(true);
+      console.log(
+        "fetching distances",
+        initialLat,
+        initialLng,
+        safeCurrentLocation.latitude,
+        safeCurrentLocation.longitude
+      );
+
+      try {
+        const [initialToJobResult, homeToJobResult] = await Promise.all([
+          getApproximateDrivingDistance(
+            initialLat,
+            initialLng,
+            safeCurrentLocation.latitude,
+            safeCurrentLocation.longitude
+          ),
+          getApproximateDrivingDistance(
+            -34.785,
+            -58.482134, // Palleros 607,
+            safeCurrentLocation.latitude,
+            safeCurrentLocation.longitude
+          ),
+        ]);
+
+        const distInitialToJob = initialToJobResult.distance;
+        const distDefinedHomeToJob = homeToJobResult.distance;
+
+        const newDistance =
+          distInitialToJob > distDefinedHomeToJob
+            ? distDefinedHomeToJob
+            : distInitialToJob;
+
+        console.log("Selected distance: ", newDistance);
+        setDistanceToFirstJob(newDistance);
+
+        setWorkday((prev) =>
+          prev
+            ? {
+                ...prev,
+                distanceToFirstJob: newDistance,
+              }
+            : null
+        );
+      } catch (err) {
+        console.error("Distance calculation error:", err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    calculateAllDistances();
+
     const startTime = Date.now();
     const newWorkday: Workday = {
       id: crypto.randomUUID(),
@@ -454,6 +796,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
         },
       ],
       pauseIntervals: [],
+      distanceToFirstJob: distanceToFirstJob,
     };
     setWorkday(newWorkday);
     toast({
@@ -775,14 +1118,22 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
           finalizedWorkdayForSave.startLocation?.longitude,
         start_location_timestamp: finalizedWorkdayForSave.startLocation
           ?.timestamp
-          ? Math.floor(new Date(
-              finalizedWorkdayForSave.startLocation.timestamp
-            ).getTime()/1000)
+          ? Math.floor(
+              new Date(
+                finalizedWorkdayForSave.startLocation.timestamp
+              ).getTime() / 1000
+            )
           : null, // Convert timestamp to Unix/epoch (in seconds) bigint or null
         end_location_latitude: finalizedWorkdayForSave.endLocation?.latitude,
         end_location_longitude: finalizedWorkdayForSave.endLocation?.longitude, // Fixed typo
         end_location_timestamp:
           finalizedWorkdayForSave.endLocation?.timestamp ?? null, // Send number or null
+        distance_to_first_job:
+          finalizedWorkdayForSave.distanceToFirstJob ?? null,
+        distance_from_last_job:
+          finalizedWorkdayForSave.distanceFromLastJob ?? null,
+        distance_traveled:
+          finalizedWorkdayForSave.distanceTraveled ?? null,
       };
       console.log(
         "Attempting to upsert workday:",
@@ -932,6 +1283,8 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
           "La sesión de trabajo ha concluido y se ha guardado en la nube.",
       });
       localStorage.removeItem(getLocalStorageKey());
+      sessionStorage.removeItem("initialLat");
+      sessionStorage.removeItem("initialLng");
 
       try {
         const summary = await calculateWorkdaySummary(finalizedWorkdayForSave);
@@ -979,6 +1332,8 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
         setWorkday(workdayAtStartOfEnd); // Revert local state to before the finalize attempt using the initial state
       }
     } finally {
+      localStorage.removeItem("initialLat");
+      localStorage.removeItem("initialLng");
       // Always run
       console.log(
         "FINALLY block in finalizeWorkdayAndSave. Setting isSavingToCloud and isLoading to false."
@@ -1020,7 +1375,43 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
       return;
     }
     if (workday) {
-      await initiateEndDayProcess(workday);
+      const calculateAllDistances = async () => {
+        setIsLoading(true);
+        console.log("fetching distances", currentLocation, " to Palleros 607");
+
+        try {
+          const lastJobToHomeResult = await getApproximateDrivingDistance(
+            currentLocation?.latitude,
+            currentLocation?.longitude,
+            -34.785,
+            -58.482134 // Palleros 607,
+          );
+
+          const distLastJobToHome = lastJobToHomeResult.distance;
+
+          console.log("Selected distance: ", distLastJobToHome);
+          setDistanceFromLastJob(distLastJobToHome);
+
+          const updatedWorkday = workday
+           ? {
+               ...workday,
+               distanceFromLastJob: distLastJobToHome,
+               distanceTraveled: totalDistance,
+             }
+          : null;
+
+          setWorkday(updatedWorkday);
+  
+         // Use the updated workday directly
+          await initiateEndDayProcess(updatedWorkday);
+        } catch (err) {
+          console.error("Distance calculation error:", err);
+          await initiateEndDayProcess(workday);
+        } finally {
+          setIsLoading(false);
+        }
+      };
+      calculateAllDistances();
     }
   };
 
@@ -1432,7 +1823,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
               </CardTitle>
               <CardDescription className="flex items-center justify-center">
                 <User className="mr-1 h-4 w-4 text-muted-foreground" />{" "}
-                Bienvenido, {technicianName}.
+                {/* Bienvenido, {technicianName}. */}
               </CardDescription>
             </div>
             <div className="w-auto min-w-[calc(110px+0.5rem)]"></div>
@@ -1467,6 +1858,20 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
               </span>
             </div>
           )}
+          <div className="text-sm text-muted-foreground flex items-center space-x-1">
+            <span>Distance traveled: {formatDistance(totalDistance)}</span>
+          </div>
+
+          <div className="text-sm text-muted-foreground flex items-center space-x-2">
+            <span>
+              Distance paid to first job: {formatDistance(distanceToFirstJob)}
+            </span>
+            <p>Distance paid from last job: {formatDistance(distanceFromLastJob)}</p>
+          </div>
+          {/*        <div className="text-sm text-muted-foreground flex items-center space-x-1">
+            <span>Distance Paleros to first job: {formatDistance(distDefinedHomeToJob)}</span>
+          </div> */}
+
           {geolocationError && (
             <p className="text-xs text-destructive">
               Error de Geolocalización: {geolocationError.message}

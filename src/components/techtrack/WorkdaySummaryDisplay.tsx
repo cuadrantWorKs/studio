@@ -1,7 +1,7 @@
 'use client';
 
 import type { WorkdaySummaryContext, LocationPoint } from '@/lib/techtrack/types';
-import { formatTime } from '@/lib/utils';
+import { formatDistance, formatTime } from '@/lib/utils';
 import LocationInfo from './LocationInfo';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 
@@ -26,6 +26,9 @@ export default function WorkdaySummaryDisplay({ summary, showTitle = true }: Wor
         <LocationInfo location={summary.endLocation} label="Workday Ended:" time={summary.endTime ?? null} getGoogleMapsLink={getGoogleMapsLink} />
       </div>
       
+      <p><strong>Total distance to first job:</strong> {formatDistance(summary.distanceToFirstJob) ?? null}</p>
+      <p><strong>Total distance from last job:</strong> {formatDistance(summary.distanceFromLastJob) ?? null}</p>
+      <p><strong>Total distance travelled:</strong> {formatDistance(summary.distanceTraveled) ?? null}</p>
       <p><strong>Total Active Time:</strong> {formatTime(summary.totalActiveTime ?? null)}</p>
       <p><strong>Total Paused Time:</strong> {formatTime(summary.totalPausedTime)}</p>
       <p><strong>Total Distance:</strong> {summary.totalDistanceKm.toFixed(2)} km</p>

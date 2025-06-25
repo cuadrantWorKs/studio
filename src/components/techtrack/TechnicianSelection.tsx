@@ -52,7 +52,8 @@ export default function TechnicianSelection({ onTechnicianSelect }: TechnicianSe
 
           <Button onClick={handleContinue} className="w-full" size="lg">
             <PlayCircle className="mr-2 h-5 w-5" />
-            Continuar como {selectedTechnician}
+            {/* Continuar como {selectedTechnician} */}
+            Inicia el recorrido
           </Button>
         </CardContent>
         <CardFooter className="flex justify-center pt-4">

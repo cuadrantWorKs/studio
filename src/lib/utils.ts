@@ -17,6 +17,18 @@ export function formatTime(ms: number): string {
   )}:${String(seconds).padStart(2, "0")}`;
 }
 
+  // Function to format distance for display
+export const formatDistance = (distanceInMeters: any): string => {
+  if(distanceInMeters){
+    if (distanceInMeters < 1000) {
+      return `${distanceInMeters.toFixed(0)} m`;
+    } else {
+      return `${(distanceInMeters / 1000).toFixed(2)} km`;
+    }
+  }
+  return 'n/a';
+  };
+
 // Convert snake_case to camelCase
 export function toCamelCase(obj: object | null): any {
   if (obj === null || typeof obj !== "object") return obj;

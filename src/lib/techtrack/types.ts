@@ -66,6 +66,9 @@ export interface Workday {
   lastNewJobPromptTime?: number;
   lastJobCompletionPromptTime?: number;
   currentJobId?: string | null;
+  distanceToFirstJob?: number | null;
+  distanceFromLastJob?: number | null;
+  distanceTraveled?: number | null;
 }
 
 export interface WorkdaySummaryContext extends Workday {
