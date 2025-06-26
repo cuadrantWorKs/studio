@@ -52,7 +52,7 @@ import { summarizeJobDescription } from "@/ai/flows/summarize-job-description";
 import { decidePromptForNewJob } from "@/ai/flows/decide-prompt-for-new-job";
 import { decidePromptForJobCompletion } from "@/ai/flows/decide-prompt-for-job-completion";
 import { calculateWorkdaySummary } from "@/lib/techtrack/summary";
-import { formatDistance, formatTime } from "@/lib/utils";
+import { formatDistance, formatTime, setupGeolocation } from "@/lib/utils";
 import WorkdaySummaryDisplay from "./WorkdaySummaryDisplay";
 import { db } from "@/lib/supabase";
 import LocationInfo from "./LocationInfo";
@@ -243,25 +243,34 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
   }
 
   // Check if key exists
-  const sessionExists = (key: string): boolean => {
+  const localStorageExists = (key: string): boolean => {
     return localStorage.getItem(key) !== null;
   };
 
   // Save value
-  const sessionSave = (key: string, value: any) => {
+  const localStorageSave = (key: string, value: any) => {
     if (typeof window !== "undefined") {
       localStorage.setItem(key, JSON.stringify(value));
     }
   };
 
   // Get value
-  const sessionGet = (key: string) => {
+  const localStorageGet = (key: string) => {
     if (typeof window !== "undefined") {
       const item = localStorage.getItem(key);
       return item ? JSON.parse(item) : null;
     }
     return null;
   };
+
+  // Delete value
+const localStorageDelete = (key: string): boolean => {
+  if (typeof window !== "undefined") {
+    localStorage.removeItem(key);
+    return true;
+  }
+  return false;
+};
 
   const { toast } = useToast();
 
@@ -310,6 +319,10 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
   }, [workday]);
 
   useEffect(() => {
+    // Initialize geolocation (will enable mock in development if configured)
+    //const USE_MOCK_LOCATION = false;
+    //setupGeolocation();
+
     if (typeof navigator !== "undefined" && navigator.geolocation) {
       const watchId = navigator.geolocation.watchPosition(
         (position) => {
@@ -381,9 +394,9 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
   }, [currentLocation]);
 
   const handleLocationUpdate = (newLocation) => {
-    if (!sessionExists("initialLat")) {
-      sessionSave("initialLat", newLocation.latitude);
-      sessionSave("initialLng", newLocation.longitude);
+    if (!localStorageExists("initialLat")) {
+      localStorageSave("initialLat", newLocation.latitude);
+      localStorageSave("initialLng", newLocation.longitude);
     }
 
     console.log("previous location", previousLocation);
@@ -410,16 +423,19 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
         const timeDelta = (newLocation.timestamp - previousLocation.timestamp) / 1000;
         const speed = distance / timeDelta;
     
-    // Count distance only if:
-    // 1. Reasonable distance (5-500m)
-    // 2. Good GPS accuracy
-    // 3. Speed suggests driving (>2 m/s)
-    // 4. Reasonable time gap
-    if (//distance >= 5 && 
-        distance <= 500 &&
-        //newLocation.accuracy <= 150 && 
+        console.log("distance ", ((7*3.6)*timeDelta));
+        console.log("max distance", ((300*3.6)*timeDelta));
+        console.log("newLocation.accuracy ", newLocation.accuracy);
+        console.log("speed ", speed/3.6);
+        console.log("timeDelta ", timeDelta);
+        console.log("workday?.status ", workday?.status);
+
+    if (distance >= ((7*3.6)*timeDelta) && 
+        distance <= ((300*3.6)*timeDelta) &&
+        newLocation.accuracy <= 100 && 
         speed >= 2.0 && 
-        timeDelta >= 5 &&
+        //speed <= ((300/3.6)*timeDelta) &&
+        timeDelta >= 1.5 &&
         workday?.status != 'paused'
       ) {
         
@@ -696,8 +712,8 @@ useEffect(() => {
     setIsLoading(true);
     setEndOfDaySummary(null);
 
-    var initialLat = sessionGet("initialLat");
-    var initialLng = sessionGet("initialLng");
+    var initialLat = localStorageGet("initialLat");
+    var initialLng = localStorageGet("initialLng");
 
     const calculateAllDistances = async () => {
       setIsLoading(true);
@@ -1330,8 +1346,8 @@ useEffect(() => {
           "La sesión de trabajo ha concluido y se ha guardado en la nube.",
       });
       localStorage.removeItem(getLocalStorageKey());
-      localStorage.removeItem("initialLat");
-      localStorage.removeItem("initialLng");
+      localStorageDelete("initialLat");
+      localStorageDelete("initialLng");
 
       try {
         const summary = await calculateWorkdaySummary(finalizedWorkdayForSave);
@@ -1379,8 +1395,8 @@ useEffect(() => {
         setWorkday(workdayAtStartOfEnd); // Revert local state to before the finalize attempt using the initial state
       }
     } finally {
-      localStorage.removeItem("initialLat");
-      localStorage.removeItem("initialLng");
+      localStorageDelete("initialLat");
+      localStorageDelete("initialLng");
       // Always run
       console.log(
         "FINALLY block in finalizeWorkdayAndSave. Setting isSavingToCloud and isLoading to false."
@@ -1862,8 +1878,11 @@ useEffect(() => {
               setElapsedTime(0);
               setEndOfDaySummary(null);
               setPendingEndDayAction(false);
-              localStorage.removeItem('initialLat');
-              localStorage.removeItem('initialLng');
+              localStorageDelete("initialLat");
+              localStorageDelete("initialLng");
+              setTotalDistance(0);
+              setDistanceFromLastJob(0);
+              setDistanceToFirstJob(0);
             }}
             variant="secondary"
             className="w-full"
