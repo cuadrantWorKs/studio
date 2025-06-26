@@ -350,45 +350,6 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
     return R * c; // Distance in meters
   };
 
-  // Function to update distance when location changes
-  const updateDistance = useCallback(
-    (newLocation) => {
-      if (!newLocation || !newLocation.latitude || !newLocation.longitude)
-        return;
-
-      // Only calculate distance if we have a previous location and accuracy is reasonable
-      if (
-        previousLocation &&
-        previousLocation.latitude &&
-        previousLocation.longitude &&
-        newLocation.accuracy &&
-        newLocation.accuracy < 50
-      ) {
-        // Only count if accuracy is better than 50m
-
-        const distance = calculateDistance(
-          previousLocation.latitude,
-          previousLocation.longitude,
-          newLocation.latitude,
-          newLocation.longitude
-        );
-
-        // Only add distance if it's reasonable (between 1m and 1000m)
-        // This helps filter out GPS noise and unrealistic jumps
-        if (distance > 1 && distance < 1000) {
-          setTotalDistance((prev) => prev + distance);
-        }
-      }
-
-      setPreviousLocation({
-        latitude: newLocation.latitude,
-        longitude: newLocation.longitude,
-        timestamp: Date.now(),
-      });
-    },
-    [previousLocation]
-  );
-
   // This effect runs whenever currentLocation changes
   useEffect(() => {
     if (currentLocation) {
@@ -445,10 +406,23 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
       newLocation.longitude
     );
 
-    // Only add distance if it's reasonable (between 1m and 1000m)
-    // This helps filter out GPS noise and unrealistic jumps
-    //if (distance > 1 && distance < 1000) {
-    setTotalDistance((prev) => prev + distance);
+        const timeDelta = (newLocation.timestamp - previousLocation.timestamp) / 1000;
+        const speed = distance / timeDelta;
+    
+    // Count distance only if:
+    // 1. Reasonable distance (5-500m)
+    // 2. Good GPS accuracy
+    // 3. Speed suggests driving (>2 m/s)
+    // 4. Reasonable time gap
+    if (distance >= 5 && 
+        distance <= 500 &&
+        newLocation.accuracy <= 150 && 
+        speed >= 2.0 && 
+        timeDelta >= 5
+      ) {
+        
+        setTotalDistance((prev) => prev + distance);
+      }
     setPreviousLocation({
       latitude: newLocation.latitude,
       longitude: newLocation.longitude,
