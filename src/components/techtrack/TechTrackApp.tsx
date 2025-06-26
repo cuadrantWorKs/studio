@@ -56,6 +56,7 @@ import { formatDistance, formatTime } from "@/lib/utils";
 import WorkdaySummaryDisplay from "./WorkdaySummaryDisplay";
 import { db } from "@/lib/supabase";
 import LocationInfo from "./LocationInfo";
+import { LocaleRouteNormalizer } from "next/dist/server/normalizers/locale-route-normalizer";
 
 const LOCATION_INTERVAL_MS = 5 * 60 * 1000;
 const STOP_DETECT_DURATION_MS = 15 * 60 * 1000;
@@ -243,20 +244,20 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
 
   // Check if key exists
   const sessionExists = (key: string): boolean => {
-    return sessionStorage.getItem(key) !== null;
+    return localStorage.getItem(key) !== null;
   };
 
   // Save value
   const sessionSave = (key: string, value: any) => {
     if (typeof window !== "undefined") {
-      sessionStorage.setItem(key, JSON.stringify(value));
+      localStorage.setItem(key, JSON.stringify(value));
     }
   };
 
   // Get value
   const sessionGet = (key: string) => {
     if (typeof window !== "undefined") {
-      const item = sessionStorage.getItem(key);
+      const item = localStorage.getItem(key);
       return item ? JSON.parse(item) : null;
     }
     return null;
@@ -414,11 +415,12 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
     // 2. Good GPS accuracy
     // 3. Speed suggests driving (>2 m/s)
     // 4. Reasonable time gap
-    if (distance >= 5 && 
+    if (//distance >= 5 && 
         distance <= 500 &&
-        newLocation.accuracy <= 150 && 
+        //newLocation.accuracy <= 150 && 
         speed >= 2.0 && 
-        timeDelta >= 5
+        timeDelta >= 5 &&
+        workday?.status != 'paused'
       ) {
         
         setTotalDistance((prev) => prev + distance);
@@ -726,6 +728,9 @@ useEffect(() => {
         const distInitialToJob = initialToJobResult.distance;
         const distDefinedHomeToJob = homeToJobResult.distance;
 
+        console.log("distInitialToJob: ", distInitialToJob);
+        console.log("distDefinedHomeToJob: ", distDefinedHomeToJob);
+        
         const newDistance =
           distInitialToJob > distDefinedHomeToJob
             ? distDefinedHomeToJob
@@ -852,18 +857,78 @@ useEffect(() => {
     setIsLoading(true);
     setIsSavingToCloud(true);
 
-    // We don't need to update the state to 'paused' *before* calling finalizeWorkdayAndSave
-    // The status update to 'ended' should happen within finalizeWorkdayAndSave
-    // Let's simplify and pass the original workdayDataToEnd to finalizeWorkdayAndSave
+    if (workdayDataToEnd) {
+      console.log('TEST WORK DAY2 ', workdayDataToEnd);
+      
+      const calculateAllDistances = async () => {
+        setIsLoading(true);
+        console.log("fetching distances", currentLocation, " to Palleros 607");
 
-    // Use a timeout to ensure any pending state updates related to job completion
-    // or other actions that trigger initiateEndDayProcess have a chance to
-    // be processed by React before the finalization process begins.
-    // Passing workdayDataToEnd which represents the state at the time of initiating
-    // the end day process.
-    setTimeout(async () => {
-      await finalizeWorkdayAndSave(workdayDataToEnd, actionTime);
-    }, 0);
+        try {
+          const lastJobToHomeResult = await getApproximateDrivingDistance(
+            currentLocation?.latitude,
+            currentLocation?.longitude,
+            -34.785,
+            -58.482134 // Palleros 607,
+          );
+
+          const distLastJobToHome = lastJobToHomeResult.distance;
+
+          console.log("Selected distance: ", distLastJobToHome);
+          setDistanceFromLastJob(distLastJobToHome);
+
+
+          console.log("ultimo trabajo: ", workdayDataToEnd?.jobs[workdayDataToEnd?.jobs.length-1]);
+          var lastJobEndTime = workdayDataToEnd?.jobs[workdayDataToEnd?.jobs.length-1].endTime;
+          console.log("lastJobEndTime: ", lastJobEndTime);
+          if(!lastJobEndTime){
+              try{
+                console.log('change');
+                lastJobEndTime = workdayDataToEnd.endTime; 
+              }catch(error){
+                console.log("err: ", error);
+              }
+          } 
+
+
+          console.log("lastJobEndTime: ", lastJobEndTime);
+          workdayDataToEnd = workdayDataToEnd
+           ? {
+               ...workdayDataToEnd,
+               distanceFromLastJob: distLastJobToHome,
+               distanceTraveled: totalDistance,
+               endTime: lastJobEndTime,
+             }
+          : null;
+
+          setWorkday(workdayDataToEnd);
+
+
+          //cut short time depending on last job
+          console.log('debug:',workdayDataToEnd?.jobs[workdayDataToEnd?.jobs.length-1]);//.endTime
+          
+        } catch (err) {
+          console.error("Distance calculation error:", err);
+        } finally {
+          // We don't need to update the state to 'paused' *before* calling finalizeWorkdayAndSave
+          // The status update to 'ended' should happen within finalizeWorkdayAndSave
+          // Let's simplify and pass the original workdayDataToEnd to finalizeWorkdayAndSave
+
+          // Use a timeout to ensure any pending state updates related to job completion
+          // or other actions that trigger initiateEndDayProcess have a chance to
+          // be processed by React before the finalization process begins.
+          // Passing workdayDataToEnd which represents the state at the time of initiating
+          // the end day process.
+          setTimeout(async () => {
+            await finalizeWorkdayAndSave(workdayDataToEnd, actionTime);
+          }, 0);
+          setIsLoading(false);
+        }
+        
+      };
+
+      calculateAllDistances();
+    }
   };
 
   const finalizeWorkdayAndSave = async (
@@ -907,7 +972,7 @@ useEffect(() => {
       finalizedWorkdayForSave = {
         ...workdayAtStartOfEnd, // Start with the original workday properties
         status: "ended", // Set status to ended
-        endTime: finalizationTimestamp, // Set the final end time
+         endTime: workdayAtStartOfEnd.endTime ? workdayAtStartOfEnd.endTime : finalizationTimestamp, // Set the final end time
         // endLocation will be determined after sanitization below
         currentJobId: null, // No current job after finalizing the workday
 
@@ -951,7 +1016,11 @@ useEffect(() => {
             };
           }
           return pause; // Return already ended pauses as is
-        });
+        }).filter((pause) => 
+            pause.endTime === null || 
+            finalizedWorkdayForSave.endTime === null || 
+            pause.endTime <= finalizedWorkdayForSave.endTime
+          );
 
       // Rigorous Sanitization Pass
       finalizedWorkdayForSave.startLocation = sanitizeLocationPoint(
@@ -1174,8 +1243,12 @@ useEffect(() => {
             end_location_latitude: pause.endLocation?.latitude || null,
             end_location_longitude: pause.endLocation?.longitude || null, // Fixed typo
             end_location_timestamp: pause.endLocation?.timestamp || null, // Send number or null
-          })
-        );
+          }))
+         .filter((pause) => 
+            pause.end_time === null || 
+            finalizedWorkdayForSave.endTime === null || 
+            pause.end_time <= finalizedWorkdayForSave.endTime
+          );
 
         console.log(
           "Data being sent for pause intervals insert:",
@@ -1257,8 +1330,8 @@ useEffect(() => {
           "La sesión de trabajo ha concluido y se ha guardado en la nube.",
       });
       localStorage.removeItem(getLocalStorageKey());
-      sessionStorage.removeItem("initialLat");
-      sessionStorage.removeItem("initialLng");
+      localStorage.removeItem("initialLat");
+      localStorage.removeItem("initialLng");
 
       try {
         const summary = await calculateWorkdaySummary(finalizedWorkdayForSave);
@@ -1348,7 +1421,11 @@ useEffect(() => {
       );
       return;
     }
+
+    if(workday) initiateEndDayProcess(workday);
+/*     console.log('TEST WORK DAY1 ', workday);
     if (workday) {
+      console.log('TEST WORK DAY2 ', workday);
       const calculateAllDistances = async () => {
         setIsLoading(true);
         console.log("fetching distances", currentLocation, " to Palleros 607");
@@ -1366,15 +1443,35 @@ useEffect(() => {
           console.log("Selected distance: ", distLastJobToHome);
           setDistanceFromLastJob(distLastJobToHome);
 
+
+          console.log("ultimo trabajo: ", workday?.jobs[workday?.jobs.length-1]);
+          var lastJobEndTime = workday?.jobs[workday?.jobs.length-1].endTime;
+          console.log("lastJobEndTime: ", lastJobEndTime);
+          if(!lastJobEndTime){
+              try{
+                console.log('change');
+                lastJobEndTime = workday.endTime; 
+              }catch(error){
+                console.log("err: ", error);
+              }
+          } 
+
+
+          console.log("lastJobEndTime: ", lastJobEndTime);
           const updatedWorkday = workday
            ? {
                ...workday,
                distanceFromLastJob: distLastJobToHome,
                distanceTraveled: totalDistance,
+               endTime: lastJobEndTime,
              }
           : null;
 
           setWorkday(updatedWorkday);
+
+
+          //cut short time depending on last job
+          console.log('debug:',workday?.jobs[workday?.jobs.length-1]);//.endTime
   
          // Use the updated workday directly
           await initiateEndDayProcess(updatedWorkday);
@@ -1385,8 +1482,9 @@ useEffect(() => {
           setIsLoading(false);
         }
       };
+      console.log('DEBUG1', workday);
       calculateAllDistances();
-    }
+    } */
   };
 
   const handleJobFormSubmit = async () => {
@@ -1560,6 +1658,7 @@ useEffect(() => {
                 console.log(
                   "Pending end day action detected and job locally completed. Initiating end day process."
                 );
+                //handleEndDay(latestWorkdayState);
                 // Pass the latest state to initiateEndDayProcess
                 initiateEndDayProcess(latestWorkdayState);
                 setPendingEndDayAction(false); // Clear the flag once action is initiated
@@ -1622,7 +1721,7 @@ useEffect(() => {
     if (!workday)
       return (
         <p className="text-muted-foreground">
-          Presiona "Iniciar Seguimiento" para comenzar tu día.
+          Presiona "Abre un trabajo nuevo" para comenzar tu día.
         </p>
       );
 
@@ -1679,7 +1778,7 @@ useEffect(() => {
           ) : (
             <Play className="mr-2 h-5 w-5" />
           )}{" "}
-          Iniciar Seguimiento
+          Abre un trabajo nuevo
         </Button>
       );
     }
@@ -1763,6 +1862,8 @@ useEffect(() => {
               setElapsedTime(0);
               setEndOfDaySummary(null);
               setPendingEndDayAction(false);
+              localStorage.removeItem('initialLat');
+              localStorage.removeItem('initialLng');
             }}
             variant="secondary"
             className="w-full"
