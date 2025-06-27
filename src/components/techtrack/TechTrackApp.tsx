@@ -343,7 +343,7 @@ const localStorageDelete = (key: string): boolean => {
             variant: "destructive",
           });
         },
-        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+        { enableHighAccuracy: true, maximumAge: 0 }
       );
       return () => navigator.geolocation.clearWatch(watchId);
     }
