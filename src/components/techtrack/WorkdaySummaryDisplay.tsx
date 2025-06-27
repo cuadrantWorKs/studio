@@ -18,7 +18,8 @@ export default function WorkdaySummaryDisplay({ summary, showTitle = true }: Wor
       {showTitle && (
         <CardHeader className="p-0 mb-4">
           <CardTitle>Workday Summary</CardTitle>
-          {summary.date && <CardDescription>Summary for {new Date(summary.date).toLocaleDateString('es-AR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'})}</CardDescription>}
+          {summary.date}
+          {summary.date && <CardDescription>Summary for {new Date(summary.date + 'T00:00:00').toLocaleDateString('es-AR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'})}</CardDescription>}
         </CardHeader>
       )}
       <div className="space-y-1">

@@ -59,7 +59,7 @@ import LocationInfo from "./LocationInfo";
 import { LocaleRouteNormalizer } from "next/dist/server/normalizers/locale-route-normalizer";
 
 const LOCATION_INTERVAL_MS = 5 * 60 * 1000;
-const STOP_DETECT_DURATION_MS = 15 * 60 * 1000;
+const STOP_DETECT_DURATION_MS = 3 * 60 * 1000;
 const MOVEMENT_THRESHOLD_METERS = 100;
 const RECENT_PROMPT_THRESHOLD_MS = 30 * 60 * 1000;
 const LOCAL_STORAGE_CURRENT_WORKDAY_KEY_PREFIX = "TECHTRACK_CURRENT_WORKDAY_";
@@ -320,8 +320,8 @@ const localStorageDelete = (key: string): boolean => {
 
   useEffect(() => {
     // Initialize geolocation (will enable mock in development if configured)
-    //const USE_MOCK_LOCATION = false;
-    //setupGeolocation();
+    const USE_MOCK_LOCATION = true;
+    setupGeolocation();
 
     if (typeof navigator !== "undefined" && navigator.geolocation) {
       const watchId = navigator.geolocation.watchPosition(
@@ -578,8 +578,9 @@ useEffect(() => {
           workday.lastNewJobPromptTime &&
           Date.now() - workday.lastNewJobPromptTime <
             RECENT_PROMPT_THRESHOLD_MS;
-
-        setAiLoading((prev) => ({ ...prev, newJob: true }));
+        console.log('hasBeenPromptedRecently ', hasBeenPromptedRecently);
+        if(!(hasBeenPromptedRecently) || (hasBeenPromptedRecently===undefined)){
+          setAiLoading((prev) => ({ ...prev, newJob: true }));
         decidePromptForNewJob({
           hasBeenPromptedRecently: !!hasBeenPromptedRecently,
           timeStoppedInMinutes: Math.round(
@@ -616,6 +617,7 @@ useEffect(() => {
             });
           })
           .finally(() => setAiLoading((prev) => ({ ...prev, newJob: false })));
+        }
       }
     }
   }, [

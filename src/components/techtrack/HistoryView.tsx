@@ -141,10 +141,10 @@ const {data: workdays, error} = await db
                     >
                       <div className="flex flex-col">
                         <span>
-                            {wd.date ? new Date(wd.date).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' }) : 'Date N/A'}
+                            {wd.date ? new Date(wd.date + 'T00:00:00').toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' }) : 'Date N/A'}
                         </span>
                         <span className="text-xs text-muted-foreground">
-                            {wd.startTime ? `Started: ${new Date(wd.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : 'Start Time N/A'}
+                            {wd.startTime ? `Started: ${new Date(wd.startTime).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}` : 'Start Time N/A'}
                         </span>
                        </div>
                     </Button>

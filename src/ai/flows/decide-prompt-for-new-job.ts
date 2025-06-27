@@ -52,6 +52,12 @@ const prompt = ai.definePrompt({
 
   Based on this information, determine whether the technician should be prompted to enter information for a new job.
   Consider that prompting too often can be annoying, but not prompting enough can lead to incomplete data.
+
+  Never prompt if the last movement is smaller than 500mts. 
+
+  Never prompt if the user what's prompted less than 30min ago.
+
+  Never prompt if there is a job open.
 `,
 });
 
