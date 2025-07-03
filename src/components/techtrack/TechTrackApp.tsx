@@ -149,42 +149,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
     return R * c; // Distance in meters
   }
 
-  /**
-   * Convert address to coordinates using a free geocoding service
-   * Using Nominatim (OpenStreetMap) - no API key required
-   */
-  async function geocodeAddress(address: string): Promise<GPSLocation> {
-    try {
-      const encodedAddress = encodeURIComponent(address);
-      const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodedAddress}&limit=1`;
-
-      const response = await fetch(url, {
-        headers: {
-          "User-Agent": "YourAppName/1.0 (your-email@example.com)", // Required by Nominatim
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error(`Geocoding failed: ${response.status}`);
-      }
-
-      const data = await response.json();
-
-      if (data.length === 0) {
-        throw new Error("Address not found");
-      }
-
-      return {
-        lat: parseFloat(data[0].lat),
-        lng: parseFloat(data[0].lon),
-      };
-    } catch (error) {
-      console.error("Geocoding error:", error);
-      throw error;
-    }
-  }
-
-  /**
+  /** 
    * Get approximate driving distance using OpenRouteService (free tier available)
    * Limited requests per day without API key
    */
@@ -206,7 +171,15 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
         },
       });
 
-      if (response.ok) {
+      const data = await response.json();
+      const route = data.features[0];
+
+      return {
+        distance: route.properties.segments[0].distance, // meters
+        duration: route.properties.segments[0].duration, // seconds
+      };
+
+/*       if (response.ok) {
         const data = await response.json();
         const route = data.features[0];
 
@@ -225,9 +198,9 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
           distance: straightDistance * 1.3, // Approximate 30% longer for roads
           duration: (straightDistance * 1.3) / 13.89, // Assume ~50km/h average speed
         };
-      }
+      } */
     } catch (error) {
-      console.error("Routing error:", error);
+      console.error("API ERROR:", error);
       // Fallback to straight-line distance with approximation
       const straightDistance = calculateStraightLineDistance(
         startLat,
@@ -413,7 +386,7 @@ const localStorageDelete = (key: string): boolean => {
     if (!newLocation || !newLocation.latitude || !newLocation.longitude) return;
     // Your custom logic when location updates
     console.log("Handling location update:", newLocation);
-    const distance = calculateDistance(
+    /* const distance = calculateDistance(
       previousLocation.latitude,
       previousLocation.longitude,
       newLocation.latitude,
@@ -440,7 +413,7 @@ const localStorageDelete = (key: string): boolean => {
       ) {
         
         setTotalDistance((prev) => prev + distance);
-      }
+      } */
     setPreviousLocation({
       latitude: newLocation.latitude,
       longitude: newLocation.longitude,
@@ -749,19 +722,25 @@ useEffect(() => {
         console.log("distInitialToJob: ", distInitialToJob);
         console.log("distDefinedHomeToJob: ", distDefinedHomeToJob);
         
+
         const newDistance =
           distInitialToJob > distDefinedHomeToJob
             ? distDefinedHomeToJob
             : distInitialToJob;
+          
 
         console.log("Selected distance: ", newDistance);
         setDistanceToFirstJob(newDistance);
 
+
+        var homeLocationPoint: LocationPoint = {latitude: -34.785, longitude: -58.482134, timestamp: 0};
         setWorkday((prev) =>
           prev
             ? {
                 ...prev,
                 distanceToFirstJob: newDistance,
+                startLocation: (distInitialToJob > distDefinedHomeToJob) ? homeLocationPoint : workday?.startLocation
+                //distanceTraveled: totalDistance
               }
             : null
         );
@@ -876,8 +855,7 @@ useEffect(() => {
     setIsSavingToCloud(true);
 
     if (workdayDataToEnd) {
-      console.log('TEST WORK DAY2 ', workdayDataToEnd);
-      
+
       const calculateAllDistances = async () => {
         setIsLoading(true);
         console.log("fetching distances", currentLocation, " to Palleros 607");
@@ -896,6 +874,8 @@ useEffect(() => {
           setDistanceFromLastJob(distLastJobToHome);
 
 
+          var homeLocationPoint: LocationPoint = {latitude: -34.785, longitude: -58.482134, timestamp: 0};
+
           console.log("ultimo trabajo: ", workdayDataToEnd?.jobs[workdayDataToEnd?.jobs.length-1]);
           var lastJobEndTime = workdayDataToEnd?.jobs[workdayDataToEnd?.jobs.length-1].endTime;
           console.log("lastJobEndTime: ", lastJobEndTime);
@@ -907,6 +887,47 @@ useEffect(() => {
                 console.log("err: ", error);
               }
           } 
+
+          // Create the location array
+        const jobs = workdayDataToEnd?.jobs;
+        
+        var routePoints: LocationPoint[] = [];
+        if(jobs){
+          routePoints = jobs.flatMap(job => [job.startLocation, job.endLocation]);
+        }
+
+        
+        const results = [];
+        for (let i = 0; i < routePoints.length - 1; i += 2) {
+          const current = routePoints[i];
+          const next = routePoints[i + 1];
+          if(current && next)
+          {
+              try{
+              const result = await getApproximateDrivingDistance(
+               current.latitude,
+               current.longitude,
+               next.latitude,
+               next.longitude
+              );
+              results.push(result);
+            }catch(error){
+                console.log(error);
+            }
+          }
+        }
+
+        console.log('results ', results); 
+
+        var totalDistance = results.reduce((sum, result) => sum + result.distance, 0);
+        totalDistance+=distanceToFirstJob;
+        totalDistance+=distLastJobToHome;
+        const totalDuration = results.reduce((sum, result) => sum + result.duration, 0);
+
+
+        console.log('totalDuration ', totalDuration); 
+        setTotalDistance(totalDistance);
+
 
 
           console.log("lastJobEndTime: ", lastJobEndTime);
