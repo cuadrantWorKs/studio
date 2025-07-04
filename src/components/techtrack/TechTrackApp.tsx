@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import {
@@ -56,13 +56,17 @@ import { formatDistance, formatTime, setupGeolocation } from "@/lib/utils";
 import WorkdaySummaryDisplay from "./WorkdaySummaryDisplay";
 import { db } from "@/lib/supabase";
 import LocationInfo from "./LocationInfo";
-import { LocaleRouteNormalizer } from "next/dist/server/normalizers/locale-route-normalizer";
 
 const LOCATION_INTERVAL_MS = 5 * 60 * 1000;
-const STOP_DETECT_DURATION_MS = 3 * 60 * 1000;
+const STOP_DETECT_DURATION_MS = 30 * 60 * 1000;
 const MOVEMENT_THRESHOLD_METERS = 100;
-const RECENT_PROMPT_THRESHOLD_MS = 30 * 60 * 1000;
+const RECENT_PROMPT_THRESHOLD_MS = 30 * 5 * 1000;
 const LOCAL_STORAGE_CURRENT_WORKDAY_KEY_PREFIX = "TECHTRACK_CURRENT_WORKDAY_";
+const HOME_LOCATION_POINT: LocationPoint = {
+  latitude: -34.785,
+  longitude: -58.482134,
+  timestamp: 0,
+}; //Palleros 607
 
 interface TechTrackAppProps {
   technicianName: string;
@@ -125,31 +129,37 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
   const [distanceToFirstJob, setDistanceToFirstJob] = useState(0);
   const [distanceFromLastJob, setDistanceFromLastJob] = useState(0);
 
+  const [lastLocation, setLastLocation] = useState<LocationPoint | null>(null);
+  const [idleStartTime, setIdleStartTime] = useState<number | null>(null);
+  const [isPrompted, setIsPrompted] = useState(false);
+
+  const [locationOnPrompt, setLocationOnPrompt] = useState<LocationPoint | undefined>(undefined);
+
+  const idleTimerRef = useRef<NodeJS.Timeout | null>(null);
+
   /**
    * Calculate straight-line distance between two points (Haversine formula)
    * This is NOT the driving distance, but can be used as an approximation
    */
-  function calculateStraightLineDistance(
-    lat1: number,
-    lng1: number,
-    lat2: number,
-    lng2: number
-  ): number {
-    const R = 6371000; // Earth's radius in meters
-    const φ1 = (lat1 * Math.PI) / 180;
-    const φ2 = (lat2 * Math.PI) / 180;
-    const Δφ = ((lat2 - lat1) * Math.PI) / 180;
-    const Δλ = ((lng2 - lng1) * Math.PI) / 180;
+  const calculateStraightLineDistance = useCallback(
+    (lat1: number, lng1: number, lat2: number, lng2: number): number => {
+      const R = 6371000; // Earth's radius in meters
+      const φ1 = (lat1 * Math.PI) / 180;
+      const φ2 = (lat2 * Math.PI) / 180;
+      const Δφ = ((lat2 - lat1) * Math.PI) / 180;
+      const Δλ = ((lng2 - lng1) * Math.PI) / 180;
 
-    const a =
-      Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
-      Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      const a =
+        Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+        Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 
-    return R * c; // Distance in meters
-  }
+      return R * c; // Distance in meters
+    },
+    []
+  );
 
-  /** 
+  /**
    * Get approximate driving distance using OpenRouteService (free tier available)
    * Limited requests per day without API key
    */
@@ -179,7 +189,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
         duration: route.properties.segments[0].duration, // seconds
       };
 
-/*       if (response.ok) {
+      /*       if (response.ok) {
         const data = await response.json();
         const route = data.features[0];
 
@@ -237,13 +247,13 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
   };
 
   // Delete value
-const localStorageDelete = (key: string): boolean => {
-  if (typeof window !== "undefined") {
-    localStorage.removeItem(key);
-    return true;
-  }
-  return false;
-};
+  const localStorageDelete = (key: string): boolean => {
+    if (typeof window !== "undefined") {
+      localStorage.removeItem(key);
+      return true;
+    }
+    return false;
+  };
 
   const { toast } = useToast();
 
@@ -252,6 +262,7 @@ const localStorageDelete = (key: string): boolean => {
     () => `${LOCAL_STORAGE_CURRENT_WORKDAY_KEY_PREFIX}${technicianName}`,
     [technicianName]
   );
+
 
   useEffect(() => {
     const localStorageKey = getLocalStorageKey();
@@ -322,47 +333,11 @@ const localStorageDelete = (key: string): boolean => {
     }
   }, [toast]);
 
-  // Haversine formula to calculate distance between two GPS coordinates
-  const calculateDistance = (lat1, lon1, lat2, lon2) => {
-    const R = 6371000; // Earth's radius in meters
-    const dLat = ((lat2 - lat1) * Math.PI) / 180;
-    const dLon = ((lon2 - lon1) * Math.PI) / 180;
-    const a =
-      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-      Math.cos((lat1 * Math.PI) / 180) *
-        Math.cos((lat2 * Math.PI) / 180) *
-        Math.sin(dLon / 2) *
-        Math.sin(dLon / 2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    return R * c; // Distance in meters
-  };
-
   // This effect runs whenever currentLocation changes
   useEffect(() => {
     if (currentLocation) {
       console.log("Location updated:", currentLocation);
       handleLocationUpdate(currentLocation);
-
-      /*       const fetchDistance = async () => {
-      setIsLoading(true);
-      console.log('fetching distance');
-      try {
-        console.log('trying');
-        const result = await getApproximateDrivingDistance(
-          currentLocation.latitude, 
-          currentLocation.longitude, 
-          -34.785000, -58.482134 // Palleros 607
-        );
-
-        setDistanceToHome(result.distance);
-        
-      } catch (err) {
-        console.error('Distance calculation error:', err);
-      } finally {
-        setIsLoading(false);
-      }
-    }
-      fetchDistance(); */
     }
   }, [currentLocation]);
 
@@ -428,13 +403,8 @@ useEffect(() => {
   }
 }, [currentLocation, workday?.status, updateDistance]); */
 
-
-
   // Function to reset distance (call when starting a new workday)
-  const resetDistance = () => {
-    setTotalDistance(0);
-    setPreviousLocation(null);
-  };
+
 
   const recordEvent = useCallback(
     (
@@ -537,7 +507,7 @@ useEffect(() => {
   }, [workday?.status, currentLocation, recordEvent]);
 
   useEffect(() => {
-    if (workday?.status === "tracking" && !currentJob) {
+    /* if (workday?.status === "tracking" && !currentJob) {
       if (aiLoading.newJob || isJobModalOpen) return;
 
       const lastMovementTime =
@@ -552,7 +522,7 @@ useEffect(() => {
           Date.now() - workday.lastNewJobPromptTime <
             RECENT_PROMPT_THRESHOLD_MS;
         console.log('hasBeenPromptedRecently ', hasBeenPromptedRecently);
-        if(!(hasBeenPromptedRecently) || (hasBeenPromptedRecently===undefined)){
+        if(!(hasBeenPromptedRecently) || (hasBeenPromptedRecently===undefined)){}
           setAiLoading((prev) => ({ ...prev, newJob: true }));
         decidePromptForNewJob({
           hasBeenPromptedRecently: !!hasBeenPromptedRecently,
@@ -592,7 +562,7 @@ useEffect(() => {
           .finally(() => setAiLoading((prev) => ({ ...prev, newJob: false })));
         }
       }
-    }
+    } */
   }, [
     workday,
     currentLocation,
@@ -603,76 +573,112 @@ useEffect(() => {
     aiLoading.newJob,
   ]);
 
-  useEffect(() => {
+  useEffect(useCallback(() => {
     if (
       workday?.status === "tracking" &&
       currentJob &&
       currentJob.status === "active" &&
       currentLocation
     ) {
-      if (aiLoading.jobCompletion || isJobModalOpen) return;
+      if (/* aiLoading.jobCompletion ||  */isJobModalOpen) return;
 
       const jobStartLocation = currentJob.startLocation; // Already sanitized LocationPoint
       if (!jobStartLocation) return; // Should not happen if job was created correctly
+
+      setLocationOnPrompt(currentLocation);
+
 
       const distance = haversineDistance(jobStartLocation, currentLocation); // currentLocation is sanitized
       if (distance > MOVEMENT_THRESHOLD_METERS) {
         const lastPromptTime = workday.lastJobCompletionPromptTime;
 
-        setAiLoading((prev) => ({ ...prev, jobCompletion: true }));
-        decidePromptForJobCompletion({
-          distanceMovedMeters: distance,
-          lastJobPromptedTimestamp: lastPromptTime,
-        })
-          .then((res) => {
-            if (res.shouldPrompt) {
-              toast({
-                title: "¿Actualizar Trabajo?",
-                description: `Te has movido significativamente. ¿Completaste el trabajo: ${currentJob.description}? IA: ${res.reason}`,
-              });
-              setJobToSummarizeId(currentJob.id);
-              setJobModalMode("summary");
-              setCurrentJobFormData({
-                description: currentJob.description || "",
-                summary: "",
-              });
-              setIsJobModalOpen(true);
-              recordEvent(
-                "JOB_COMPLETION_PROMPT",
-                currentLocation,
-                currentJob.id,
-                `IA: ${res.reason}`
+        const hasBeenPromptedRecently =
+          workday.lastJobCompletionPromptTime &&
+          Date.now() - workday.lastJobCompletionPromptTime <
+            RECENT_PROMPT_THRESHOLD_MS;
+
+        console.log("hasBeenPromptedRecently ", hasBeenPromptedRecently);
+        if (!hasBeenPromptedRecently || hasBeenPromptedRecently === undefined) {
+
+
+                toast({
+                  title: "¿Actualizar Trabajo?",
+                  description: `Te has movido significativamente. ¿Completaste el trabajo: ${currentJob.description}? IA: reason`,
+                });
+                setJobToSummarizeId(currentJob.id);
+                setJobModalMode("summary");
+                setCurrentJobFormData({
+                  description: currentJob.description || "",
+                  summary: "",
+                });
+                setIsJobModalOpen(true);
+                recordEvent(
+                  "JOB_COMPLETION_PROMPT",
+                  currentLocation,
+                  currentJob.id,
+                  `IA: reason`
+                );
+              
+              setWorkday((prev) =>
+                prev
+                  ? { ...prev, lastJobCompletionPromptTime: Date.now() }
+                  : null
               );
-            }
-            setWorkday((prev) =>
-              prev ? { ...prev, lastJobCompletionPromptTime: Date.now() } : null
-            );
+          //setAiLoading((prev) => ({ ...prev, jobCompletion: true }));
+          /* decidePromptForJobCompletion({
+            distanceMovedMeters: distance,
+            lastJobPromptedTimestamp: lastPromptTime,
           })
-          .catch((err) => {
-            console.error("AI Error (decidePromptForJobCompletion):", err);
-            toast({
-              title: "Error de IA",
-              description: "No se pudo verificar la finalización del trabajo.",
-              variant: "destructive",
-            });
-          })
-          .finally(() =>
-            setAiLoading((prev) => ({ ...prev, jobCompletion: false }))
-          );
+            .then((res) => {
+              if (res.shouldPrompt) {
+                toast({
+                  title: "¿Actualizar Trabajo?",
+                  description: `Te has movido significativamente. ¿Completaste el trabajo: ${currentJob.description}? IA: ${res.reason}`,
+                });
+                setJobToSummarizeId(currentJob.id);
+                setJobModalMode("summary");
+                setCurrentJobFormData({
+                  description: currentJob.description || "",
+                  summary: "",
+                });
+                setIsJobModalOpen(true);
+                recordEvent(
+                  "JOB_COMPLETION_PROMPT",
+                  currentLocation,
+                  currentJob.id,
+                  `IA: ${res.reason}`
+                );
+              }
+              setWorkday((prev) =>
+                prev
+                  ? { ...prev, lastJobCompletionPromptTime: Date.now() }
+                  : null
+              );
+            })
+            .catch((err) => {
+              console.error("AI Error (decidePromptForJobCompletion):", err);
+              toast({
+                title: "Error de IA",
+                description:
+                  "No se pudo verificar la finalización del trabajo.",
+                variant: "destructive",
+              });
+            })
+            .finally(() =>
+              setAiLoading((prev) => ({ ...prev, jobCompletion: false }))
+            ); */
+        }
       }
     }
   }, [
     workday,
     currentJob,
     currentLocation,
+    locationOnPrompt,
     toast,
     recordEvent,
     isJobModalOpen,
-    aiLoading.jobCompletion,
-  ]);
-
-  const [distInitialToJob, setDistInitialToJob] = useState(0);
-  const [distDefinedHomeToJob, setDistDefinedHomeToJob] = useState(0);
+  ]));
 
   const handleStartTracking = () => {
     const safeCurrentLocation = sanitizeLocationPoint(currentLocation);
@@ -721,25 +727,24 @@ useEffect(() => {
 
         console.log("distInitialToJob: ", distInitialToJob);
         console.log("distDefinedHomeToJob: ", distDefinedHomeToJob);
-        
 
         const newDistance =
           distInitialToJob > distDefinedHomeToJob
             ? distDefinedHomeToJob
             : distInitialToJob;
-          
 
         console.log("Selected distance: ", newDistance);
         setDistanceToFirstJob(newDistance);
 
-
-        var homeLocationPoint: LocationPoint = {latitude: -34.785, longitude: -58.482134, timestamp: 0};
         setWorkday((prev) =>
           prev
             ? {
                 ...prev,
                 distanceToFirstJob: newDistance,
-                startLocation: (distInitialToJob > distDefinedHomeToJob) ? homeLocationPoint : workday?.startLocation
+                startLocation:
+                  distInitialToJob > distDefinedHomeToJob
+                    ? HOME_LOCATION_POINT
+                    : workday?.startLocation,
                 //distanceTraveled: totalDistance
               }
             : null
@@ -750,7 +755,6 @@ useEffect(() => {
         setIsLoading(false);
       }
     };
-    calculateAllDistances();
 
     const startTime = Date.now();
     const newWorkday: Workday = {
@@ -775,6 +779,7 @@ useEffect(() => {
       distanceToFirstJob: distanceToFirstJob,
     };
     setWorkday(newWorkday);
+    calculateAllDistances();
     toast({
       title: "Seguimiento Iniciado",
       description: "Tu jornada laboral ha comenzado.",
@@ -793,6 +798,330 @@ useEffect(() => {
     }, 100);
     setIsLoading(false);
   };
+
+  const handleJobFormSubmit = async () => {
+    if (!workday) return;
+    const safeCurrentLocation = sanitizeLocationPoint(currentLocation);
+
+    if (jobModalMode === "new") {
+      // ... existing new job logic
+      if (!safeCurrentLocation) {
+        toast({
+          title: "Ubicación Requerida",
+          description: "No se puede iniciar un nuevo trabajo sin ubicación.",
+          variant: "destructive",
+        });
+        return;
+      }
+      const newJob: Job = {
+        id: crypto.randomUUID(),
+        description: currentJobFormData.description,
+        startTime: idleStartTime ? idleStartTime : Date.now(), // Keep as number (epoch milliseconds)
+        startLocation: safeCurrentLocation, // Already sanitized
+        status: "active",
+      };
+      setIdleStartTime(null);
+      resetIdleTimer();
+      setWorkday((prev) =>
+        prev
+          ? {
+              ...prev,
+              jobs: [...prev.jobs, newJob],
+              currentJobId: newJob.id,
+            }
+          : null
+      );
+      recordEvent(
+        "JOB_START",
+        safeCurrentLocation,
+        newJob.id,
+        `Nuevo trabajo iniciado: ${newJob.description}`
+      );
+      toast({
+        title: "Nuevo Trabajo Iniciado",
+        description: newJob.description,
+      });
+      setIsJobModalOpen(false);
+      setCurrentJobFormData({ description: "", summary: "" });
+      setJobToSummarizeId(null); // Reset this explicitly
+    } else if (jobModalMode === "summary" && jobToSummarizeId) {
+      // --- Modified Logic for Job Completion (Non-blocking AI) ---
+
+      console.log(
+        "Handling job completion form submit for job ID:",
+        jobToSummarizeId
+      );
+
+      // Find the job to update
+      const jobToUpdateIndex = workday.jobs.findIndex(
+        (j) => j.id === jobToSummarizeId
+      );
+      if (jobToUpdateIndex === -1) {
+        console.error(
+          `Attempted to complete non-existent job with ID: ${jobToSummarizeId}`
+        );
+        toast({
+          title: "Error Interno",
+          description: "No se encontró el trabajo para completar.",
+          variant: "destructive",
+        });
+        setIsJobModalOpen(false); // Close modal on error
+        setCurrentJobFormData({ description: "", summary: "" });
+        setJobToSummarizeId(null);
+        return;
+      }
+
+      // Store the job data *before* updating its status to 'completed'
+      const jobBeforeCompletion = workday.jobs[jobToUpdateIndex];
+
+
+      // 1. Immediately update local state to mark job as completed with user summary
+      setWorkday((prev) => {
+        if (!prev) return null;
+        const updatedJobs = [...prev.jobs];
+        updatedJobs[jobToUpdateIndex] = {
+          ...jobBeforeCompletion, // Use data before AI call
+          summary: currentJobFormData.summary || "", // Ensure user summary is saved
+          status: "completed" as "completed", // Explicitly cast to literal type
+          endTime: Date.now(),
+          endLocation: locationOnPrompt ? locationOnPrompt : safeCurrentLocation || undefined,
+          // aiSummary will be added later if AI is successful
+        };
+        setLocationOnPrompt(undefined);
+        return {
+          ...prev,
+          jobs: updatedJobs,
+          currentJobId: null, // No current job after completion
+        };
+      });
+
+      // Record the job completion event immediately after local update
+      recordEvent(
+        "JOB_COMPLETED",
+        safeCurrentLocation,
+        jobToSummarizeId,
+        `Trabajo completado. Usuario: ${currentJobFormData.summary}`
+      );
+      toast({
+        title: "Trabajo Completado",
+        description: `Resumen de usuario guardado para el trabajo.`,
+      });
+
+      // Close modal and reset form immediately
+      setIsJobModalOpen(false);
+      setCurrentJobFormData({ description: "", summary: "" });
+      setJobToSummarizeId(null); // Reset this explicitly
+
+      // 2. Initiate AI summarization asynchronously (fire-and-forget)
+      // This call does NOT block the rest of the function execution.
+      setAiLoading((prev) => ({ ...prev, summarize: true })); // Indicate AI is working
+      // Use the user's summary for the AI prompt
+      summarizeJobDescription({
+        jobDescription: currentJobFormData.summary || "N/A",
+      }) // Provide default if empty
+        .then((aiRes) => {
+          // `aiRes` contains the AI summary
+          console.log("AI Summarization successful:", aiRes.summary);
+          // 3. Update local state with AI summary opportunistically
+          setWorkday((prev) => {
+            if (!prev) return null;
+            const jobIndexForAI = prev.jobs.findIndex(
+              (j) => j.id === jobToSummarizeId
+            );
+            if (jobIndexForAI === -1) return prev; // Job not found (shouldn't happen if ID is correct)
+            const updatedJobs = [...prev.jobs];
+            updatedJobs[jobIndexForAI] = {
+              ...updatedJobs[jobIndexForAI],
+              aiSummary: aiRes.summary,
+            };
+            // We could also potentially update localStorage here if desired,
+            // but for now, keep it simple and rely on the next cloud sync.
+            return { ...prev, jobs: updatedJobs };
+          });
+          // Optionally show a toast for successful AI summary update
+          toast({
+            title: "Resumen de IA Disponible",
+            description: "Se añadió el resumen de IA al trabajo.",
+          });
+        })
+        .catch((err) => {
+          console.error("AI Error (summarizeJobDescription):", err);
+          // 3. Handle AI failure - log error, show toast, but don't revert job status
+          toast({
+            title: "Error de IA",
+            description:
+              "No se pudo generar el resumen de IA para este trabajo.",
+            variant: "destructive",
+          });
+          // The local state already has the user's summary, so no change needed there.
+        })
+        .finally(() => {
+          setAiLoading((prev) => ({ ...prev, summarize: false }));
+          setIsJobModalOpen(false);
+
+          // 4. Check if End Day action was pending and proceed
+          if (pendingEndDayAction) {
+            console.log(
+              "AI summarize finally block: Pending end day action detected. Checking latest state..."
+            );
+            // We need to check the *current* state of the workday in the callback.
+            setWorkday((latestWorkdayState) => {
+              if (!latestWorkdayState) return null; // Should not happen here
+              const jobIsLocallyCompleted =
+                latestWorkdayState.jobs.find((j) => j.id === jobToSummarizeId)
+                  ?.status === "completed";
+              if (pendingEndDayAction && jobIsLocallyCompleted) {
+                console.log(
+                  "Pending end day action detected and job locally completed. Initiating end day process."
+                );
+                //handleEndDay(latestWorkdayState);
+                // Pass the latest state to initiateEndDayProcess
+                initiateEndDayProcess(latestWorkdayState);
+                setPendingEndDayAction(false); // Clear the flag once action is initiated
+              } else if (!pendingEndDayAction) {
+                // If no pending end day action, this was just a manual job completion, reset form
+                console.log(
+                  "AI summarize finally block: Job completed, but no pending end day action."
+                );
+                // Form is already reset, this block is unnecessary
+                setCurrentJobFormData({ description: "", summary: "" });
+                setJobToSummarizeId(null);
+              }
+              return latestWorkdayState; // Always return state
+            });
+          }
+        });
+      return;
+    }
+  };
+
+  // Reset idle timer
+  const resetIdleTimer = useCallback(() => {
+    if (idleTimerRef.current) {
+      clearTimeout(idleTimerRef.current);
+      idleTimerRef.current = null;
+    }
+    //setIdleStartTime(null);
+    //idleStartTime1 = null;
+    setIsPrompted(false);
+  }, []);
+
+  useEffect(() => {
+    if (!currentLocation) return;
+
+    if (!lastLocation) {
+      // First location reading
+      setLastLocation(currentLocation);
+      startIdleTimer(currentLocation);
+      return;
+    }
+
+    const distance = calculateStraightLineDistance(
+      lastLocation.latitude,
+      lastLocation.longitude,
+      currentLocation.latitude,
+      currentLocation.longitude
+    );
+
+    if (distance > MOVEMENT_THRESHOLD_METERS) {
+      // User has moved significantly - reset timer
+      resetIdleTimer();
+      setLastLocation(currentLocation);
+      startIdleTimer(currentLocation);
+    } else {
+      // User is still within the radius - keep current timer running
+      setLastLocation(currentLocation);
+    }
+  }, [
+    currentLocation,
+    lastLocation,
+    calculateStraightLineDistance,
+    MOVEMENT_THRESHOLD_METERS,
+    resetIdleTimer,
+  ]);
+
+  // Cleanup when component unmounts
+  useEffect(() => {
+    return () => {
+      resetIdleTimer();
+    };
+  }, [resetIdleTimer]);
+
+  // Trigger job start prompt
+  const triggerJobStartPrompt = useCallback(() => {
+    if (isPrompted) return;
+    setIsPrompted(true);
+
+    if (
+      workday?.status === "tracking" &&
+      !currentJob &&
+      !isLoading &&
+      !isJobModalOpen &&
+      !isSavingToCloud &&
+      !isSummaryModalOpen
+    ) {
+      toast({
+        title: "¿Nuevo Trabajo?",
+        description:
+          "Parece que te has detenido. ¿Comenzando un nuevo trabajo? IA: " +
+          "reason",
+      });
+      setJobModalMode("new");
+      setIsJobModalOpen(true);
+      recordEvent("NEW_JOB_PROMPT", currentLocation, undefined, `IA: inactivo`);
+
+      setWorkday((prev) =>
+        prev ? { ...prev, lastNewJobPromptTime: Date.now() } : null
+      );
+    } else if (
+      (!workday || workday?.status === undefined) &&
+      !currentJob &&
+      currentLocation
+    ) {
+
+      //TODO handle start tracking
+      //handleStartTracking();
+    }
+    setIsPrompted(false);
+  }, [
+    isPrompted,
+    workday,
+    currentJob,
+    currentLocation,
+    idleStartTime,
+    toast,
+    setJobModalMode,
+    setIsJobModalOpen,
+    recordEvent,
+    setWorkday,
+    handleStartTracking,
+    resetIdleTimer,
+  ]);
+
+  // Start idle timer
+  const startIdleTimer = useCallback(
+    (location: LocationPoint) => {
+      // Clear any existing timer
+      if (idleTimerRef.current) {
+        clearTimeout(idleTimerRef.current);
+      }
+
+      // Set the idle start time
+      setIdleStartTime(location.timestamp);
+      setIsPrompted(false);
+      console.log("idleStartTime", idleStartTime);
+      // Start the 30-minute timer
+      idleTimerRef.current = setTimeout(() => {
+        triggerJobStartPrompt();
+      }, STOP_DETECT_DURATION_MS);
+    },
+    [
+      STOP_DETECT_DURATION_MS,
+      idleStartTime,
+      triggerJobStartPrompt,
+      handleJobFormSubmit,
+    ]
+  );
 
   const handlePauseTracking = () => {
     if (!workday) return;
@@ -855,7 +1184,6 @@ useEffect(() => {
     setIsSavingToCloud(true);
 
     if (workdayDataToEnd) {
-
       const calculateAllDistances = async () => {
         setIsLoading(true);
         console.log("fetching distances", currentLocation, " to Palleros 607");
@@ -869,83 +1197,73 @@ useEffect(() => {
           );
 
           const distLastJobToHome = lastJobToHomeResult.distance;
-
-          console.log("Selected distance: ", distLastJobToHome);
           setDistanceFromLastJob(distLastJobToHome);
 
-
-          var homeLocationPoint: LocationPoint = {latitude: -34.785, longitude: -58.482134, timestamp: 0};
-
-          console.log("ultimo trabajo: ", workdayDataToEnd?.jobs[workdayDataToEnd?.jobs.length-1]);
-          var lastJobEndTime = workdayDataToEnd?.jobs[workdayDataToEnd?.jobs.length-1].endTime;
-          console.log("lastJobEndTime: ", lastJobEndTime);
-          if(!lastJobEndTime){
-              try{
-                console.log('change');
-                lastJobEndTime = workdayDataToEnd.endTime; 
-              }catch(error){
-                console.log("err: ", error);
-              }
-          } 
-
-          // Create the location array
-        const jobs = workdayDataToEnd?.jobs;
-        
-        var routePoints: LocationPoint[] = [];
-        if(jobs){
-          routePoints = jobs.flatMap(job => [job.startLocation, job.endLocation]);
-        }
-
-        
-        const results = [];
-        for (let i = 0; i < routePoints.length - 1; i += 2) {
-          const current = routePoints[i];
-          const next = routePoints[i + 1];
-          if(current && next)
-          {
-              try{
-              const result = await getApproximateDrivingDistance(
-               current.latitude,
-               current.longitude,
-               next.latitude,
-               next.longitude
-              );
-              results.push(result);
-            }catch(error){
-                console.log(error);
+          var lastJobEndTime =
+            workdayDataToEnd?.jobs[workdayDataToEnd?.jobs.length - 1].endTime;
+          if (!lastJobEndTime) {
+            try {
+              console.log("change");
+              lastJobEndTime = workdayDataToEnd.endTime;
+            } catch (error) {
+              console.log("err: ", error);
             }
           }
-        }
 
-        console.log('results ', results); 
+          // Create the location array
+          const jobs = workdayDataToEnd?.jobs;
 
-        var totalDistance = results.reduce((sum, result) => sum + result.distance, 0);
-        totalDistance+=distanceToFirstJob;
-        totalDistance+=distLastJobToHome;
-        const totalDuration = results.reduce((sum, result) => sum + result.duration, 0);
+          var routePoints: LocationPoint[] = [];
+          if (jobs) {
+            routePoints = jobs.flatMap((job) => [
+              job.startLocation,
+              job.endLocation,
+            ]);
+          }
 
+          const results = [];
+          for (let i = 0; i < routePoints.length - 1; i += 2) {
+            const current = routePoints[i];
+            const next = routePoints[i + 1];
+            if (current && next) {
+              try {
+                const result = await getApproximateDrivingDistance(
+                  current.latitude,
+                  current.longitude,
+                  next.latitude,
+                  next.longitude
+                );
+                results.push(result);
+              } catch (error) {
+                console.log(error);
+              }
+            }
+          }
 
-        console.log('totalDuration ', totalDuration); 
-        setTotalDistance(totalDistance);
+          var totalDistance = results.reduce(
+            (sum, result) => sum + result.distance,
+            0
+          );
+          totalDistance += distanceToFirstJob;
+          totalDistance += distLastJobToHome;
+          const totalDuration = results.reduce(
+            (sum, result) => sum + result.duration,
+            0
+          );
 
+          console.log("totalDuration ", totalDuration);
+          setTotalDistance(totalDistance);
 
-
-          console.log("lastJobEndTime: ", lastJobEndTime);
           workdayDataToEnd = workdayDataToEnd
-           ? {
-               ...workdayDataToEnd,
-               distanceFromLastJob: distLastJobToHome,
-               distanceTraveled: totalDistance,
-               endTime: lastJobEndTime,
-             }
-          : null;
+            ? {
+                ...workdayDataToEnd,
+                distanceFromLastJob: distLastJobToHome,
+                distanceTraveled: totalDistance,
+                endTime: lastJobEndTime,
+              }
+            : null;
 
           setWorkday(workdayDataToEnd);
-
-
-          //cut short time depending on last job
-          console.log('debug:',workdayDataToEnd?.jobs[workdayDataToEnd?.jobs.length-1]);//.endTime
-          
         } catch (err) {
           console.error("Distance calculation error:", err);
         } finally {
@@ -963,7 +1281,6 @@ useEffect(() => {
           }, 0);
           setIsLoading(false);
         }
-        
       };
 
       calculateAllDistances();
@@ -1011,7 +1328,9 @@ useEffect(() => {
       finalizedWorkdayForSave = {
         ...workdayAtStartOfEnd, // Start with the original workday properties
         status: "ended", // Set status to ended
-         endTime: workdayAtStartOfEnd.endTime ? workdayAtStartOfEnd.endTime : finalizationTimestamp, // Set the final end time
+        endTime: workdayAtStartOfEnd.endTime
+          ? workdayAtStartOfEnd.endTime
+          : finalizationTimestamp, // Set the final end time
         // endLocation will be determined after sanitization below
         currentJobId: null, // No current job after finalizing the workday
 
@@ -1046,19 +1365,22 @@ useEffect(() => {
 
       // Update pause intervals that were still active at the end of the day
       finalizedWorkdayForSave.pauseIntervals =
-        finalizedWorkdayForSave.pauseIntervals.map((pause) => {
-          if (pause.startTime && !pause.endTime) {
-            return {
-              ...pause,
-              endTime: finalizationTimestamp,
-              endLocation: finalEndLocationCandidate || undefined,
-            };
-          }
-          return pause; // Return already ended pauses as is
-        }).filter((pause) => 
-            pause.endTime === null || 
-            finalizedWorkdayForSave.endTime === null || 
-            pause.endTime <= finalizedWorkdayForSave.endTime
+        finalizedWorkdayForSave.pauseIntervals
+          .map((pause) => {
+            if (pause.startTime && !pause.endTime) {
+              return {
+                ...pause,
+                endTime: finalizationTimestamp,
+                endLocation: finalEndLocationCandidate || undefined,
+              };
+            }
+            return pause; // Return already ended pauses as is
+          })
+          .filter(
+            (pause) =>
+              pause.endTime === null ||
+              finalizedWorkdayForSave.endTime === null ||
+              pause.endTime <= finalizedWorkdayForSave.endTime
           );
 
       // Rigorous Sanitization Pass
@@ -1214,8 +1536,7 @@ useEffect(() => {
           finalizedWorkdayForSave.distanceToFirstJob ?? null,
         distance_from_last_job:
           finalizedWorkdayForSave.distanceFromLastJob ?? null,
-        distance_traveled:
-          finalizedWorkdayForSave.distanceTraveled ?? null,
+        distance_traveled: finalizedWorkdayForSave.distanceTraveled ?? null,
       };
       console.log(
         "Attempting to upsert workday:",
@@ -1269,8 +1590,8 @@ useEffect(() => {
         finalizedWorkdayForSave.pauseIntervals
       );
       if (finalizedWorkdayForSave.pauseIntervals?.length > 0) {
-        const pausesToInsert = finalizedWorkdayForSave.pauseIntervals.map(
-          (pause) => ({
+        const pausesToInsert = finalizedWorkdayForSave.pauseIntervals
+          .map((pause) => ({
             //id: pause.id || null, // Use ID for upsert
             workday_id: finalizedWorkdayForSave.id,
             start_time: pause.startTime || null,
@@ -1283,10 +1604,11 @@ useEffect(() => {
             end_location_longitude: pause.endLocation?.longitude || null, // Fixed typo
             end_location_timestamp: pause.endLocation?.timestamp || null, // Send number or null
           }))
-         .filter((pause) => 
-            pause.end_time === null || 
-            finalizedWorkdayForSave.endTime === null || 
-            pause.end_time <= finalizedWorkdayForSave.endTime
+          .filter(
+            (pause) =>
+              pause.end_time === null ||
+              finalizedWorkdayForSave.endTime === null ||
+              pause.end_time <= finalizedWorkdayForSave.endTime
           );
 
         console.log(
@@ -1444,6 +1766,10 @@ useEffect(() => {
     );
 
     if (activeJob) {
+      if(!activeJob.endLocation && !locationOnPrompt && currentLocation) 
+        activeJob.endLocation = currentLocation;
+      activeJob.endLocation = locationOnPrompt ? locationOnPrompt : activeJob.endLocation;
+      setLocationOnPrompt(undefined);
       setPendingEndDayAction(true);
       setJobToSummarizeId(activeJob.id);
       setJobModalMode("summary");
@@ -1461,8 +1787,8 @@ useEffect(() => {
       return;
     }
 
-    if(workday) initiateEndDayProcess(workday);
-/*     console.log('TEST WORK DAY1 ', workday);
+    if (workday) initiateEndDayProcess(workday);
+    /*     console.log('TEST WORK DAY1 ', workday);
     if (workday) {
       console.log('TEST WORK DAY2 ', workday);
       const calculateAllDistances = async () => {
@@ -1524,198 +1850,6 @@ useEffect(() => {
       console.log('DEBUG1', workday);
       calculateAllDistances();
     } */
-  };
-
-  const handleJobFormSubmit = async () => {
-    if (!workday) return;
-    const safeCurrentLocation = sanitizeLocationPoint(currentLocation);
-
-    if (jobModalMode === "new") {
-      // ... existing new job logic
-      if (!safeCurrentLocation) {
-        toast({
-          title: "Ubicación Requerida",
-          description: "No se puede iniciar un nuevo trabajo sin ubicación.",
-          variant: "destructive",
-        });
-        return;
-      }
-      const newJob: Job = {
-        id: crypto.randomUUID(),
-        description: currentJobFormData.description,
-        startTime: Date.now(), // Keep as number (epoch milliseconds)
-        startLocation: safeCurrentLocation, // Already sanitized
-        status: "active",
-      };
-      setWorkday((prev) =>
-        prev
-          ? {
-              ...prev,
-              jobs: [...prev.jobs, newJob],
-              currentJobId: newJob.id,
-            }
-          : null
-      );
-      recordEvent(
-        "JOB_START",
-        safeCurrentLocation,
-        newJob.id,
-        `Nuevo trabajo iniciado: ${newJob.description}`
-      );
-      toast({
-        title: "Nuevo Trabajo Iniciado",
-        description: newJob.description,
-      });
-      setIsJobModalOpen(false);
-      setCurrentJobFormData({ description: "", summary: "" });
-      setJobToSummarizeId(null); // Reset this explicitly
-    } else if (jobModalMode === "summary" && jobToSummarizeId) {
-      // --- Modified Logic for Job Completion (Non-blocking AI) ---
-
-      console.log(
-        "Handling job completion form submit for job ID:",
-        jobToSummarizeId
-      );
-
-      // Find the job to update
-      const jobToUpdateIndex = workday.jobs.findIndex(
-        (j) => j.id === jobToSummarizeId
-      );
-      if (jobToUpdateIndex === -1) {
-        console.error(
-          `Attempted to complete non-existent job with ID: ${jobToSummarizeId}`
-        );
-        toast({
-          title: "Error Interno",
-          description: "No se encontró el trabajo para completar.",
-          variant: "destructive",
-        });
-        setIsJobModalOpen(false); // Close modal on error
-        setCurrentJobFormData({ description: "", summary: "" });
-        setJobToSummarizeId(null);
-        return;
-      }
-
-      // Store the job data *before* updating its status to 'completed'
-      const jobBeforeCompletion = workday.jobs[jobToUpdateIndex];
-      // 1. Immediately update local state to mark job as completed with user summary
-      setWorkday((prev) => {
-        if (!prev) return null;
-        const updatedJobs = [...prev.jobs];
-        updatedJobs[jobToUpdateIndex] = {
-          ...jobBeforeCompletion, // Use data before AI call
-          summary: currentJobFormData.summary || "", // Ensure user summary is saved
-          status: "completed" as "completed", // Explicitly cast to literal type
-          endTime: Date.now(),
-          endLocation: safeCurrentLocation || undefined,
-          // aiSummary will be added later if AI is successful
-        };
-
-        return {
-          ...prev,
-          jobs: updatedJobs,
-          currentJobId: null, // No current job after completion
-        };
-      });
-
-      // Record the job completion event immediately after local update
-      recordEvent(
-        "JOB_COMPLETED",
-        safeCurrentLocation,
-        jobToSummarizeId,
-        `Trabajo completado. Usuario: ${currentJobFormData.summary}`
-      );
-      toast({
-        title: "Trabajo Completado",
-        description: `Resumen de usuario guardado para el trabajo.`,
-      });
-
-      // Close modal and reset form immediately
-      setIsJobModalOpen(false);
-      setCurrentJobFormData({ description: "", summary: "" });
-      setJobToSummarizeId(null); // Reset this explicitly
-
-      // 2. Initiate AI summarization asynchronously (fire-and-forget)
-      // This call does NOT block the rest of the function execution.
-      setAiLoading((prev) => ({ ...prev, summarize: true })); // Indicate AI is working
-      // Use the user's summary for the AI prompt
-      summarizeJobDescription({
-        jobDescription: currentJobFormData.summary || "N/A",
-      }) // Provide default if empty
-        .then((aiRes) => {
-          // `aiRes` contains the AI summary
-          console.log("AI Summarization successful:", aiRes.summary);
-          // 3. Update local state with AI summary opportunistically
-          setWorkday((prev) => {
-            if (!prev) return null;
-            const jobIndexForAI = prev.jobs.findIndex(
-              (j) => j.id === jobToSummarizeId
-            );
-            if (jobIndexForAI === -1) return prev; // Job not found (shouldn't happen if ID is correct)
-            const updatedJobs = [...prev.jobs];
-            updatedJobs[jobIndexForAI] = {
-              ...updatedJobs[jobIndexForAI],
-              aiSummary: aiRes.summary,
-            };
-            // We could also potentially update localStorage here if desired,
-            // but for now, keep it simple and rely on the next cloud sync.
-            return { ...prev, jobs: updatedJobs };
-          });
-          // Optionally show a toast for successful AI summary update
-          toast({
-            title: "Resumen de IA Disponible",
-            description: "Se añadió el resumen de IA al trabajo.",
-          });
-        })
-        .catch((err) => {
-          console.error("AI Error (summarizeJobDescription):", err);
-          // 3. Handle AI failure - log error, show toast, but don't revert job status
-          toast({
-            title: "Error de IA",
-            description:
-              "No se pudo generar el resumen de IA para este trabajo.",
-            variant: "destructive",
-          });
-          // The local state already has the user's summary, so no change needed there.
-        })
-        .finally(() => {
-          setAiLoading((prev) => ({ ...prev, summarize: false }));
-          setIsJobModalOpen(false);
-
-          // 4. Check if End Day action was pending and proceed
-          if (pendingEndDayAction) {
-            console.log(
-              "AI summarize finally block: Pending end day action detected. Checking latest state..."
-            );
-            // We need to check the *current* state of the workday in the callback.
-            setWorkday((latestWorkdayState) => {
-              if (!latestWorkdayState) return null; // Should not happen here
-              const jobIsLocallyCompleted =
-                latestWorkdayState.jobs.find((j) => j.id === jobToSummarizeId)
-                  ?.status === "completed";
-              if (pendingEndDayAction && jobIsLocallyCompleted) {
-                console.log(
-                  "Pending end day action detected and job locally completed. Initiating end day process."
-                );
-                //handleEndDay(latestWorkdayState);
-                // Pass the latest state to initiateEndDayProcess
-                initiateEndDayProcess(latestWorkdayState);
-                setPendingEndDayAction(false); // Clear the flag once action is initiated
-              } else if (!pendingEndDayAction) {
-                // If no pending end day action, this was just a manual job completion, reset form
-                console.log(
-                  "AI summarize finally block: Job completed, but no pending end day action."
-                );
-                // Form is already reset, this block is unnecessary
-                setCurrentJobFormData({ description: "", summary: "" });
-                setJobToSummarizeId(null);
-              }
-              return latestWorkdayState; // Always return state
-            });
-          }
-        });
-      return;
-    }
   };
 
   const handleManualStartNewJob = () => {
@@ -1906,6 +2040,8 @@ useEffect(() => {
               setTotalDistance(0);
               setDistanceFromLastJob(0);
               setDistanceToFirstJob(0);
+              setIdleStartTime(null);
+              resetIdleTimer();
             }}
             variant="secondary"
             className="w-full"
@@ -1983,7 +2119,9 @@ useEffect(() => {
             <span>
               Distance paid to first job: {formatDistance(distanceToFirstJob)}
             </span>
-            <p>Distance paid from last job: {formatDistance(distanceFromLastJob)}</p>
+            <p>
+              Distance paid from last job: {formatDistance(distanceFromLastJob)}
+            </p>
           </div>
           {/*        <div className="text-sm text-muted-foreground flex items-center space-x-1">
             <span>Distance Paleros to first job: {formatDistance(distDefinedHomeToJob)}</span>
@@ -2153,6 +2291,8 @@ useEffect(() => {
               <Button
                 variant="outline"
                 onClick={() => {
+                  setIdleStartTime(null);
+                  resetIdleTimer();
                   if (pendingEndDayAction && jobModalMode === "summary") {
                     setPendingEndDayAction(false);
                     toast({
@@ -2196,7 +2336,15 @@ useEffect(() => {
           )}
           <DialogFooter>
             <DialogClose asChild>
-              <Button onClick={() => setEndOfDaySummary(null)}>Cerrar</Button>
+              <Button
+                onClick={() => {
+                  setEndOfDaySummary(null);
+                  setIdleStartTime(null);
+                  resetIdleTimer();
+                }}
+              >
+                Cerrar
+              </Button>
             </DialogClose>
           </DialogFooter>
         </DialogContent>
