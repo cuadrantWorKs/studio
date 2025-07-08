@@ -56,11 +56,20 @@ import { formatDistance, formatTime, setupGeolocation } from "@/lib/utils";
 import WorkdaySummaryDisplay from "./WorkdaySummaryDisplay";
 import { db } from "@/lib/supabase";
 import LocationInfo from "./LocationInfo";
+import { GetServerSideProps } from 'next';
+import { useRouter } from "next/router";
+// Add this instead:
+import { useSearchParams } from "next/navigation";
 
+/* const LOCATION_INTERVAL_MS = 5 * 60 * 1000;
+const STOP_DETECT_DURATION_MS = 1 * 60 * 1000; //comment dsp cambiak
+const MOVEMENT_THRESHOLD_METERS = 150;
+const RECENT_PROMPT_THRESHOLD_MS = 1 * 60 * 1000; */
 const LOCATION_INTERVAL_MS = 5 * 60 * 1000;
-const STOP_DETECT_DURATION_MS = 30 * 60 * 1000;
+const STOP_DETECT_DURATION_MS = 15 * 60 * 1000; //comment dsp cambiak
 const MOVEMENT_THRESHOLD_METERS = 100;
-const RECENT_PROMPT_THRESHOLD_MS = 30 * 5 * 1000;
+const RECENT_PROMPT_THRESHOLD_MS = 20 * 60 * 1000;
+const RECENT_PROMPT_THRESHOLD_MS2 = 20 * 60 * 1000;
 const LOCAL_STORAGE_CURRENT_WORKDAY_KEY_PREFIX = "TECHTRACK_CURRENT_WORKDAY_";
 const HOME_LOCATION_POINT: LocationPoint = {
   latitude: -34.785,
@@ -72,29 +81,7 @@ interface TechTrackAppProps {
   technicianName: string;
 }
 
-// Helper function to sanitize location point data for Firestore
-const sanitizeLocationPoint = (location: any): LocationPoint | null => {
-  if (
-    location &&
-    typeof location.latitude === "number" &&
-    !isNaN(location.latitude) &&
-    typeof location.longitude === "number" &&
-    !isNaN(location.longitude) &&
-    typeof location.timestamp === "number" &&
-    !isNaN(location.timestamp)
-  ) {
-    const sanitized: LocationPoint = {
-      latitude: location.latitude,
-      longitude: location.longitude,
-      timestamp: location.timestamp,
-    };
-    if (typeof location.accuracy === "number" && !isNaN(location.accuracy)) {
-      sanitized.accuracy = location.accuracy;
-    }
-    return sanitized;
-  }
-  return null;
-};
+
 
 export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
   const [workday, setWorkday] = useState<Workday | null>(null);
@@ -136,6 +123,36 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
   const [locationOnPrompt, setLocationOnPrompt] = useState<LocationPoint | undefined>(undefined);
 
   const idleTimerRef = useRef<NodeJS.Timeout | null>(null);
+  
+
+//const [isAdmin, setIsAdmin] = useState<boolean>(false);
+const searchParams = useSearchParams();
+const isAdmin = searchParams.get('user') === 'admin';
+
+
+// Helper function to sanitize location point data for Firestore
+const sanitizeLocationPoint = (location: any): LocationPoint | null => {
+  if (
+    location &&
+    typeof location.latitude === "number" &&
+    !isNaN(location.latitude) &&
+    typeof location.longitude === "number" &&
+    !isNaN(location.longitude) &&
+    typeof location.timestamp === "number" &&
+    !isNaN(location.timestamp)
+  ) {
+    const sanitized: LocationPoint = {
+      latitude: location.latitude,
+      longitude: location.longitude,
+      timestamp: location.timestamp,
+    };
+    if (typeof location.accuracy === "number" && !isNaN(location.accuracy)) {
+      sanitized.accuracy = location.accuracy;
+    }
+    return sanitized;
+  }
+  return null;
+};
 
   /**
    * Calculate straight-line distance between two points (Haversine formula)
@@ -458,8 +475,8 @@ useEffect(() => {
             !(
               workday.status === "paused" &&
               p.startTime ===
-                workday.pauseIntervals[workday.pauseIntervals.length - 1]
-                  ?.startTime &&
+              workday.pauseIntervals[workday.pauseIntervals.length - 1]
+                ?.startTime &&
               !p.endTime
             )
           ) {
@@ -486,12 +503,12 @@ useEffect(() => {
           setWorkday((prev) =>
             prev
               ? {
-                  ...prev,
-                  locationHistory: [
-                    ...prev.locationHistory,
-                    safeCurrentLocation,
-                  ],
-                }
+                ...prev,
+                locationHistory: [
+                  ...prev.locationHistory,
+                  safeCurrentLocation,
+                ],
+              }
               : null
           );
           recordEvent(
@@ -595,35 +612,39 @@ useEffect(() => {
         const hasBeenPromptedRecently =
           workday.lastJobCompletionPromptTime &&
           Date.now() - workday.lastJobCompletionPromptTime <
-            RECENT_PROMPT_THRESHOLD_MS;
+          RECENT_PROMPT_THRESHOLD_MS2;
 
-        console.log("hasBeenPromptedRecently ", hasBeenPromptedRecently);
+        console.log("hasBeenPromptedRecently ", );
+
+        console.log("!hasBeenPromptedRecently || hasBeenPromptedRecently === undefined ", !hasBeenPromptedRecently || hasBeenPromptedRecently === undefined);
         if (!hasBeenPromptedRecently || hasBeenPromptedRecently === undefined) {
 
 
-                toast({
-                  title: "¿Actualizar Trabajo?",
-                  description: `Te has movido significativamente. ¿Completaste el trabajo: ${currentJob.description}? IA: reason`,
-                });
-                setJobToSummarizeId(currentJob.id);
-                setJobModalMode("summary");
-                setCurrentJobFormData({
-                  description: currentJob.description || "",
-                  summary: "",
-                });
-                setIsJobModalOpen(true);
-                recordEvent(
-                  "JOB_COMPLETION_PROMPT",
-                  currentLocation,
-                  currentJob.id,
-                  `IA: reason`
-                );
-              
-              setWorkday((prev) =>
-                prev
-                  ? { ...prev, lastJobCompletionPromptTime: Date.now() }
-                  : null
-              );
+          toast({
+            title: "¿Actualizar Trabajo?",
+            description: `Te has movido significativamente. ¿Completaste el trabajo: ${currentJob.description}? IA: reason`,
+          });
+          setJobToSummarizeId(currentJob.id);
+          setJobModalMode("summary");
+          setCurrentJobFormData({
+            description: currentJob.description || "",
+            summary: "",
+          });
+          setIsJobModalOpen(true);
+          recordEvent(
+            "JOB_COMPLETION_PROMPT",
+            currentLocation,
+            currentJob.id,
+            `IA: reason`
+          );
+
+          setWorkday((prev) =>
+            prev
+              ? { ...prev, lastJobCompletionPromptTime: Date.now() }
+              : null
+          );
+
+  
           //setAiLoading((prev) => ({ ...prev, jobCompletion: true }));
           /* decidePromptForJobCompletion({
             distanceMovedMeters: distance,
@@ -739,14 +760,14 @@ useEffect(() => {
         setWorkday((prev) =>
           prev
             ? {
-                ...prev,
-                distanceToFirstJob: newDistance,
-                startLocation:
-                  distInitialToJob > distDefinedHomeToJob
-                    ? HOME_LOCATION_POINT
-                    : workday?.startLocation,
-                //distanceTraveled: totalDistance
-              }
+              ...prev,
+              distanceToFirstJob: newDistance,
+              startLocation:
+                distInitialToJob > distDefinedHomeToJob
+                  ? HOME_LOCATION_POINT
+                  : workday?.startLocation,
+              //distanceTraveled: totalDistance
+            }
             : null
         );
       } catch (err) {
@@ -825,10 +846,10 @@ useEffect(() => {
       setWorkday((prev) =>
         prev
           ? {
-              ...prev,
-              jobs: [...prev.jobs, newJob],
-              currentJobId: newJob.id,
-            }
+            ...prev,
+            jobs: [...prev.jobs, newJob],
+            currentJobId: newJob.id,
+          }
           : null
       );
       recordEvent(
@@ -1043,11 +1064,11 @@ useEffect(() => {
   // Cleanup when component unmounts
   useEffect(() => {
     return () => {
-      resetIdleTimer();
+      //resetIdleTimer();
     };
   }, [resetIdleTimer]);
 
-  // Trigger job start prompt
+  // Trigger job start prompt triggerJobStartPrompt idle
   const triggerJobStartPrompt = useCallback(() => {
     if (isPrompted) return;
     setIsPrompted(true);
@@ -1080,7 +1101,7 @@ useEffect(() => {
     ) {
 
       //TODO handle start tracking
-      //handleStartTracking();
+      handleStartTracking();
     }
     setIsPrompted(false);
   }, [
@@ -1134,10 +1155,10 @@ useEffect(() => {
     setWorkday((prev) =>
       prev
         ? {
-            ...prev,
-            status: "paused",
-            pauseIntervals: [...prev.pauseIntervals, newPauseInterval],
-          }
+          ...prev,
+          status: "paused",
+          pauseIntervals: [...prev.pauseIntervals, newPauseInterval],
+        }
         : null
     );
     recordEvent("SESSION_PAUSE", currentLocation);
@@ -1256,11 +1277,11 @@ useEffect(() => {
 
           workdayDataToEnd = workdayDataToEnd
             ? {
-                ...workdayDataToEnd,
-                distanceFromLastJob: distLastJobToHome,
-                distanceTraveled: totalDistance,
-                endTime: lastJobEndTime,
-              }
+              ...workdayDataToEnd,
+              distanceFromLastJob: distLastJobToHome,
+              distanceTraveled: totalDistance,
+              endTime: lastJobEndTime,
+            }
             : null;
 
           setWorkday(workdayDataToEnd);
@@ -1314,10 +1335,10 @@ useEffect(() => {
         setWorkday((prev) =>
           prev
             ? {
-                ...prev,
-                status: workdayAtStartOfEnd.status,
-                endTime: undefined,
-              }
+              ...prev,
+              status: workdayAtStartOfEnd.status,
+              endTime: undefined,
+            }
             : workdayAtStartOfEnd
         );
         return; // Exit the function
@@ -1352,10 +1373,10 @@ useEffect(() => {
         sanitizeLocationPoint(currentLocation) ||
         (finalizedWorkdayForSave.locationHistory.length > 0
           ? sanitizeLocationPoint(
-              finalizedWorkdayForSave.locationHistory[
-                finalizedWorkdayForSave.locationHistory.length - 1
-              ]
-            )
+            finalizedWorkdayForSave.locationHistory[
+            finalizedWorkdayForSave.locationHistory.length - 1
+            ]
+          )
           : null) ||
         sanitizeLocationPoint(finalizedWorkdayForSave.startLocation) ||
         null;
@@ -1460,9 +1481,8 @@ useEffect(() => {
           type: "JOB_COMPLETED",
           timestamp: job.endTime || finalizationTimestamp, // Use job's end time or workday end time
           jobId: job.id || undefined, // Ensure jobId is undefined or string
-          details: `Trabajo completado: ${job.description || ""}. Resumen: ${
-            job.summary || ""
-          }. IA: ${job.aiSummary || "N/A"}`,
+          details: `Trabajo completado: ${job.description || ""}. Resumen: ${job.summary || ""
+            }. IA: ${job.aiSummary || "N/A"}`,
           location:
             sanitizeLocationPoint(job.endLocation) ??
             sanitizeLocationPoint(job.startLocation) ??
@@ -1523,10 +1543,10 @@ useEffect(() => {
         start_location_timestamp: finalizedWorkdayForSave.startLocation
           ?.timestamp
           ? Math.floor(
-              new Date(
-                finalizedWorkdayForSave.startLocation.timestamp
-              ).getTime() / 1000
-            )
+            new Date(
+              finalizedWorkdayForSave.startLocation.timestamp
+            ).getTime() / 1000
+          )
           : null, // Convert timestamp to Unix/epoch (in seconds) bigint or null
         end_location_latitude: finalizedWorkdayForSave.endLocation?.latitude,
         end_location_longitude: finalizedWorkdayForSave.endLocation?.longitude, // Fixed typo
@@ -1766,7 +1786,7 @@ useEffect(() => {
     );
 
     if (activeJob) {
-      if(!activeJob.endLocation && !locationOnPrompt && currentLocation) 
+      if (!activeJob.endLocation && !locationOnPrompt && currentLocation)
         activeJob.endLocation = currentLocation;
       activeJob.endLocation = locationOnPrompt ? locationOnPrompt : activeJob.endLocation;
       setLocationOnPrompt(undefined);
@@ -1927,9 +1947,8 @@ useEffect(() => {
     return (
       <div className="flex items-center space-x-2">
         <IconComponent
-          className={`h-5 w-5 text-accent ${
-            IconComponent === Loader2 ? "animate-spin" : ""
-          }`}
+          className={`h-5 w-5 text-accent ${IconComponent === Loader2 ? "animate-spin" : ""
+            }`}
         />
         <span>{statusText}</span>
       </div>
@@ -2114,8 +2133,7 @@ useEffect(() => {
           <div className="text-sm text-muted-foreground flex items-center space-x-1">
             <span>Distance traveled: {formatDistance(totalDistance)}</span>
           </div>
-
-          <div className="text-sm text-muted-foreground flex items-center space-x-2">
+          {isAdmin && <div className="text-sm text-muted-foreground flex items-center space-x-2">
             <span>
               Distance paid to first job: {formatDistance(distanceToFirstJob)}
             </span>
@@ -2123,7 +2141,8 @@ useEffect(() => {
               Distance paid from last job: {formatDistance(distanceFromLastJob)}
             </p>
           </div>
-          {/*        <div className="text-sm text-muted-foreground flex items-center space-x-1">
+          }
+          {/*        <div className="text-sm text-muexportted-foreground flex items-center space-x-1">
             <span>Distance Paleros to first job: {formatDistance(distDefinedHomeToJob)}</span>
           </div> */}
 
@@ -2180,11 +2199,11 @@ useEffect(() => {
           {(aiLoading.newJob ||
             aiLoading.jobCompletion ||
             aiLoading.summarize) && (
-            <div className="flex items-center justify-center text-sm text-muted-foreground pt-2">
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              <span>IA está pensando...</span>
-            </div>
-          )}
+              <div className="flex items-center justify-center text-sm text-muted-foreground pt-2">
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                <span>IA está pensando...</span>
+              </div>
+            )}
         </CardContent>
         <CardFooter>
           <ActionButton />
