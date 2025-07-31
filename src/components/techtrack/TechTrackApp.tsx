@@ -1914,7 +1914,7 @@ useEffect(() => {
     if (!workday)
       return (
         <p className="text-muted-foreground">
-          Presiona "Abre un trabajo nuevo" para comenzar tu día.
+          Presiona "Comenzar el primer trabajo" para tu día.
         </p>
       );
 
@@ -1970,7 +1970,7 @@ useEffect(() => {
           ) : (
             <Play className="mr-2 h-5 w-5" />
           )}{" "}
-          Abre un trabajo nuevo
+          Comenzar el primer trabajo
         </Button>
       );
     }
@@ -2130,8 +2130,10 @@ useEffect(() => {
               </span>
             </div>
           )}
+                      <b>Recorrido activo</b>
           <div className="text-sm text-muted-foreground flex items-center space-x-1">
-            <span>Distance traveled: {formatDistance(totalDistance)}</span>
+
+            <span>Kms recorridos: {formatDistance(totalDistance)}</span>
           </div>
           {isAdmin && <div className="text-sm text-muted-foreground flex items-center space-x-2">
             <span>
