@@ -9,12 +9,12 @@ export interface LocationPoint {
 export interface Job {
   id: string;
   description: string;
-  startTime: number;
-  startLocation: LocationPoint;
-  endTime?: number;
-  endLocation?: LocationPoint;
-  summary?: string; // Technician's summary
-  aiSummary?: string; // AI-generated summary
+  startTime: number | null;
+  startLocation: LocationPoint | null;
+  endTime?: number | null;
+  endLocation?: LocationPoint | null;
+  summary?: string | null; // Technician's summary
+  aiSummary?: string | null; // AI-generated summary
   status: 'active' | 'completed';
 }
 
@@ -22,7 +22,7 @@ export type TrackingStatus = 'idle' | 'tracking' | 'paused' | 'ended';
 
 export interface TrackingEvent {
   id: string;
-  type: 
+  type:
     | 'SESSION_START' 
     | 'SESSION_PAUSE' 
     | 'SESSION_RESUME' 
@@ -36,17 +36,17 @@ export interface TrackingEvent {
     | 'USER_ACTION' // Added for manual user interactions
     | 'ERROR';
   timestamp: number;
-  location?: LocationPoint;
+  location?: LocationPoint | null;
   jobId?: string;
-  details?: string; 
+  details?: string;
 }
 
 export interface PauseInterval {
-  id: any;
+  id: string;
   startTime: number | null;
   endTime?: number | null;
-  startLocation?: LocationPoint;
-  endLocation?: LocationPoint;
+  startLocation?: LocationPoint | null;
+  endLocation?: LocationPoint | null;
 }
 
 export interface Workday {
