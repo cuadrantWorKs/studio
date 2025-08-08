@@ -22,8 +22,22 @@ export default function WorkdaySummaryDisplay({ summary, showTitle = true }: Wor
         </CardHeader>
       )}
       <div className="space-y-1 text-sm">        
-        {summary.startLocation && <LocationInfo location={summary.startLocation} label="Workday Started:" time={summary.startTime} getGoogleMapsLink={getGoogleMapsLink} />}
-        <LocationInfo location={summary.endLocation} label="Workday Ended:" time={summary.endTime} getGoogleMapsLink={getGoogleMapsLink} />
+        {summary.startLocation && (
+          <LocationInfo
+            location={summary.startLocation}
+            label="Workday Started:"
+            time={summary.startTime}
+            getGoogleMapsLink={getGoogleMapsLink}
+          />
+        )}
+        {summary.endLocation && (
+          <LocationInfo
+            location={summary.endLocation}
+            label="Workday Ended:"
+            time={summary.endTime}
+            getGoogleMapsLink={getGoogleMapsLink}
+          />
+        )}
 </div>
       
       <p><strong>Total Active Time:</strong> {formatTime(summary.totalActiveTime)}</p>
@@ -33,17 +47,24 @@ export default function WorkdaySummaryDisplay({ summary, showTitle = true }: Wor
       <h4 className="font-semibold mt-2">Jobs ({summary.jobs.length}):</h4>
       {summary.jobs.length > 0 ? (
         <ul className="list-disc pl-5 space-y-2 text-sm">
-          {summary.jobs.map(job => (
-            <li key={job.id}>
-              <div><strong>{job.description}</strong> ({job.status})</div>
-              <LocationInfo location={job.startLocation} label="Started at" time={job.startTime} getGoogleMapsLink={getGoogleMapsLink}/>
-              {(job.endTime !== undefined && job.endLocation !== undefined && job.endLocation !== null) && (
-                 <LocationInfo location={job.endLocation} label="Ended at" time={job.endTime} getGoogleMapsLink={getGoogleMapsLink} />
-              )}
-              {job.summary && <p className="text-xs text-muted-foreground mt-1">Summary: {job.summary}</p>}
-              {job.aiSummary && <p className="text-xs text-muted-foreground">AI Summary: {job.aiSummary}</p>}
-            </li>
-          ))}
+            {summary.jobs.map(job => (
+              <li key={job.id}>
+                <div><strong>{job.description}</strong> ({job.status})</div>
+                {job.startLocation && (
+                  <LocationInfo
+                    location={job.startLocation}
+                    label="Started at"
+                    time={job.startTime ?? undefined}
+                    getGoogleMapsLink={getGoogleMapsLink}
+                  />
+                )}
+                {(job.endTime !== undefined && job.endLocation !== undefined && job.endLocation !== null) && (
+                   <LocationInfo location={job.endLocation} label="Ended at" time={job.endTime ?? undefined} getGoogleMapsLink={getGoogleMapsLink} />
+                )}
+                {job.summary && <p className="text-xs text-muted-foreground mt-1">Summary: {job.summary}</p>}
+                {job.aiSummary && <p className="text-xs text-muted-foreground">AI Summary: {job.aiSummary}</p>}
+              </li>
+            ))}
         </ul>
       ) : <p className="text-sm text-muted-foreground">No jobs recorded.</p>}
 

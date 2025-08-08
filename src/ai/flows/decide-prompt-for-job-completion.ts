@@ -52,10 +52,10 @@ const prompt = ai.definePrompt({
   name: 'decidePromptForJobCompletionPrompt',
   input: {schema: DecidePromptForJobCompletionInputSchema},
   output: {schema: DecidePromptForJobCompletionOutputSchema},
-  template: `
+  prompt: `
   Here's the available information:
   - Distance moved: {{distanceMovedMeters}} meters
-  - Last prompted time: {{#if lastJobPromptedTimestamp}}{{{lastJobPromptedTimestamp}}} ({{formatEpoch lastJobPromptedTimestamp}}){{else}}Never{{/if}}
+  - Last prompted time: {{lastJobPromptedTimestamp}}
 
   Consider these factors:
   - Prompt if the technician has moved a significant distance (more than 100 meters) since their last known location.
@@ -69,14 +69,7 @@ const prompt = ai.definePrompt({
 
   You must output a JSON object that conforms to this schema:
   {{outputSchemaDescription}}
-
-  Here's how the current date/time looks (it's only for display):
-  {{formatNow}}
   `,
-  templateHelpers: {
-    formatEpoch: (time: number) => new Date(time).toLocaleString(),
-    formatNow: () => new Date().toLocaleString(),
-  },
 });
 
 const decidePromptForJobCompletionFlow = ai.defineFlow(
