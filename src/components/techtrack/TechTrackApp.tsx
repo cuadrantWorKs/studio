@@ -76,7 +76,7 @@ const sanitizeLocationPoint = (location: LocationPoint | null | undefined): Loca
 
 
 
-export default function TechTrackApp({ technicianName }: TechTrackAppProps): JSX.Element {
+export default function TechTrackApp({ technicianName }: TechTrackAppProps): any {
   const [workday, setWorkday] = useState<Workday | null>(null);
   const [currentLocation, setCurrentLocation] = useState<LocationPoint | null>(null);
   const [geolocationError, setGeolocationError] = useState<GeolocationError | null>(null); // Keep this for user feedback
@@ -944,7 +944,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps): JSX
         setJobToSummarizeId(null);
         setIsJobModalOpen(true);
       };
-      return <Button onClick={openNewJobModal} disabled={!currentLocation || commonDisabled || !workday?.status} className="w-full" size="lg"> {/* Add !workday?.status for initial state */}
+        return <Button onClick={openNewJobModal} disabled={!currentLocation || commonDisabled} className="w-full" size="lg">
         {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Play className="mr-2 h-5 w-5" />} Iniciar Seguimiento
       </Button>;
     }
