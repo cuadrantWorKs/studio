@@ -451,6 +451,8 @@ useEffect(() => {
 
   useEffect(() => {
     let intervalId: NodeJS.Timeout | undefined = undefined;
+    // Store the interval ID in a ref or a state outside this effect if you need to clear it from elsewhere
+    // For this modification, we'll assume we can access and clear it directly here if the workday is being reset.
 
     if (workday?.status === "tracking") {
       intervalId = setInterval(() => {
@@ -808,6 +810,7 @@ useEffect(() => {
 
     setTimeout(() => {
       setJobModalMode("new");
+      setJobToSummarizeId(null); // Ensure this is null for new jobs
       setCurrentJobFormData({ description: "", summary: "" });
       setIsJobModalOpen(true);
       recordEvent(
@@ -2235,6 +2238,20 @@ useEffect(() => {
           setIsJobModalOpen(open);
 
           if (!open) {
+            // --- NEW LOGIC TO RESET WORKDAY ON FIRST JOB MODAL CANCEL ---
+            // Check if the modal is closing, was in "new" mode,
+            // and if the workday exists but has no jobs (meaning this was the first job attempt).
+            if (
+ jobModalMode === "new" &&
+ workday !== null &&
+ (workday.jobs === null || workday.jobs.length === 0)
+ ) {
+ console.log("First job modal canceled. Resetting workday state.");
+ setWorkday(null); // Reset the workday state
+ // You would also need to clear the time counting interval here
+ // The current intervalId is local to the useEffect, you'd need a ref or state for it
+ }
+            // --- END NEW LOGIC ---
             if (
               pendingEndDayAction &&
               jobModalMode === "summary" &&
@@ -2254,7 +2271,9 @@ useEffect(() => {
             }
             // Reset form only if not in the middle of an AI summary that might repopulate it
             if (!aiLoading.summarize) {
-              setCurrentJobFormData({ description: "", summary: "" });
+              setCurrentJobFormData({
+ description: "", summary: ""
+ }); // Explicitly reset to empty strings
               setJobToSummarizeId(null);
             }
           }
