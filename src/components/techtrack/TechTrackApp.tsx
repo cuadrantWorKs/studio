@@ -66,7 +66,7 @@ const STOP_DETECT_DURATION_MS = 1 * 60 * 1000; //comment dsp cambiak
 const MOVEMENT_THRESHOLD_METERS = 150;
 const RECENT_PROMPT_THRESHOLD_MS = 1 * 60 * 1000; */
 const LOCATION_INTERVAL_MS = 5 * 60 * 1000;
-const STOP_DETECT_DURATION_MS = 15 * 60 * 1000; //comment dsp cambiak
+const STOP_DETECT_DURATION_MS = 3 * 60 * 1000; //comment dsp cambiak
 const MOVEMENT_THRESHOLD_METERS = 100;
 const RECENT_PROMPT_THRESHOLD_MS = 20 * 60 * 1000;
 const RECENT_PROMPT_THRESHOLD_MS2 = 20 * 60 * 1000;
@@ -701,7 +701,18 @@ useEffect(() => {
     isJobModalOpen,
   ]));
 
-  const handleStartTracking = () => {
+      // Reset idle timer
+  const resetIdleTimer = useCallback(() => {
+    if (idleTimerRef.current) {
+      clearTimeout(idleTimerRef.current);
+      idleTimerRef.current = null;
+    }
+    //setIdleStartTime(null);
+    //idleStartTime1 = null;
+    setIsPrompted(false);
+  }, []);
+
+  const handleStartTracking = (description: string | null = null, promptTime: number | null = null) => {
     const safeCurrentLocation = sanitizeLocationPoint(currentLocation);
     if (!safeCurrentLocation) {
       toast({
@@ -761,6 +772,7 @@ useEffect(() => {
           prev
             ? {
               ...prev,
+              
               distanceToFirstJob: newDistance,
               startLocation:
                 distInitialToJob > distDefinedHomeToJob
@@ -776,13 +788,13 @@ useEffect(() => {
         setIsLoading(false);
       }
     };
-
+ 
     const startTime = Date.now();
     const newWorkday: Workday = {
       id: crypto.randomUUID(),
       userId: technicianName,
       date: getCurrentFormattedDate(),
-      startTime: startTime,
+      startTime: promptTime ? promptTime /*+ STOP_DETECT_DURATION_MS*/ : startTime,
       startLocation: safeCurrentLocation,
       status: "tracking",
       locationHistory: [safeCurrentLocation],
@@ -806,7 +818,47 @@ useEffect(() => {
       description: "Tu jornada laboral ha comenzado.",
     });
 
-    setTimeout(() => {
+    //handleJobFormSubmit(description, promptTime);
+
+      if (!safeCurrentLocation) {
+        toast({
+          title: "Ubicación Requerida",
+          description: "No se puede iniciar un nuevo trabajo sin ubicación.",
+          variant: "destructive",
+        });
+        return;
+      }
+      const newJob: Job = {
+        id: crypto.randomUUID(),
+        description: description ? description : currentJobFormData.description,
+        startTime: idleStartTime ? idleStartTime : Date.now(), // Keep as number (epoch milliseconds)
+        startLocation: safeCurrentLocation, // Already sanitized
+        status: "active",
+      };
+
+      
+      setWorkday((prev) =>
+        prev
+          ? {
+            ...prev,
+            jobs: [...prev.jobs, newJob],
+            currentJobId: newJob.id,
+          }
+          : null
+      );
+      recordEvent(
+        "JOB_START",
+        safeCurrentLocation,
+        newJob.id,
+        `Nuevo trabajo iniciado: ${newJob.description}`
+      );
+      toast({
+        title: "Nuevo Trabajo Iniciado",
+        description: newJob.description,
+      });
+
+
+    /* setTimeout(() => {
       setJobModalMode("new");
       setCurrentJobFormData({ description: "", summary: "" });
       setIsJobModalOpen(true);
@@ -816,13 +868,30 @@ useEffect(() => {
         undefined,
         "Prompt inicial después del inicio de sesión"
       );
-    }, 100);
+    }, 100); */
     setIsLoading(false);
   };
 
-  const handleJobFormSubmit = async () => {
-    if (!workday) return;
+  const showModalNewJob = async () => {
+      setJobModalMode("new");
+      setCurrentJobFormData({ description: "", summary: "" });
+      setIsJobModalOpen(true);
+  }
+
+  const handleJobFormSubmit = async (description: string | null = null, promptTime: number | null = null/*(data: JobFormData*/) => {
     const safeCurrentLocation = sanitizeLocationPoint(currentLocation);
+    if (!workday) {
+      //const startTimeOfModal = idleStartTime ? idleStartTime - STOP_DETECT_DURATION_MS : ;
+      //currentJobFormData.description
+      handleStartTracking(currentJobFormData.description ? currentJobFormData.description : null, idleStartTime ? idleStartTime : null);
+
+      setIdleStartTime(null);
+      resetIdleTimer();
+      setIsJobModalOpen(false);
+      setCurrentJobFormData({ description: "", summary: "" });
+    } 
+    if(!workday) return;
+    
 
     if (jobModalMode === "new") {
       // ... existing new job logic
@@ -836,13 +905,15 @@ useEffect(() => {
       }
       const newJob: Job = {
         id: crypto.randomUUID(),
-        description: currentJobFormData.description,
+        description: description ? description : currentJobFormData.description,
         startTime: idleStartTime ? idleStartTime : Date.now(), // Keep as number (epoch milliseconds)
         startLocation: safeCurrentLocation, // Already sanitized
         status: "active",
       };
       setIdleStartTime(null);
       resetIdleTimer();
+
+      
       setWorkday((prev) =>
         prev
           ? {
@@ -1016,16 +1087,7 @@ useEffect(() => {
     }
   };
 
-  // Reset idle timer
-  const resetIdleTimer = useCallback(() => {
-    if (idleTimerRef.current) {
-      clearTimeout(idleTimerRef.current);
-      idleTimerRef.current = null;
-    }
-    //setIdleStartTime(null);
-    //idleStartTime1 = null;
-    setIsPrompted(false);
-  }, []);
+
 
   useEffect(() => {
     if (!currentLocation) return;
@@ -1073,8 +1135,10 @@ useEffect(() => {
     if (isPrompted) return;
     setIsPrompted(true);
 
+    console.log("workday?.status, ", workday?.status);
+
     if (
-      workday?.status === "tracking" &&
+      workday?.status == "tracking" &&
       !currentJob &&
       !isLoading &&
       !isJobModalOpen &&
@@ -1101,7 +1165,7 @@ useEffect(() => {
     ) {
 
       //TODO handle start tracking
-      handleStartTracking();
+      //handleStartTracking();
     }
     setIsPrompted(false);
   }, [
@@ -1960,7 +2024,7 @@ useEffect(() => {
     if (!workday || workday.status === "idle") {
       return (
         <Button
-          onClick={handleStartTracking}
+          onClick={showModalNewJob}
           disabled={!currentLocation || commonDisabled}
           className="w-full"
           size="lg"
