@@ -16,29 +16,30 @@ export interface Job {
   summary?: string; // Technician's summary
   aiSummary?: string; // AI-generated summary
   status: 'active' | 'completed';
+  drivingDistanceKm?: number; // OSRM calculated distance
 }
 
 export type TrackingStatus = 'idle' | 'tracking' | 'paused' | 'ended';
 
 export interface TrackingEvent {
   id: string;
-  type: 
-    | 'SESSION_START' 
-    | 'SESSION_PAUSE' 
-    | 'SESSION_RESUME' 
-    | 'SESSION_END' 
-    | 'LOCATION_UPDATE' 
-    | 'JOB_START' 
-    | 'JOB_DETAILS_UPDATED'
-    | 'JOB_COMPLETION_PROMPT'
-    | 'JOB_COMPLETED'
-    | 'NEW_JOB_PROMPT'
-    | 'USER_ACTION' // Added for manual user interactions
-    | 'ERROR';
+  type:
+  | 'SESSION_START'
+  | 'SESSION_PAUSE'
+  | 'SESSION_RESUME'
+  | 'SESSION_END'
+  | 'LOCATION_UPDATE'
+  | 'JOB_START'
+  | 'JOB_DETAILS_UPDATED'
+  | 'JOB_COMPLETION_PROMPT'
+  | 'JOB_COMPLETED'
+  | 'NEW_JOB_PROMPT'
+  | 'USER_ACTION' // Added for manual user interactions
+  | 'ERROR';
   timestamp: number;
   location?: LocationPoint;
   jobId?: string;
-  details?: string; 
+  details?: string;
 }
 
 export interface PauseInterval {
@@ -65,6 +66,7 @@ export interface Workday {
   lastNewJobPromptTime?: number;
   lastJobCompletionPromptTime?: number;
   currentJobId?: string | null;
+  finalLegDistanceKm?: number; // Distance from last job to end location
 }
 
 export interface WorkdaySummaryContext extends Workday {

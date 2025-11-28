@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -9,10 +8,8 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import type { Workday, WorkdaySummaryContext } from '@/lib/techtrack/types';
 import { calculateWorkdaySummary } from '@/lib/techtrack/summary';
 import WorkdaySummaryDisplay from './WorkdaySummaryDisplay';
-import { ArrowLeft, Loader2, AlertTriangle } from 'lucide-react'; // Added AlertTriangle
-import { db } from '@/lib/firebase';
-import { collection, getDocs, query, orderBy } from 'firebase/firestore';
-
+import { ArrowLeft, Loader2, AlertTriangle } from 'lucide-react';
+import { db } from '@/lib/supabase';
 
 export default function HistoryView() {
   const [pastWorkdays, setPastWorkdays] = useState<Workday[]>([]);
@@ -27,17 +24,47 @@ export default function HistoryView() {
       setIsLoadingHistory(true);
       setError(null);
       try {
-        const workdaysCollectionRef = collection(db, "workdays");
-        const q = query(workdaysCollectionRef, orderBy("startTime", "desc"));
-        const querySnapshot = await getDocs(q);
-        const fetchedWorkdays: Workday[] = [];
-        querySnapshot.forEach((doc) => {
-          fetchedWorkdays.push({ id: doc.id, ...doc.data() } as Workday);
-        });
+        const { data, error } = await db
+          .from('workdays')
+          .select('*')
+          .order('start_time', { ascending: false });
+
+        if (error) throw error;
+
+        // Transform Supabase data to Workday type
+        // Note: This is a simplified transformation. In a real app, you'd need to fetch related jobs, events, etc.
+        // or use a join query if the summary calculation needs them.
+        // For now, we'll assume the summary calculation might need more data, so we might need to fetch full details
+        // when a workday is selected.
+
+        const fetchedWorkdays: Workday[] = (data || []).map((row: any) => ({
+          id: row.id,
+          userId: row.user_id,
+          date: row.date,
+          startTime: row.start_time,
+          endTime: row.end_time,
+          status: row.status,
+          // Map other fields as needed, defaulting arrays to empty for the list view
+          jobs: [],
+          events: [],
+          pauseIntervals: [],
+          locationHistory: [],
+          startLocation: row.start_location_latitude ? {
+            latitude: row.start_location_latitude,
+            longitude: row.start_location_longitude,
+            timestamp: row.start_location_timestamp || 0
+          } : undefined,
+          endLocation: row.end_location_latitude ? {
+            latitude: row.end_location_latitude,
+            longitude: row.end_location_longitude,
+            timestamp: row.end_location_timestamp || 0
+          } : undefined
+        } as Workday));
+
         setPastWorkdays(fetchedWorkdays);
       } catch (err) {
-        console.error("Error fetching history from Firestore:", err);
-        setError("Failed to load history. Please check your Firebase setup and network connection.");
+        console.error("Error fetching history from Supabase:", err);
+        setError("Failed to load history. Please check your Supabase setup and network connection.");
       } finally {
         setIsLoadingHistory(false);
       }
@@ -49,8 +76,55 @@ export default function HistoryView() {
   useEffect(() => {
     if (selectedWorkday) {
       setIsLoadingSummary(true);
-      setDisplayedSummary(null); 
-      calculateWorkdaySummary(selectedWorkday)
+      setDisplayedSummary(null);
+
+      // We need to fetch the full details for the selected workday to calculate the summary
+      const fetchFullWorkdayDetails = async (workdayId: string) => {
+        const { data: jobs } = await db.from('jobs').select('*').eq('workday_id', workdayId);
+        const { data: pauses } = await db.from('pause_intervals').select('*').eq('workday_id', workdayId);
+        const { data: events } = await db.from('events').select('*').eq('workday_id', workdayId);
+        const { data: locations } = await db.from('locations').select('*').eq('workday_id', workdayId);
+
+        const fullWorkday: Workday = {
+          ...selectedWorkday,
+          jobs: (jobs || []).map((j: any) => ({
+            id: j.id,
+            description: j.description,
+            startTime: j.start_time,
+            endTime: j.end_time,
+            status: j.status,
+            summary: j.summary,
+            aiSummary: j.ai_summary,
+            startLocation: { latitude: j.start_location_latitude, longitude: j.start_location_longitude, timestamp: j.start_location_timestamp },
+            endLocation: j.end_location_latitude ? { latitude: j.end_location_latitude, longitude: j.end_location_longitude, timestamp: j.end_location_timestamp } : undefined
+          })),
+          pauseIntervals: (pauses || []).map((p: any) => ({
+            id: p.id,
+            startTime: p.start_time,
+            endTime: p.end_time,
+            startLocation: p.start_location_latitude ? { latitude: p.start_location_latitude, longitude: p.start_location_longitude, timestamp: p.start_location_timestamp } : undefined,
+            endLocation: p.end_location_latitude ? { latitude: p.end_location_latitude, longitude: p.end_location_longitude, timestamp: p.end_location_timestamp } : undefined
+          })),
+          events: (events || []).map((e: any) => ({
+            id: e.id,
+            type: e.type,
+            timestamp: e.timestamp,
+            jobId: e.job_id,
+            details: e.details,
+            location: e.location_latitude ? { latitude: e.location_latitude, longitude: e.location_longitude, timestamp: e.location_timestamp } : undefined
+          })),
+          locationHistory: (locations || []).map((l: any) => ({
+            latitude: l.latitude,
+            longitude: l.longitude,
+            timestamp: l.timestamp,
+            accuracy: l.accuracy
+          }))
+        };
+        return fullWorkday;
+      };
+
+      fetchFullWorkdayDetails(selectedWorkday.id)
+        .then(fullWorkday => calculateWorkdaySummary(fullWorkday))
         .then(summary => {
           setDisplayedSummary(summary);
         })
@@ -80,15 +154,15 @@ export default function HistoryView() {
   }
 
   if (error) {
-     return (
+    return (
       <div className="flex flex-col min-h-screen items-center justify-center p-4 text-center">
-        <AlertTriangle className="h-12 w-12 text-destructive mb-4" /> {/* Added Icon */}
+        <AlertTriangle className="h-12 w-12 text-destructive mb-4" />
         <p className="text-destructive text-xl mb-2">Error Loading History</p>
         <p className="text-muted-foreground mb-4">{error}</p>
         <Link href="/" passHref legacyBehavior>
-            <Button variant="outline">
-                <ArrowLeft className="mr-2 h-4 w-4" /> Back to Tracking
-            </Button>
+          <Button variant="outline">
+            <ArrowLeft className="mr-2 h-4 w-4" /> Back to Tracking
+          </Button>
         </Link>
       </div>
     );
@@ -123,12 +197,12 @@ export default function HistoryView() {
                     >
                       <div className="flex flex-col">
                         <span>
-                            {wd.date ? new Date(wd.date).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' }) : 'Date N/A'}
+                          {wd.date ? new Date(wd.date).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' }) : 'Date N/A'}
                         </span>
                         <span className="text-xs text-muted-foreground">
-                            {wd.startTime ? `Started: ${new Date(wd.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : 'Start Time N/A'}
+                          {wd.startTime ? `Started: ${new Date(wd.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : 'Start Time N/A'}
                         </span>
-                       </div>
+                      </div>
                     </Button>
                   ))}
                 </div>
@@ -154,4 +228,3 @@ export default function HistoryView() {
     </div>
   );
 }
-

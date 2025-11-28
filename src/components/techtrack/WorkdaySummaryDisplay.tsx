@@ -21,24 +21,24 @@ export default function WorkdaySummaryDisplay({ summary, showTitle = true }: Wor
           {summary.date && <CardDescription>Summary for {new Date(summary.date).toLocaleDateString('es-ES', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</CardDescription>}
         </CardHeader>
       )}
-      <div className="space-y-1 text-sm">        
+      <div className="space-y-1 text-sm">
         {summary.startLocation && <LocationInfo location={summary.startLocation} label="Workday Started:" time={summary.startTime} getGoogleMapsLink={getGoogleMapsLink} />}
-        <LocationInfo location={summary.endLocation} label="Workday Ended:" time={summary.endTime} getGoogleMapsLink={getGoogleMapsLink} />
-</div>
-      
+        {summary.endLocation && <LocationInfo location={summary.endLocation} label="Workday Ended:" time={summary.endTime} getGoogleMapsLink={getGoogleMapsLink} />}
+      </div>
+
       <p><strong>Total Active Time:</strong> {formatTime(summary.totalActiveTime)}</p>
       <p><strong>Total Paused Time:</strong> {formatTime(summary.totalPausedTime)}</p>
       <p><strong>Total Distance:</strong> {summary.totalDistanceKm.toFixed(2)} km</p>
-      
+
       <h4 className="font-semibold mt-2">Jobs ({summary.jobs.length}):</h4>
       {summary.jobs.length > 0 ? (
         <ul className="list-disc pl-5 space-y-2 text-sm">
           {summary.jobs.map(job => (
             <li key={job.id}>
               <div><strong>{job.description}</strong> ({job.status})</div>
-              <LocationInfo location={job.startLocation} label="Started at" time={job.startTime} getGoogleMapsLink={getGoogleMapsLink}/>
+              <LocationInfo location={job.startLocation} label="Started at" time={job.startTime} getGoogleMapsLink={getGoogleMapsLink} />
               {(job.endTime !== undefined && job.endLocation !== undefined && job.endLocation !== null) && (
-                 <LocationInfo location={job.endLocation} label="Ended at" time={job.endTime} getGoogleMapsLink={getGoogleMapsLink} />
+                <LocationInfo location={job.endLocation} label="Ended at" time={job.endTime} getGoogleMapsLink={getGoogleMapsLink} />
               )}
               {job.summary && <p className="text-xs text-muted-foreground mt-1">Summary: {job.summary}</p>}
               {job.aiSummary && <p className="text-xs text-muted-foreground">AI Summary: {job.aiSummary}</p>}
@@ -48,14 +48,14 @@ export default function WorkdaySummaryDisplay({ summary, showTitle = true }: Wor
       ) : <p className="text-sm text-muted-foreground">No jobs recorded.</p>}
 
       <h4 className="font-semibold mt-2">Pauses ({summary.pauseIntervals.filter(p => p.endTime).length}):</h4>
-       {summary.pauseIntervals.filter((p: PauseInterval) => p.endTime !== undefined && p.startTime !== undefined).length > 0 ? (
+      {summary.pauseIntervals.filter((p: PauseInterval) => p.endTime !== undefined && p.startTime !== undefined).length > 0 ? (
         <ul className="list-disc pl-5 space-y-2 text-sm">
-          {summary.pauseIntervals.filter((p: PauseInterval) => p.endTime !== undefined && p.startTime !== undefined).map((pause,idx) => (
+          {summary.pauseIntervals.filter((p: PauseInterval) => p.endTime !== undefined && p.startTime !== undefined).map((pause, idx) => (
             <li key={idx}>
-              Paused from {new Date(pause.startTime!).toLocaleTimeString()} for {formatTime(pause.endTime! - pause.startTime!)}              
+              Paused from {new Date(pause.startTime!).toLocaleTimeString()} for {formatTime(pause.endTime! - pause.startTime!)}
               {pause.startLocation !== undefined && pause.startLocation !== null && <LocationInfo location={pause.startLocation} label="Paused at" getGoogleMapsLink={getGoogleMapsLink} />}
               {pause.endLocation && (
-                <LocationInfo location={pause.endLocation} label="Resumed at" getGoogleMapsLink={getGoogleMapsLink}/>
+                <LocationInfo location={pause.endLocation} label="Resumed at" getGoogleMapsLink={getGoogleMapsLink} />
               )}
             </li>
           ))}
