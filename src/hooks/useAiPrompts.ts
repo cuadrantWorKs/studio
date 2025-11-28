@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Workday, LocationPoint, Job } from '@/lib/techtrack/types';
+import { Workday, LocationPoint, Job, TrackingEvent } from '@/lib/techtrack/types';
 import { decidePromptForNewJob } from '@/ai/flows/decide-prompt-for-new-job';
 import { decidePromptForJobCompletion } from '@/ai/flows/decide-prompt-for-job-completion';
 import { haversineDistance } from '@/lib/techtrack/geometry';
@@ -15,8 +15,8 @@ interface UseAiPromptsProps {
     currentJob: Job | null | undefined;
     isJobModalOpen: boolean;
     setWorkday: React.Dispatch<React.SetStateAction<Workday | null>>;
-    recordEvent: (type: any, location: any, jobId?: string, details?: string) => void;
-    openJobModal: (mode: 'new' | 'summary', data?: any) => void;
+    recordEvent: (type: TrackingEvent['type'], location: LocationPoint | null, jobId?: string, details?: string) => void;
+    openJobModal: (mode: 'new' | 'summary', data?: { description?: string; summary?: string }) => void;
 }
 
 export function useAiPrompts({

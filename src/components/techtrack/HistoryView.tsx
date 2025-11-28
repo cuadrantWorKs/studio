@@ -37,6 +37,7 @@ export default function HistoryView() {
         // For now, we'll assume the summary calculation might need more data, so we might need to fetch full details
         // when a workday is selected.
 
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const fetchedWorkdays: Workday[] = (data || []).map((row: any) => ({
           id: row.id,
           userId: row.user_id,
@@ -87,6 +88,7 @@ export default function HistoryView() {
 
         const fullWorkday: Workday = {
           ...selectedWorkday,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           jobs: (jobs || []).map((j: any) => ({
             id: j.id,
             description: j.description,
@@ -98,6 +100,7 @@ export default function HistoryView() {
             startLocation: { latitude: j.start_location_latitude, longitude: j.start_location_longitude, timestamp: j.start_location_timestamp },
             endLocation: j.end_location_latitude ? { latitude: j.end_location_latitude, longitude: j.end_location_longitude, timestamp: j.end_location_timestamp } : undefined
           })),
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           pauseIntervals: (pauses || []).map((p: any) => ({
             id: p.id,
             startTime: p.start_time,
@@ -105,6 +108,7 @@ export default function HistoryView() {
             startLocation: p.start_location_latitude ? { latitude: p.start_location_latitude, longitude: p.start_location_longitude, timestamp: p.start_location_timestamp } : undefined,
             endLocation: p.end_location_latitude ? { latitude: p.end_location_latitude, longitude: p.end_location_longitude, timestamp: p.end_location_timestamp } : undefined
           })),
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           events: (events || []).map((e: any) => ({
             id: e.id,
             type: e.type,
@@ -113,6 +117,7 @@ export default function HistoryView() {
             details: e.details,
             location: e.location_latitude ? { latitude: e.location_latitude, longitude: e.location_longitude, timestamp: e.location_timestamp } : undefined
           })),
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           locationHistory: (locations || []).map((l: any) => ({
             latitude: l.latitude,
             longitude: l.longitude,

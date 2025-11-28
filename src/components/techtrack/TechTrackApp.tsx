@@ -8,8 +8,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import {
   MapPin, Play, Pause, StopCircle, Briefcase, Clock, CheckCircle,
-  AlertTriangle, Loader2, History, CloudUpload, User, MessageSquareText,
-  Ban, MapPinned
+  AlertTriangle, Loader2, User, MessageSquareText, MapPinned
 } from 'lucide-react';
 
 import { calculateWorkdaySummary } from '@/lib/techtrack/summary';
@@ -51,9 +50,9 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
 
   const { toast } = useToast();
 
-  const openJobModal = (mode: 'new' | 'summary', data?: any, startTime?: number) => {
+  const openJobModal = (mode: 'new' | 'summary', data?: { description?: string; summary?: string }, startTime?: number) => {
     setJobModalMode(mode);
-    if (data) setCurrentJobFormData(data);
+    if (data) setCurrentJobFormData({ description: data.description || '', summary: data.summary || '' });
     if (startTime) setPendingJobStartTime(startTime);
     setIsJobModalOpen(true);
   };
@@ -310,7 +309,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
         toast({ title: "Error de Resumen", description: "No se pudo calcular el resumen de la jornada.", variant: "destructive" });
       }
 
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("SUPABASE SAVE ERROR:", error);
       let errorMessage = "Un error desconocido ocurrió durante el guardado en la nube.";
       if (error instanceof Error) {
@@ -443,7 +442,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
       // If we were waiting to end the day and now there is no current job, proceed.
       initiateEndDayProcess(workday);
     }
-  }, [workday, pendingEndDayAction]);
+  }, [workday, pendingEndDayAction, initiateEndDayProcess]);
 
 
   if (!workday) {
