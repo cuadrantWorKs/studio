@@ -1,6 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-    outputFileTracingRoot: '/Users/admin/studio/studio',
+    output: 'standalone',
     images: {
         remotePatterns: [
             {

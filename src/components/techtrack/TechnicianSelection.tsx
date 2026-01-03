@@ -56,11 +56,11 @@ export default function TechnicianSelection({ onTechnicianSelect }: TechnicianSe
           </Button>
         </CardContent>
         <CardFooter className="flex justify-center pt-4">
-            <Link href="/history" passHref legacyBehavior>
-              <Button variant="outline" size="sm" asChild>
-                <a><History className="mr-2 h-4 w-4" /> Consultar historial de la empresa</a>
-              </Button>
+          <Button variant="outline" size="sm" asChild>
+            <Link href="/history">
+              <History className="mr-2 h-4 w-4" /> Consultar historial de la empresa
             </Link>
+          </Button>
         </CardFooter>
       </Card>
     </div>

@@ -164,11 +164,11 @@ export default function HistoryView() {
         <AlertTriangle className="h-12 w-12 text-destructive mb-4" />
         <p className="text-destructive text-xl mb-2">Error Loading History</p>
         <p className="text-muted-foreground mb-4">{error}</p>
-        <Link href="/" passHref legacyBehavior>
-          <Button variant="outline">
+        <Button variant="outline" asChild>
+          <Link href="/">
             <ArrowLeft className="mr-2 h-4 w-4" /> Back to Tracking
-          </Button>
-        </Link>
+          </Link>
+        </Button>
       </div>
     );
   }
@@ -179,11 +179,11 @@ export default function HistoryView() {
         <CardHeader>
           <div className="flex justify-between items-center">
             <CardTitle className="text-2xl">Workday History (Cloud)</CardTitle>
-            <Link href="/" passHref legacyBehavior>
-              <Button variant="outline" size="sm" asChild>
-                <a><ArrowLeft className="mr-2 h-4 w-4" /> Back to Tracking</a>
-              </Button>
-            </Link>
+            <Button variant="outline" size="sm" asChild>
+              <Link href="/">
+                <ArrowLeft className="mr-2 h-4 w-4" /> Back to Tracking
+              </Link>
+            </Button>
           </div>
         </CardHeader>
         <CardContent>

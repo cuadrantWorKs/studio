@@ -8,7 +8,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import {
   MapPin, Play, Pause, StopCircle, Briefcase, Clock, CheckCircle,
-  AlertTriangle, Loader2, User, MessageSquareText, MapPinned
+  AlertTriangle, Loader2, User, MessageSquareText, MapPinned, BrainCircuit
 } from 'lucide-react';
 
 import { calculateWorkdaySummary } from '@/lib/techtrack/summary';
@@ -20,6 +20,8 @@ import LocationInfo from './LocationInfo';
 import type {
   LocationPoint, Job, Workday, PauseInterval, WorkdaySummaryContext, TrackingEvent
 } from '@/lib/techtrack/types';
+import { summarizeJobDescription } from '@/ai/flows/summarize-job-description';
+import { Wand2 } from 'lucide-react';
 
 import { useGeolocation } from '@/hooks/useGeolocation';
 import { useWorkday } from '@/hooks/useWorkday';
@@ -488,6 +490,14 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
 
   return (
     <div className="p-4 max-w-md mx-auto space-y-4 pb-20">
+      {Object.values(aiLoading).some(Boolean) && (
+        <div className="fixed top-4 right-4 z-50 animate-in fade-in slide-in-from-top-2 pointer-events-none">
+          <div className="bg-purple-900/90 text-white px-3 py-1.5 rounded-full shadow-xl flex items-center gap-2 border border-purple-500/50 backdrop-blur-sm">
+            <BrainCircuit className="h-4 w-4 animate-pulse text-purple-300" />
+            <span className="text-xs font-semibold">IA Analizando...</span>
+          </div>
+        </div>
+      )}
       {/* Header Card */}
       <Card className="bg-slate-900 text-white border-none shadow-lg">
         <CardContent className="p-6">
@@ -621,12 +631,41 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
                   <CheckCircle className="h-4 w-4" />
                   Resumen de Cierre
                 </Label>
-                <Textarea
-                  id="summary"
-                  value={currentJobFormData.summary}
-                  onChange={(e) => setCurrentJobFormData({ ...currentJobFormData, summary: e.target.value })}
-                  placeholder="Ej: Instalación exitosa, señal verificada."
-                />
+                <div className="relative">
+                  <Textarea
+                    id="summary"
+                    value={currentJobFormData.summary}
+                    onChange={(e) => setCurrentJobFormData({ ...currentJobFormData, summary: e.target.value })}
+                    placeholder="Ej: Instalación exitosa, señal verificada."
+                    className="pr-10"
+                  />
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="absolute right-2 top-2 h-6 w-6 text-purple-600 hover:text-purple-700 hover:bg-purple-100"
+                    title="Generar resumen con IA"
+                    onClick={async () => {
+                      if (!currentJobFormData.description) return;
+                      setIsLoading(true);
+                      try {
+                        const result = await summarizeJobDescription({
+                          jobDescription: currentJobFormData.description,
+                          additionalNotes: currentJobFormData.summary
+                        });
+                        setCurrentJobFormData(prev => ({ ...prev, summary: result.summary }));
+                        toast({ title: "Resumen Generado", description: "La IA ha generado un resumen de tu trabajo." });
+                      } catch (error) {
+                        console.error(error);
+                        toast({ title: "Error IA", description: "No se pudo generar el resumen.", variant: "destructive" });
+                      } finally {
+                        setIsLoading(false);
+                      }
+                    }}
+                    disabled={isLoading || !currentJobFormData.description}
+                  >
+                    {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wand2 className="h-4 w-4" />}
+                  </Button>
+                </div>
               </div>
             )}
           </div>

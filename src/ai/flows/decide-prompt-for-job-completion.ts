@@ -52,31 +52,18 @@ const prompt = ai.definePrompt({
   name: 'decidePromptForJobCompletionPrompt',
   input: { schema: DecidePromptForJobCompletionInputSchema },
   output: { schema: DecidePromptForJobCompletionOutputSchema },
-  messages: [
-    {
-      role: 'user',
-      content: [
-        {
-          text: `Here's the available information:
-  - Distance moved: {{distanceMovedMeters}} meters
-  - Last prompted time: {{lastJobPromptedTimestamp}}
+  prompt: `You are an AI assistant helping determine if a technician should be prompted about job completion.
 
-  Consider these factors:
-  - Prompt if the technician has moved a significant distance (more than 100 meters) since their last known location.
-  - Avoid prompting too frequently. If the technician was prompted recently (e.g., within the last 30 minutes), it might be disruptive to prompt again.
+Input data:
+- Distance moved: {{distanceMovedMeters}} meters
+- Last prompted timestamp: {{lastJobPromptedTimestamp}}
 
-  Reason your decision step by step, and return the answer in JSON format.
+Rules:
+- Prompt if distance moved > 100 meters
+- Don't prompt if prompted within last 30 minutes (1800000 ms)
 
-  Output:
-  - shouldPrompt: true or false
-  - reason: the explanation for the decision
-
-  You must output a JSON object that conforms to this schema:
-  {{outputSchemaDescription}}`,
-        },
-      ],
-    },
-  ],
+Respond with ONLY valid JSON, no other text:
+{"shouldPrompt": true or false, "reason": "brief explanation"}`,
 });
 
 const decidePromptForJobCompletionFlow = ai.defineFlow(

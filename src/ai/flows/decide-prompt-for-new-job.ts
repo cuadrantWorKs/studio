@@ -8,8 +8,8 @@
  * - DecidePromptForNewJobOutput - The return type for the decidePromptForNewJob function.
  */
 
-import {ai} from '@/ai/genkit';
-import {z} from 'genkit';
+import { ai } from '@/ai/genkit';
+import { z } from 'genkit';
 
 const DecidePromptForNewJobInputSchema = z.object({
   hasBeenPromptedRecently: z
@@ -43,16 +43,20 @@ export async function decidePromptForNewJob(
 
 const prompt = ai.definePrompt({
   name: 'decidePromptForNewJobPrompt',
-  input: {schema: DecidePromptForNewJobInputSchema},
-  output: {schema: DecidePromptForNewJobOutputSchema},
-  prompt: `You are an AI assistant that helps determine whether a technician should be prompted to enter information about a new job.
+  input: { schema: DecidePromptForNewJobInputSchema },
+  output: { schema: DecidePromptForNewJobOutputSchema },
+  prompt: `You are an AI assistant helping determine if a technician should be prompted to start a new job.
 
-  The technician has stopped moving for {{timeStoppedInMinutes}} minutes.
-  It is known whether the technician has been prompted recently, specifically: {{#if hasBeenPromptedRecently}}they have been prompted recently{{else}}they have not been prompted recently{{/if}}.
+Input data:
+- Time stopped: {{timeStoppedInMinutes}} minutes
+- Was prompted recently: {{hasBeenPromptedRecently}}
 
-  Based on this information, determine whether the technician should be prompted to enter information for a new job.
-  Consider that prompting too often can be annoying, but not prompting enough can lead to incomplete data.
-`,
+Rules:
+- Prompt if stopped for 15+ minutes and not prompted recently
+- Don't prompt too often to avoid being annoying
+
+Respond with ONLY valid JSON, no other text:
+{"shouldPrompt": true or false, "reason": "brief explanation"}`,
 });
 
 const decidePromptForNewJobFlow = ai.defineFlow(
@@ -62,7 +66,7 @@ const decidePromptForNewJobFlow = ai.defineFlow(
     outputSchema: DecidePromptForNewJobOutputSchema,
   },
   async input => {
-    const {output} = await prompt(input);
+    const { output } = await prompt(input);
     return output!;
   }
 );
