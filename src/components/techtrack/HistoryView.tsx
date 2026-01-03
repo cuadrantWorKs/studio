@@ -10,11 +10,21 @@ import { calculateWorkdaySummary } from '@/lib/techtrack/summary';
 import WorkdaySummaryDisplay from './WorkdaySummaryDisplay';
 import { ArrowLeft, Loader2, AlertTriangle } from 'lucide-react';
 import { db } from '@/lib/supabase';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import WorkdayTimeline from "./WorkdayTimeline";
+import RawDataInspector from "./RawDataInspector";
+import dynamic from 'next/dynamic';
+
+const WorkdayMap = dynamic(() => import('./WorkdayMap'), {
+  ssr: false,
+  loading: () => <div className="h-[500px] w-full flex items-center justify-center bg-slate-100 rounded-lg animate-pulse">Loading Map...</div>
+});
 
 export default function HistoryView() {
   const [pastWorkdays, setPastWorkdays] = useState<Workday[]>([]);
   const [selectedWorkday, setSelectedWorkday] = useState<Workday | null>(null);
   const [displayedSummary, setDisplayedSummary] = useState<WorkdaySummaryContext | null>(null);
+  const [fullWorkdayDetails, setFullWorkdayDetails] = useState<Workday | null>(null);
   const [isLoadingHistory, setIsLoadingHistory] = useState(true);
   const [isLoadingSummary, setIsLoadingSummary] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -129,7 +139,10 @@ export default function HistoryView() {
       };
 
       fetchFullWorkdayDetails(selectedWorkday.id)
-        .then(fullWorkday => calculateWorkdaySummary(fullWorkday))
+        .then(fullWorkday => {
+          setFullWorkdayDetails(fullWorkday);
+          return calculateWorkdaySummary(fullWorkday);
+        })
         .then(summary => {
           setDisplayedSummary(summary);
         })
@@ -218,11 +231,34 @@ export default function HistoryView() {
                     <Loader2 className="mr-2 h-6 w-6 animate-spin" />
                     <p className="text-muted-foreground">Loading summary...</p>
                   </div>
-                ) : displayedSummary ? (
-                  <WorkdaySummaryDisplay summary={displayedSummary} showTitle={false} />
+                ) : displayedSummary && fullWorkdayDetails ? (
+                  <Tabs defaultValue="summary" className="w-full">
+                    <TabsList className="grid w-full grid-cols-4">
+                      <TabsTrigger value="summary">Summary</TabsTrigger>
+                      <TabsTrigger value="map">Map</TabsTrigger>
+                      <TabsTrigger value="timeline">Timeline</TabsTrigger>
+                      <TabsTrigger value="raw">Data</TabsTrigger>
+                    </TabsList>
+
+                    <TabsContent value="summary" className="mt-4">
+                      <WorkdaySummaryDisplay summary={displayedSummary} showTitle={false} />
+                    </TabsContent>
+
+                    <TabsContent value="map" className="mt-4">
+                      <WorkdayMap workday={fullWorkdayDetails} />
+                    </TabsContent>
+
+                    <TabsContent value="timeline" className="mt-4">
+                      <WorkdayTimeline events={fullWorkdayDetails.events} />
+                    </TabsContent>
+
+                    <TabsContent value="raw" className="mt-4">
+                      <RawDataInspector workday={fullWorkdayDetails} />
+                    </TabsContent>
+                  </Tabs>
                 ) : (
                   <p className="text-muted-foreground h-full flex items-center justify-center">
-                    Select a workday from the list to view its summary.
+                    Select a workday from the list to view details.
                   </p>
                 )}
               </div>
