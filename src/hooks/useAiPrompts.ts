@@ -45,6 +45,7 @@ export function useAiPrompts({
             // 2. The workday has been active for at least that duration (prevents alerts on immediate start with old cached GPS)
             if (timeSinceLastMovement > STOP_DETECT_DURATION_MS && timeSinceWorkdayStart > STOP_DETECT_DURATION_MS) {
                 const hasBeenPromptedRecently = workday.lastNewJobPromptTime && (Date.now() - workday.lastNewJobPromptTime < RECENT_PROMPT_THRESHOLD_MS);
+                if (hasBeenPromptedRecently) return;
 
                 setAiLoading(prev => ({ ...prev, newJob: true }));
                 decidePromptForNewJob({ hasBeenPromptedRecently: !!hasBeenPromptedRecently, timeStoppedInMinutes: Math.round(STOP_DETECT_DURATION_MS / (60 * 1000)) })
@@ -76,6 +77,7 @@ export function useAiPrompts({
             const distance = haversineDistance(jobStartLocation, currentLocation);
             if (distance > MOVEMENT_THRESHOLD_METERS) {
                 const lastPromptTime = workday.lastJobCompletionPromptTime;
+                if (lastPromptTime && (Date.now() - lastPromptTime < RECENT_PROMPT_THRESHOLD_MS)) return;
 
                 setAiLoading(prev => ({ ...prev, jobCompletion: true }));
                 decidePromptForJobCompletion({ distanceMovedMeters: distance, lastJobPromptedTimestamp: lastPromptTime })
