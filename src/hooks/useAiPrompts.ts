@@ -16,7 +16,7 @@ interface UseAiPromptsProps {
     isJobModalOpen: boolean;
     setWorkday: React.Dispatch<React.SetStateAction<Workday | null>>;
     recordEvent: (type: TrackingEvent['type'], location: LocationPoint | null, jobId?: string, details?: string) => void;
-    openJobModal: (mode: 'new' | 'summary', data?: { description?: string; summary?: string }) => void;
+    openJobModal: (mode: 'new' | 'summary', data?: { description?: string; summary?: string }, startTime?: number) => void;
 }
 
 export function useAiPrompts({
@@ -52,7 +52,7 @@ export function useAiPrompts({
                     .then(res => {
                         if (res.shouldPrompt) {
                             toast({ title: "¿Nuevo Trabajo?", description: "Parece que te has detenido. ¿Comenzando un nuevo trabajo? IA: " + res.reason });
-                            openJobModal('new');
+                            openJobModal('new', undefined, lastMovementTime);
                             recordEvent('NEW_JOB_PROMPT', currentLocation, undefined, `IA: ${res.reason}`);
                         }
                         setWorkday(prev => prev ? ({ ...prev, lastNewJobPromptTime: Date.now() }) : null);

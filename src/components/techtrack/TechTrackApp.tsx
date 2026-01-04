@@ -42,6 +42,8 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
   const [jobModalMode, setJobModalMode] = useState<'new' | 'summary'>('new');
   const [currentJobFormData, setCurrentJobFormData] = useState({ description: '', summary: '' });
   const [pendingJobStartTime, setPendingJobStartTime] = useState<number | null>(null);
+  const [activityType, setActivityType] = useState<'job' | 'break' | 'supplies'>('job');
+  const [personalBreakReason, setPersonalBreakReason] = useState('');
   const [isSummaryModalOpen, setIsSummaryModalOpen] = useState(false);
   const [endOfDaySummary, setEndOfDaySummary] = useState<WorkdaySummaryContext | null>(null);
 
@@ -56,6 +58,8 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
     setJobModalMode(mode);
     if (data) setCurrentJobFormData({ description: data.description || '', summary: data.summary || '' });
     if (startTime) setPendingJobStartTime(startTime);
+    setActivityType('job');
+    setPersonalBreakReason('');
     setIsJobModalOpen(true);
   };
 
@@ -605,25 +609,90 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
             <DialogTitle>{jobModalMode === 'new' ? 'Nuevo Trabajo' : 'Completar Trabajo'}</DialogTitle>
             <DialogDescription>
               {jobModalMode === 'new'
-                ? 'Describe la tarea que vas a realizar.'
+                ? '¿Qué estás haciendo?'
                 : 'Añade un resumen o notas sobre el trabajo realizado.'}
             </DialogDescription>
           </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="grid gap-2">
-              <Label htmlFor="description" className="flex items-center gap-2">
-                <MessageSquareText className="h-4 w-4" />
-                {jobModalMode === 'new' ? 'Descripción' : 'Trabajo'}
-              </Label>
-              <Textarea
-                id="description"
-                value={currentJobFormData.description}
-                onChange={(e) => setCurrentJobFormData({ ...currentJobFormData, description: e.target.value })}
-                placeholder="Ej: Instalación de fibra en Calle Principal 123..."
-                disabled={jobModalMode === 'summary'}
-                className={jobModalMode === 'summary' ? "bg-slate-100" : ""}
-              />
+
+          {/* Activity Type Selection (only for new mode) */}
+          {jobModalMode === 'new' && (
+            <div className="flex flex-col gap-2 mt-2">
+              <Button
+                variant={activityType === 'job' ? 'default' : 'outline'}
+                className="w-full justify-start h-auto py-3 px-4"
+                onClick={() => setActivityType('job')}
+              >
+                <Briefcase className="mr-3 h-5 w-5" />
+                <div className="flex flex-col items-start">
+                  <span className="font-medium">Nuevo Trabajo</span>
+                  <span className="text-xs text-muted-foreground font-normal">Iniciar una nueva tarea remunerada</span>
+                </div>
+              </Button>
+              <Button
+                variant={activityType === 'break' ? 'default' : 'outline'}
+                className="w-full justify-start h-auto py-3 px-4"
+                onClick={() => setActivityType('break')}
+              >
+                <Clock className="mr-3 h-5 w-5" />
+                <div className="flex flex-col items-start">
+                  <span className="font-medium">Pausa Personal</span>
+                  <span className="text-xs text-muted-foreground font-normal">Almuerzo, descanso, baño...</span>
+                </div>
+              </Button>
+              <Button
+                variant={activityType === 'supplies' ? 'default' : 'outline'}
+                className="w-full justify-start h-auto py-3 px-4"
+                onClick={() => setActivityType('supplies')}
+              >
+                <MapPin className="mr-3 h-5 w-5" />
+                <div className="flex flex-col items-start">
+                  <span className="font-medium">Compra de Insumos</span>
+                  <span className="text-xs text-muted-foreground font-normal">Ferretería, materiales, etc.</span>
+                </div>
+              </Button>
             </div>
+          )}
+          <div className="grid gap-4 py-4">
+            {/* Job Description (for job mode or summary mode) */}
+            {(activityType === 'job' || jobModalMode === 'summary') && (
+              <div className="grid gap-2">
+                <Label htmlFor="description" className="flex items-center gap-2">
+                  <MessageSquareText className="h-4 w-4" />
+                  {jobModalMode === 'new' ? 'Descripción del Trabajo' : 'Trabajo'}
+                </Label>
+                <Textarea
+                  id="description"
+                  value={currentJobFormData.description}
+                  onChange={(e) => setCurrentJobFormData({ ...currentJobFormData, description: e.target.value })}
+                  placeholder="Ej: Instalación de fibra en Calle Principal 123..."
+                  disabled={jobModalMode === 'summary'}
+                  className={jobModalMode === 'summary' ? "bg-slate-100" : ""}
+                />
+                {pendingJobStartTime && jobModalMode === 'new' && (
+                  <p className="text-xs text-muted-foreground">
+                    ⏱️ Hora de inicio: {new Date(pendingJobStartTime).toLocaleTimeString()}
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* Personal Break / Supply Run Reason */}
+            {(activityType === 'break' || activityType === 'supplies') && jobModalMode === 'new' && (
+              <div className="grid gap-2">
+                <Label htmlFor="breakReason" className="flex items-center gap-2">
+                  <MessageSquareText className="h-4 w-4" />
+                  {activityType === 'supplies' ? 'Detalle de Compra' : 'Motivo de la Pausa'}
+                </Label>
+                <Textarea
+                  id="breakReason"
+                  value={personalBreakReason}
+                  onChange={(e) => setPersonalBreakReason(e.target.value)}
+                  placeholder={activityType === 'supplies'
+                    ? "Ej: Ferretería - cables, conectores..."
+                    : "Ej: Fui a comprar comida, Descanso, etc."}
+                />
+              </div>
+            )}
 
             {jobModalMode === 'summary' && (
               <div className="grid gap-2">
@@ -669,11 +738,26 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
               </div>
             )}
           </div>
-          <DialogFooter>
+          <DialogFooter className="flex-col sm:flex-row gap-2">
             <Button variant="outline" onClick={() => setIsJobModalOpen(false)}>Cancelar</Button>
-            <Button onClick={handleJobFormSubmit} disabled={!currentJobFormData.description}>
-              {jobModalMode === 'new' ? 'Iniciar Trabajo' : 'Guardar y Completar'}
-            </Button>
+            {jobModalMode === 'new' && (activityType === 'break' || activityType === 'supplies') ? (
+              <Button
+                onClick={() => {
+                  const eventType = activityType === 'supplies' ? 'Compra de insumos' : 'Pausa personal';
+                  recordEvent('USER_ACTION', currentLocation, undefined, `${eventType}: ${personalBreakReason || 'Sin detalle especificado'}`);
+                  toast({ title: activityType === 'supplies' ? "Compra Registrada" : "Pausa Registrada", description: personalBreakReason || "Actividad registrada." });
+                  handlePauseTracking();
+                  setIsJobModalOpen(false);
+                  setPersonalBreakReason('');
+                }}
+              >
+                {activityType === 'supplies' ? 'Registrar Compra' : 'Registrar Pausa'}
+              </Button>
+            ) : (
+              <Button onClick={handleJobFormSubmit} disabled={!currentJobFormData.description}>
+                {jobModalMode === 'new' ? 'Iniciar Trabajo' : 'Guardar y Completar'}
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>
