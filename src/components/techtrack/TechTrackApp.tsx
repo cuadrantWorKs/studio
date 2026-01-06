@@ -221,7 +221,8 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
         .map(loc => sanitizeLocationPoint(loc))
         .filter(loc => loc !== null) as LocationPoint[];
 
-      // Update jobs
+      // Update jobs and track which ones were force-completed
+      const forceCompletedJobIds: string[] = [];
       finalizedWorkdayForSave.jobs = (finalizedWorkdayForSave.jobs || []).map(job => {
         const jobStartLoc = sanitizeLocationPoint(job.startLocation);
         if (!jobStartLoc) {
@@ -233,24 +234,33 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
             endTime: finalizationTimestamp,
           };
         }
+
+        const isForceCompleting = job.status === 'active';
+        if (isForceCompleting) {
+          forceCompletedJobIds.push(job.id);
+        }
+
         return {
           ...job,
-          status: job.status === 'active' ? 'completed' : (job.status || 'completed'),
-          endTime: job.status === 'active' && !job.endTime ? finalizationTimestamp : (job.endTime || undefined),
-          endLocation: job.status === 'active' && !job.endLocation ? (finalEndLocationCandidate || undefined) : (sanitizeLocationPoint(job.endLocation) || undefined),
+          status: isForceCompleting ? 'completed' : (job.status || 'completed'),
+          endTime: isForceCompleting && !job.endTime ? finalizationTimestamp : (job.endTime || undefined),
+          endLocation: isForceCompleting && !job.endLocation ? (finalEndLocationCandidate || undefined) : (sanitizeLocationPoint(job.endLocation) || undefined),
           startLocation: jobStartLoc,
         };
       });
 
-      // Add JOB_COMPLETED events
-      const newEvents: TrackingEvent[] = (finalizedWorkdayForSave.jobs || []).map((job: Job) => ({
-        id: crypto.randomUUID(),
-        type: 'JOB_COMPLETED',
-        timestamp: job.endTime || finalizationTimestamp,
-        jobId: job.id || undefined,
-        details: `Trabajo completado: ${job.description || ''}. Resumen: ${job.summary || ''}. IA: ${job.aiSummary || 'N/A'}`,
-        location: sanitizeLocationPoint(job.endLocation) || sanitizeLocationPoint(job.startLocation) || undefined,
-      }));
+      // Add JOB_COMPLETED events ONLY for jobs that were force-completed
+      // (The ones manually completed already have an event recorded via handleJobFormSubmit)
+      const newEvents: TrackingEvent[] = (finalizedWorkdayForSave.jobs || [])
+        .filter(job => forceCompletedJobIds.includes(job.id))
+        .map((job: Job) => ({
+          id: crypto.randomUUID(),
+          type: 'JOB_COMPLETED',
+          timestamp: job.endTime || finalizationTimestamp,
+          jobId: job.id || undefined,
+          details: `Trabajo completado: ${job.description || ''}. Resumen: ${job.summary || ''}. IA: ${job.aiSummary || 'N/A'}`,
+          location: sanitizeLocationPoint(job.endLocation) || sanitizeLocationPoint(job.startLocation) || undefined,
+        }));
 
       finalizedWorkdayForSave.events = [...finalizedWorkdayForSave.events, ...newEvents].map(event => ({
         ...event,
