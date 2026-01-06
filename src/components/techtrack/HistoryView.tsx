@@ -191,10 +191,10 @@ export default function HistoryView() {
       <Card className="w-full max-w-3xl shadow-xl my-8">
         <CardHeader>
           <div className="flex justify-between items-center">
-            <CardTitle className="text-2xl">Workday History (Cloud)</CardTitle>
+            <CardTitle className="text-2xl">Historial de Jornadas (Nube)</CardTitle>
             <Button variant="outline" size="sm" asChild>
               <Link href="/">
-                <ArrowLeft className="mr-2 h-4 w-4" /> Back to Tracking
+                <ArrowLeft className="mr-2 h-4 w-4" /> Volver al Seguimiento
               </Link>
             </Button>
           </div>
@@ -215,10 +215,10 @@ export default function HistoryView() {
                     >
                       <div className="flex flex-col">
                         <span>
-                          {wd.date ? new Date(wd.date).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' }) : 'Date N/A'}
+                          {wd.date ? new Date(wd.date.replace(/-/g, '/')).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' }) : 'Fecha no disponible'}
                         </span>
                         <span className="text-xs text-muted-foreground">
-                          {wd.startTime ? `Started: ${new Date(wd.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : 'Start Time N/A'}
+                          {wd.startTime ? `Iniciado: ${new Date(wd.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : 'Inicio no disponible'}
                         </span>
                       </div>
                     </Button>
@@ -234,10 +234,10 @@ export default function HistoryView() {
                 ) : displayedSummary && fullWorkdayDetails ? (
                   <Tabs defaultValue="summary" className="w-full">
                     <TabsList className="grid w-full grid-cols-4">
-                      <TabsTrigger value="summary">Summary</TabsTrigger>
-                      <TabsTrigger value="map">Map</TabsTrigger>
-                      <TabsTrigger value="timeline">Timeline</TabsTrigger>
-                      <TabsTrigger value="raw">Data</TabsTrigger>
+                      <TabsTrigger value="summary">Resumen</TabsTrigger>
+                      <TabsTrigger value="map">Mapa</TabsTrigger>
+                      <TabsTrigger value="timeline">Cronología</TabsTrigger>
+                      <TabsTrigger value="raw">Datos</TabsTrigger>
                     </TabsList>
 
                     <TabsContent value="summary" className="mt-4">

@@ -27,23 +27,23 @@ const summarizeJobDescriptionPrompt = ai.definePrompt({
   input: { schema: SummarizeJobDescriptionInputSchema },
   output: { schema: SummarizeJobDescriptionOutputSchema },
   config: { temperature: 0.2 },
-  prompt: `You are an expert technical writer.
+  prompt: `Sos un escritor técnico experto.
   
-  Job Description:
+  Descripción del Trabajo:
   {{{jobDescription}}}
 
-  Technician's Notes:
-  {{#if additionalNotes}}{{{additionalNotes}}}{{else}}(None){{/if}}
+  Notas del Técnico:
+  {{#if additionalNotes}}{{{additionalNotes}}}{{else}}(Ninguna){{/if}}
   
-  Task: Create a professional final summary of the work.
-  Instructions:
-  1. Combine the Job Description and the Technician's Notes.
-  2. The Technician's Notes are the most important source of truth for what *actually* happened (e.g., successful installation, specific issues).
-  3. Professionalize the language.
-  4. CRITICAL: Do NOT invent details not found in either the description or the notes.
+  Tarea: Creá un resumen profesional final del trabajo.
+  Instrucciones:
+  1. Combiná la Descripción del Trabajo y las Notas del Técnico.
+  2. Las Notas del Técnico son la fuente de verdad más importante sobre lo que *realmente* pasó (ej: instalación exitosa, problemas específicos).
+  3. Profesionalizá el lenguaje usando español argentino.
+  4. CRÍTICO: NO inventés detalles que no estén en la descripción ni en las notas.
   
-  Respond with ONLY valid JSON:
-  {"summary": "The professional summary text"}`,
+  Respondé SOLO con JSON válido:
+  {"summary": "El texto del resumen profesional"}`,
 });
 
 const summarizeJobDescriptionFlow = ai.defineFlow(

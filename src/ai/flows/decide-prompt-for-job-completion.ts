@@ -21,6 +21,10 @@ const DecidePromptForJobCompletionInputSchema = z.object({
     .describe(
       'The timestamp of the last time the user was prompted for job details. Unix epoch time in milliseconds. If undefined, the user has not been prompted yet.'
     ),
+  jobType: z
+    .enum(['regular', 'supplies'])
+    .optional()
+    .describe('The type of job: regular or supplies (supply run). Supply runs should not prompt for completion.'),
 });
 export type DecidePromptForJobCompletionInput = z.infer<
   typeof DecidePromptForJobCompletionInputSchema
@@ -52,18 +56,20 @@ const prompt = ai.definePrompt({
   name: 'decidePromptForJobCompletionPrompt',
   input: { schema: DecidePromptForJobCompletionInputSchema },
   output: { schema: DecidePromptForJobCompletionOutputSchema },
-  prompt: `You are an AI assistant helping determine if a technician should be prompted about job completion.
+  prompt: `Sos un asistente de IA que ayuda a determinar si se debe preguntar a un técnico sobre la finalización de un trabajo.
 
-Input data:
-- Distance moved: {{distanceMovedMeters}} meters
-- Last prompted timestamp: {{lastJobPromptedTimestamp}}
+Datos de entrada:
+- Distancia recorrida: {{distanceMovedMeters}} metros
+- Último timestamp de pregunta: {{lastJobPromptedTimestamp}}
+- Tipo de trabajo: {{jobType}}
 
-Rules:
-- Prompt if distance moved > 100 meters
-- Don't prompt if prompted within last 30 minutes (1800000 ms)
+Reglas:
+- Si el tipo de trabajo es 'supplies' (compra de insumos), NUNCA preguntar. Las compras de insumos no deben interrumpir la sesión.
+- Preguntar si la distancia recorrida es mayor a 100 metros
+- No preguntar si se preguntó en los últimos 30 minutos (1800000 ms)
 
-Respond with ONLY valid JSON, no other text:
-{"shouldPrompt": true or false, "reason": "brief explanation"}`,
+Respondé SOLO con JSON válido, sin otro texto:
+{"shouldPrompt": true o false, "reason": "breve explicación en español argentino"}`,
 });
 
 const decidePromptForJobCompletionFlow = ai.defineFlow(

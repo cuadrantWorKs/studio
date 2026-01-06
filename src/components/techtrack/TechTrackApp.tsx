@@ -73,7 +73,13 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
     openJobModal
   });
 
-  const getCurrentFormattedDate = () => new Date().toISOString().split('T')[0];
+  const getCurrentFormattedDate = () => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
 
   // Periodic location updates
   useEffect(() => {
@@ -511,7 +517,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
                 <User className="h-5 w-5 text-slate-400" />
                 {technicianName}
               </h2>
-              <p className="text-slate-400 text-sm">{new Date(workday.date).toLocaleDateString()}</p>
+              <p className="text-slate-400 text-sm">{new Date(workday.date.replace(/-/g, '/')).toLocaleDateString()}</p>
             </div>
             <div className={`px-3 py-1 rounded-full text-xs font-medium flex items-center gap-1 ${workday.status === 'tracking' ? 'bg-green-500/20 text-green-400' :
               workday.status === 'paused' ? 'bg-amber-500/20 text-amber-400' :
@@ -740,18 +746,46 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
           </div>
           <DialogFooter className="flex-col sm:flex-row gap-2">
             <Button variant="outline" onClick={() => setIsJobModalOpen(false)}>Cancelar</Button>
-            {jobModalMode === 'new' && (activityType === 'break' || activityType === 'supplies') ? (
+            {jobModalMode === 'new' && activityType === 'break' ? (
               <Button
                 onClick={() => {
-                  const eventType = activityType === 'supplies' ? 'Compra de insumos' : 'Pausa personal';
-                  recordEvent('USER_ACTION', currentLocation, undefined, `${eventType}: ${personalBreakReason || 'Sin detalle especificado'}`);
-                  toast({ title: activityType === 'supplies' ? "Compra Registrada" : "Pausa Registrada", description: personalBreakReason || "Actividad registrada." });
+                  recordEvent('USER_ACTION', currentLocation, undefined, `Pausa personal: ${personalBreakReason || 'Sin detalle especificado'}`);
+                  toast({ title: "Pausa Registrada", description: personalBreakReason || "Actividad registrada." });
                   handlePauseTracking();
                   setIsJobModalOpen(false);
                   setPersonalBreakReason('');
                 }}
               >
-                {activityType === 'supplies' ? 'Registrar Compra' : 'Registrar Pausa'}
+                Registrar Pausa
+              </Button>
+            ) : jobModalMode === 'new' && activityType === 'supplies' ? (
+              <Button
+                onClick={() => {
+                  const safeCurrentLocation = sanitizeLocationPoint(currentLocation);
+                  if (!safeCurrentLocation) {
+                    toast({ title: "Ubicación Requerida", description: "No se puede registrar la compra sin una ubicación válida.", variant: "destructive" });
+                    return;
+                  }
+                  const supplyJob: Job = {
+                    id: crypto.randomUUID(),
+                    description: `Compra de insumos: ${personalBreakReason || 'Sin detalle'}`,
+                    startTime: Date.now(),
+                    startLocation: safeCurrentLocation,
+                    status: 'active',
+                    type: 'supplies',
+                  };
+                  setWorkday(prev => prev ? ({
+                    ...prev,
+                    jobs: [...prev.jobs, supplyJob],
+                    currentJobId: supplyJob.id,
+                  }) : null);
+                  recordEvent('JOB_START', safeCurrentLocation, supplyJob.id, `Compra de insumos iniciada: ${personalBreakReason || 'Sin detalle'}`);
+                  toast({ title: "Compra de Insumos Registrada", description: "La compra se registró como actividad. La sesión sigue activa." });
+                  setIsJobModalOpen(false);
+                  setPersonalBreakReason('');
+                }}
+              >
+                Registrar Compra
               </Button>
             ) : (
               <Button onClick={handleJobFormSubmit} disabled={!currentJobFormData.description}>

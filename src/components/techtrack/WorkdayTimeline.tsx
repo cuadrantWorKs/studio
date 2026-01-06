@@ -7,6 +7,7 @@ import {
     PlayCircle, PauseCircle, MapPin, Briefcase,
     CheckCircle, AlertTriangle, MessageSquare, Info
 } from "lucide-react";
+import LocationDisplay from "./LocationDisplay";
 
 interface WorkdayTimelineProps {
     events: TrackingEvent[];
@@ -34,8 +35,21 @@ export default function WorkdayTimeline({ events }: WorkdayTimelineProps) {
         }
     };
 
-    const formatEventType = (type: string) => {
-        return type.replace(/_/g, ' ');
+    const formatEventType = (type: TrackingEvent['type']) => {
+        switch (type) {
+            case 'SESSION_START': return 'INICIO SESIÓN';
+            case 'SESSION_END': return 'FIN SESIÓN';
+            case 'SESSION_PAUSE': return 'PAUSA SESIÓN';
+            case 'SESSION_RESUME': return 'REANUDACIÓN SESIÓN';
+            case 'JOB_START': return 'INICIO TRABAJO';
+            case 'JOB_COMPLETED': return 'TRABAJO COMPLETADO';
+            case 'NEW_JOB_PROMPT': return 'PROMPT NUEVO TRABAJO';
+            case 'JOB_COMPLETION_PROMPT': return 'PROMPT CIERRE TRABAJO';
+            case 'LOCATION_UPDATE': return 'ACTUALIZACIÓN UBICACIÓN';
+            case 'USER_ACTION': return 'ACCIÓN USUARIO';
+            case 'ERROR': return 'ERROR';
+            default: return type.replace(/_/g, ' ');
+        }
     };
 
     return (
@@ -60,10 +74,7 @@ export default function WorkdayTimeline({ events }: WorkdayTimelineProps) {
                             </p>
                         )}
                         {event.location && (
-                            <p className="text-xs text-slate-400 mt-0.5 flex items-center gap-1">
-                                <MapPin className="h-3 w-3" />
-                                {event.location.latitude.toFixed(5)}, {event.location.longitude.toFixed(5)}
-                            </p>
+                            <LocationDisplay location={event.location} />
                         )}
                     </div>
                 ))}
@@ -71,6 +82,7 @@ export default function WorkdayTimeline({ events }: WorkdayTimelineProps) {
         </ScrollArea>
     );
 }
+
 
 function StopCircle({ className }: { className?: string }) {
     return (

@@ -45,18 +45,18 @@ const prompt = ai.definePrompt({
   name: 'decidePromptForNewJobPrompt',
   input: { schema: DecidePromptForNewJobInputSchema },
   output: { schema: DecidePromptForNewJobOutputSchema },
-  prompt: `You are an AI assistant helping determine if a technician should be prompted to start a new job.
+  prompt: `Sos un asistente de IA que ayuda a determinar si se debe preguntar a un técnico para iniciar un nuevo trabajo.
 
-Input data:
-- Time stopped: {{timeStoppedInMinutes}} minutes
-- Was prompted recently: {{hasBeenPromptedRecently}}
+Datos de entrada:
+- Tiempo detenido: {{timeStoppedInMinutes}} minutos
+- Se preguntó recientemente: {{hasBeenPromptedRecently}}
 
-Rules:
-- Prompt if stopped for 15+ minutes and not prompted recently
-- Don't prompt too often to avoid being annoying
+Reglas:
+- Preguntar si se detuvo por más de 15 minutos y no se preguntó recientemente
+- No preguntar demasiado seguido para no ser molesto
 
-Respond with ONLY valid JSON, no other text:
-{"shouldPrompt": true or false, "reason": "brief explanation"}`,
+Respondé SOLO con JSON válido, sin otro texto:
+{"shouldPrompt": true o false, "reason": "breve explicación en español argentino"}`,
 });
 
 const decidePromptForNewJobFlow = ai.defineFlow(

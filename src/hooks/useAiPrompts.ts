@@ -80,7 +80,7 @@ export function useAiPrompts({
                 if (lastPromptTime && (Date.now() - lastPromptTime < RECENT_PROMPT_THRESHOLD_MS)) return;
 
                 setAiLoading(prev => ({ ...prev, jobCompletion: true }));
-                decidePromptForJobCompletion({ distanceMovedMeters: distance, lastJobPromptedTimestamp: lastPromptTime })
+                decidePromptForJobCompletion({ distanceMovedMeters: distance, lastJobPromptedTimestamp: lastPromptTime, jobType: currentJob.type || 'regular' })
                     .then(res => {
                         if (res.shouldPrompt) {
                             toast({ title: "¿Actualizar Trabajo?", description: `Te has movido significativamente. ¿Completaste el trabajo: ${currentJob.description}? IA: ${res.reason}` });

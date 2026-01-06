@@ -17,6 +17,7 @@ export interface Job {
   aiSummary?: string; // AI-generated summary
   status: 'active' | 'completed';
   drivingDistanceKm?: number; // OSRM calculated distance
+  type?: 'regular' | 'supplies';
 }
 
 export type TrackingStatus = 'idle' | 'tracking' | 'paused' | 'ended';
