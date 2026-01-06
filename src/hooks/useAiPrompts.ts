@@ -33,26 +33,46 @@ export function useAiPrompts({
 
     // New Job Prompt Logic
     useEffect(() => {
-        if (workday?.status === 'tracking' && !currentJob) {
+        if (workday?.status === 'tracking' && !currentJob && currentLocation) {
             if (aiLoading.newJob || isJobModalOpen) return;
 
-            const lastMovementTime = workday.locationHistory[workday.locationHistory.length - 1]?.timestamp || workday.startTime;
-            const timeSinceLastMovement = Date.now() - (lastMovementTime || Date.now());
+            // Find the point where the technician first stopped moving
+            // Iterate backwards through history to find the first point that is far away
+            let stopStartTime = workday.locationHistory[workday.locationHistory.length - 1]?.timestamp || workday.startTime || Date.now();
+
+            for (let i = workday.locationHistory.length - 1; i >= 0; i--) {
+                const point = workday.locationHistory[i];
+                const distance = haversineDistance(point, currentLocation);
+                if (distance > MOVEMENT_THRESHOLD_METERS) {
+                    // This was the last time we were "far away"
+                    // So the stop started at the next point's timestamp
+                    stopStartTime = workday.locationHistory[i + 1]?.timestamp || point.timestamp || workday.startTime || Date.now();
+                    break;
+                } else {
+                    // Still part of the same stop cluster
+                    stopStartTime = point.timestamp;
+                }
+            }
+
+            const timeSinceStopStarted = Date.now() - stopStartTime;
             const timeSinceWorkdayStart = Date.now() - (workday.startTime || Date.now());
 
-            // Only trigger if BOTH:
-            // 1. We haven't moved for the threshold duration
-            // 2. The workday has been active for at least that duration (prevents alerts on immediate start with old cached GPS)
-            if (timeSinceLastMovement > STOP_DETECT_DURATION_MS && timeSinceWorkdayStart > STOP_DETECT_DURATION_MS) {
+            // Trigger if:
+            // 1. We've been stopped for > 15 mins (based on first point in cluster)
+            // 2. Workday has been active for > 15 mins
+            if (timeSinceStopStarted > STOP_DETECT_DURATION_MS && timeSinceWorkdayStart > STOP_DETECT_DURATION_MS) {
                 const hasBeenPromptedRecently = workday.lastNewJobPromptTime && (Date.now() - workday.lastNewJobPromptTime < RECENT_PROMPT_THRESHOLD_MS);
                 if (hasBeenPromptedRecently) return;
 
                 setAiLoading(prev => ({ ...prev, newJob: true }));
-                decidePromptForNewJob({ hasBeenPromptedRecently: !!hasBeenPromptedRecently, timeStoppedInMinutes: Math.round(STOP_DETECT_DURATION_MS / (60 * 1000)) })
+                decidePromptForNewJob({
+                    hasBeenPromptedRecently: !!hasBeenPromptedRecently,
+                    timeStoppedInMinutes: Math.round(timeSinceStopStarted / (60 * 1000))
+                })
                     .then(res => {
                         if (res.shouldPrompt) {
                             toast({ title: "¿Nuevo Trabajo?", description: "Parece que te has detenido. ¿Comenzando un nuevo trabajo? IA: " + res.reason });
-                            openJobModal('new', undefined, lastMovementTime);
+                            openJobModal('new', undefined, stopStartTime);
                             recordEvent('NEW_JOB_PROMPT', currentLocation, undefined, `IA: ${res.reason}`);
                         }
                         setWorkday(prev => prev ? ({ ...prev, lastNewJobPromptTime: Date.now() }) : null);
