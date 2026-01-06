@@ -10,10 +10,11 @@ interface LocationInfoProps {
   currentLocation?: LocationPoint | null;
   label?: string;
   time?: number;
+  showCoordinates?: boolean;
   getGoogleMapsLink?: (location: LocationPoint) => string;
 }
 
-export default function LocationInfo({ location, currentLocation, label, time, getGoogleMapsLink }: LocationInfoProps) {
+export default function LocationInfo({ location, currentLocation, label, time, showCoordinates, getGoogleMapsLink }: LocationInfoProps) {
   const loc = location || currentLocation;
 
   if (!loc) return null;
@@ -23,6 +24,7 @@ export default function LocationInfo({ location, currentLocation, label, time, g
       location={loc}
       label={label}
       time={time}
+      showCoordinates={showCoordinates}
     />
   );
 }

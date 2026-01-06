@@ -205,6 +205,9 @@ export default function WorkdayMap({ workday }: WorkdayMapProps) {
                         <Popup>
                             <div className="min-w-[200px]">
                                 <strong>🔵 {j.title}</strong><br />
+                                <div className="text-[11px] font-semibold text-blue-600 mb-1">
+                                    Iniciado: {j.time}
+                                </div>
                                 <div className="mt-1 mb-2">
                                     <LocationDisplay location={j.rawLocation} showCoordinates={false} />
                                 </div>
