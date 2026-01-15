@@ -20,7 +20,7 @@ async function handleRequest(request: NextRequest) {
         console.log(`[Traccar Webhook] ${request.method} request received`, request.headers.get('content-type'));
         const searchParams = url.searchParams;
 
-        // Traccar Client Protocol (OsmAnd)
+        // 1. EXTRACT DATA
         let params = Object.fromEntries(searchParams.entries());
 
         if (request.method === 'POST') {
@@ -57,87 +57,93 @@ async function handleRequest(request: NextRequest) {
             }
         }
 
+        // 2. VALIDATE DEVICE
         const deviceId = params.id || params.deviceid || params.deviceId || params.device_id;
-
         if (!deviceId) {
             console.error('[Traccar Error] Missing Device ID. Params:', JSON.stringify(params));
             return new NextResponse('Device ID required', { status: 400 });
         }
 
+        // 3. VALIDATE COORDS
         const lat = parseFloat(params.lat || params.latitude);
         const lon = parseFloat(params.lon || params.longitude);
-
         if (isNaN(lat) || isNaN(lon)) {
             console.error('[Traccar Error] Invalid Lat/Lon. Params:', JSON.stringify(params));
             return new NextResponse('Valid Latitude and Longitude required', { status: 400 });
         }
 
-        // Parse Timestamp
+        // 4. ROBUST TIMESTAMP PARSING
         let timestampVal = params.timestamp;
         let finalTimestamp: string;
 
         if (!timestampVal) {
             finalTimestamp = new Date().toISOString();
         } else {
-            const tsNum = parseFloat(timestampVal);
-            if (!isNaN(tsNum)) {
+            // Check if it's a pure number (Unix timestamp).
+            // Regex check because parseFloat("2026-01-15") returns 2026.
+            const isNumeric = /^\d+$/.test(String(timestampVal));
+
+            if (isNumeric) {
+                const tsNum = Number(timestampVal);
                 if (tsNum < 10000000000) { // Seconds
                     finalTimestamp = new Date(tsNum * 1000).toISOString();
                 } else { // Ms
                     finalTimestamp = new Date(tsNum).toISOString();
                 }
             } else {
+                // Treat as date string
                 try {
-                    finalTimestamp = new Date(timestampVal).toISOString();
+                    const dateObj = new Date(timestampVal);
+                    if (isNaN(dateObj.getTime())) {
+                        finalTimestamp = new Date().toISOString();
+                    } else {
+                        finalTimestamp = dateObj.toISOString();
+                    }
                 } catch {
                     finalTimestamp = new Date().toISOString();
                 }
-                // Sanity Check: If timestamp is too old (e.g. 1970 or < 2025), use current time
-                // This fixes the "29 million minutes ago" error
-                const dateObj = new Date(finalTimestamp);
-                const minDate = new Date('2025-01-01').getTime();
+            }
 
-                if (isNaN(dateObj.getTime()) || dateObj.getTime() < minDate) {
-                    console.warn(`[Traccar Warning] Invalid/Old timestamp received (${finalTimestamp}). Defaulting to NOW.`);
-                    finalTimestamp = new Date().toISOString();
-                }
+            // Sanity Check: If timestamp is too old (e.g. 1970 or < 2025), use current time
+            const dateObj = new Date(finalTimestamp);
+            const minDate = new Date('2025-01-01').getTime();
+            if (isNaN(dateObj.getTime()) || dateObj.getTime() < minDate) {
+                console.warn(`[Traccar Warning] Invalid/Old timestamp received (${timestampVal} -> ${finalTimestamp}). Defaulting to NOW.`);
+                finalTimestamp = new Date().toISOString();
+            }
+        }
 
-                console.log(`[Traccar Debug] Final Timestamp used: ${finalTimestamp}`);
+        console.log(`[Traccar Debug] Processing ${deviceId} at ${finalTimestamp}`);
 
-                const adminDb = getAdminSupabase();
+        const adminDb = getAdminSupabase();
 
-                // 1. Store Raw Location
-                const data: RawLocationInsert = {
-                    device_id: deviceId,
-                    latitude: lat,
-                    longitude: lon,
-                    timestamp: finalTimestamp,
-                    speed: params.speed ? parseFloat(params.speed) : null,
-                    bearing: params.bearing ? parseFloat(params.bearing) : params.heading ? parseFloat(params.heading) : null,
-                    altitude: params.altitude ? parseFloat(params.altitude) : null,
-                    accuracy: params.accuracy ? parseFloat(params.accuracy) : null,
-                    battery: params.batt ? parseFloat(params.batt) : null,
-                    processed: false
-                };
+        // 5. STORE RAW LOCATION
+        const rawData: RawLocationInsert = {
+            device_id: deviceId,
+            latitude: lat,
+            longitude: lon,
+            timestamp: finalTimestamp,
+            speed: params.speed ? parseFloat(params.speed) : null,
+            bearing: params.bearing ? parseFloat(params.bearing) : params.heading ? parseFloat(params.heading) : null,
+            altitude: params.altitude ? parseFloat(params.altitude) : null,
+            accuracy: params.accuracy ? parseFloat(params.accuracy) : null,
+            battery: params.batt ? parseFloat(params.batt) : params.battery?.level ? parseFloat(params.battery.level) : null,
+            processed: false
+        };
 
-                const { error: insertError } = await adminDb.from('raw_locations').insert(data);
+        const { error: insertError } = await adminDb.from('raw_locations').insert(rawData);
+        if (insertError) {
+            console.error('Error inserting raw location:', insertError);
+            return new NextResponse('Database Error', { status: 500 });
+        }
 
-                if (insertError) {
-                    console.error('Error inserting raw location:', insertError);
-                    // If we fail to store, we might still want to try processing logic? No, return error.
-                    return new NextResponse('Database Error', { status: 500 });
-                }
-
-                // 2. Geofence / Event Logic
-                // Assumption: deviceId IS the user_id (UUID)
-                // If deviceId is not a UUID, this might throw, so let's check basic regex or try/catch
-                const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-
-                if (uuidRegex.test(deviceId)) {
-                    // Find active workday
-                    const { data: workday } = await adminDb
-                        .from('workdays')
-                        .select(`
+        // 6. GEOFENCE / EVENT LOGIC
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+        if (uuidRegex.test(deviceId)) {
+            // Find active workday
+            const { data: workday } = await adminDb
+                .from('workdays')
+                .select(`
                     id, 
                     status,
                     current_job_id,
@@ -148,77 +154,63 @@ async function handleRequest(request: NextRequest) {
                         start_location_longitude
                     )
                 `)
-                        .eq('user_id', deviceId)
-                        .in('status', ['tracking', 'idle']) // Check tracking or idle? User said "paused" tracking is the issue.
-                        // Actually user said "tracking being paused when browser was closed"
-                        // So if status is 'tracking' in DB but browser is closed, we are here.
-                        .order('date', { ascending: false })
-                        .limit(1)
-                        .single();
+                .eq('user_id', deviceId)
+                .in('status', ['tracking', 'idle'])
+                .order('date', { ascending: false })
+                .limit(1)
+                .single();
 
-                    if (workday) {
-                        // Check Active Job Geofence
-                        if (workday.current_job_id) {
-                            // Find the current job object
-                            const currentJob = Array.isArray(workday.jobs)
-                                ? workday.jobs.find(j => j.id === workday.current_job_id)
-                                : null;
+            if (workday && workday.current_job_id) {
+                // Find the current job object
+                const currentJob = Array.isArray(workday.jobs)
+                    ? workday.jobs.find(j => j.id === workday.current_job_id)
+                    : null;
 
-                            if (currentJob && currentJob.start_location_latitude && currentJob.start_location_longitude) {
-                                const jobLoc = {
-                                    latitude: currentJob.start_location_latitude,
-                                    longitude: currentJob.start_location_longitude
-                                };
-                                const currentLoc = { latitude: lat, longitude: lon };
+                if (currentJob && currentJob.start_location_latitude && currentJob.start_location_longitude) {
+                    const jobLoc = {
+                        latitude: currentJob.start_location_latitude,
+                        longitude: currentJob.start_location_longitude
+                    };
+                    const currentLoc = { latitude: lat, longitude: lon };
 
-                                const dist = haversineDistance(jobLoc, currentLoc); // meters
-                                const GEOFENCE_RADIUS = 200; // meters
+                    const dist = haversineDistance(jobLoc, currentLoc); // meters
+                    const GEOFENCE_RADIUS = 200; // meters
 
-                                if (dist > GEOFENCE_RADIUS) {
-                                    // User is outside geofence.
-                                    // Challenge: DID WE ALREADY TRIGGER?
-                                    // We don't want to spam GEOFENCE_EXIT events every second.
-                                    // We should check the LAST event.
+                    if (dist > GEOFENCE_RADIUS) {
+                        // Check last event to avoid spamming
+                        const { data: lastEvent } = await adminDb
+                            .from('events')
+                            .select('type')
+                            .eq('workday_id', workday.id)
+                            .eq('job_id', currentJob.id)
+                            .order('timestamp', { ascending: false })
+                            .limit(1)
+                            .single();
 
-                                    const { data: lastEvent } = await adminDb
-                                        .from('events')
-                                        .select('type')
-                                        .eq('workday_id', workday.id)
-                                        .eq('job_id', currentJob.id) // Specific to this job
-                                        .order('timestamp', { ascending: false })
-                                        .limit(1)
-                                        .single();
-
-                                    if (!lastEvent || (lastEvent.type !== 'GEOFENCE_EXIT' && lastEvent.type !== 'JOB_COMPLETED')) {
-                                        // Create Event
-                                        const exitEvent = {
-                                            workday_id: workday.id,
-                                            type: 'GEOFENCE_EXIT',
-                                            timestamp: new Date(finalTimestamp).getTime(), // Events use number timestamp?
-                                            // Wait, events table uses `timestamp` column which might be BigInt or timestamptz?
-                                            // types.ts says `timestamp: number` (unix ms).
-                                            // supabase-types.ts says `timestamp: number | null`.
-                                            // So we use .getTime()
-                                            job_id: currentJob.id,
-                                            details: `Detected exit from job site (${Math.round(dist)}m away)`,
-                                            location_latitude: lat,
-                                            location_longitude: lon,
-                                            location_timestamp: new Date(finalTimestamp).getTime(),
-                                            location_accuracy: params.accuracy ? parseFloat(params.accuracy) : null
-                                        };
-
-                                        await adminDb.from('events').insert(exitEvent as any); // Cast to any because of type mismatch risk with generated types
-                                    }
-                                }
-                            }
+                        if (!lastEvent || (lastEvent.type !== 'GEOFENCE_EXIT' && lastEvent.type !== 'JOB_COMPLETED')) {
+                            // Create Event
+                            const exitEvent = {
+                                workday_id: workday.id,
+                                type: 'GEOFENCE_EXIT',
+                                timestamp: new Date(finalTimestamp).getTime(),
+                                job_id: currentJob.id,
+                                details: `Detected exit from job site (${Math.round(dist)}m away)`,
+                                location_latitude: lat,
+                                location_longitude: lon,
+                                location_timestamp: new Date(finalTimestamp).getTime(),
+                                location_accuracy: params.accuracy ? parseFloat(params.accuracy) : null
+                            };
+                            await adminDb.from('events').insert(exitEvent as any);
                         }
                     }
                 }
-
-                return new NextResponse('OK', { status: 200 });
-
-            } catch (error: any) {
-                console.error('Webhook Handler Error:', error);
-                return new NextResponse(error.message || 'Internal Server Error', { status: 500 });
             }
         }
+
+        return new NextResponse('OK', { status: 200 });
+
+    } catch (error: any) {
+        console.error('Webhook Handler Error:', error);
+        return new NextResponse(error.message || 'Internal Server Error', { status: 500 });
+    }
+}
