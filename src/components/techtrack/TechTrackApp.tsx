@@ -782,8 +782,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
       {/* Location Info */}
       <LocationInfo currentLocation={currentLocation} />
 
-      {/* Location Info */}
-      <LocationInfo currentLocation={currentLocation} />
+
 
       {/* Geofence Prompt */}
       {currentJob && detectedExitEvent && (
