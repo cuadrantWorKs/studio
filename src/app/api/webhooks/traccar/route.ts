@@ -17,6 +17,27 @@ export async function POST(request: NextRequest) {
 async function handleRequest(request: NextRequest) {
     try {
         const url = new URL(request.url);
+
+        // ========== FULL REQUEST CAPTURE ==========
+        // Log all headers
+        const headersObj: Record<string, string> = {};
+        request.headers.forEach((value, key) => {
+            headersObj[key] = value;
+        });
+        console.log('[Traccar RAW] === HEADERS ===');
+        console.log(JSON.stringify(headersObj, null, 2));
+
+        // Log query params
+        const queryParams = Object.fromEntries(url.searchParams.entries());
+        console.log('[Traccar RAW] === QUERY PARAMS ===');
+        console.log(JSON.stringify(queryParams, null, 2));
+
+        // Clone request to read body as text (raw)
+        const rawBodyText = await request.clone().text();
+        console.log('[Traccar RAW] === RAW BODY TEXT ===');
+        console.log(rawBodyText);
+        // ========== END CAPTURE ==========
+
         console.log(`[Traccar Webhook] ${request.method} request received`, request.headers.get('content-type'));
         const searchParams = url.searchParams;
 
