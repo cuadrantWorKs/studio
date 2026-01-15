@@ -32,22 +32,40 @@ async function handleRequest(request: NextRequest) {
                     params = { ...params, ...formParams };
                 } else if (contentType?.includes('application/json')) {
                     const jsonBody = await request.json();
-                    params = { ...params, ...jsonBody };
+
+                    // --- PAYLOAD NORMALIZATION ---
+                    // Handle "TransistorSoft" style payloads where data is wrapped in "location"
+                    let data = jsonBody;
+                    if (data.location) {
+                        data = { ...data, ...data.location }; // Unwrap 'location'
+                    }
+
+                    // Handle "coords" nesting
+                    if (data.coords) {
+                        data.latitude = data.coords.latitude;
+                        data.longitude = data.coords.longitude;
+                        data.accuracy = data.coords.accuracy;
+                        data.altitude = data.coords.altitude;
+                        data.heading = data.coords.heading;
+                        data.speed = data.coords.speed;
+                    }
+
+                    params = { ...params, ...data };
                 }
             } catch (e) {
                 // ignore body parsing error, stick to URL params
             }
         }
 
-        const deviceId = params.id || params.deviceid || params.deviceId;
+        const deviceId = params.id || params.deviceid || params.deviceId || params.device_id;
 
         if (!deviceId) {
             console.error('[Traccar Error] Missing Device ID. Params:', JSON.stringify(params));
             return new NextResponse('Device ID required', { status: 400 });
         }
 
-        const lat = parseFloat(params.lat);
-        const lon = parseFloat(params.lon);
+        const lat = parseFloat(params.lat || params.latitude);
+        const lon = parseFloat(params.lon || params.longitude);
 
         if (isNaN(lat) || isNaN(lon)) {
             console.error('[Traccar Error] Invalid Lat/Lon. Params:', JSON.stringify(params));

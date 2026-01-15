@@ -40,3 +40,4 @@ When a technician ends their workday, the system will:
 1. Calculate distance from the last job location
 2. To the configured home location (from .env.local)
 3. Include this "return trip" distance in the total km for payment
+loo
