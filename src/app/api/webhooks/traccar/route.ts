@@ -122,10 +122,14 @@ async function handleRequest(request: NextRequest) {
             processed: false
         };
 
+        console.log('[Traccar Debug] Inserting raw data:', JSON.stringify(rawData));
+
         const { error: insertError } = await adminDb.from('raw_locations').insert(rawData);
         if (insertError) {
-            console.error('Error inserting raw location:', insertError);
-            return new NextResponse('Database Error', { status: 500 });
+            console.error('[Traccar Error] Database Insert Failed:', JSON.stringify(insertError));
+            return new NextResponse('Database Error: ' + insertError.message, { status: 500 });
+        } else {
+            console.log('[Traccar Debug] Successfully inserted into raw_locations');
         }
 
         // 6. GEOFENCE / EVENT LOGIC
