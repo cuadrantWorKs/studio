@@ -87,8 +87,9 @@ while true; do
     draw_ui "SENDING" "$HTTP_CODE" "$TIMESTAMP"
     
     # Payload
-    # Get Epoch Ms (macOS compatible calculation since BSD date lacks %N)
-    FULL_TS=$(($(date +%s) * 1000))
+    # TransistorSoft uses ISO 8601 strings in the default template "<%= timestamp %>"
+    FULL_TS=$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")
+    
     PAYLOAD=$(cat <<EOF
 {
   "location": {
@@ -106,7 +107,8 @@ while true; do
     "event": "heartbeat",
     "battery": { "level": 0.62, "is_charging": false },
     "activity": { "type": "in_vehicle" },
-    "extras": {}
+    "extras": {},
+    "_": "&id=$DEVICE_ID&lat=$LAT&lon=$LON&timestamp=$FULL_TS&"
   },
   "device_id": "$DEVICE_ID"
 }
