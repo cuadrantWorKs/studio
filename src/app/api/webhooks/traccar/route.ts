@@ -60,6 +60,13 @@ async function handleRequest(request: NextRequest) {
 
         // Device ID: check multiple sources
         const deviceId = payload.device_id || payload.deviceId || payload.id || urlParams.id;
+
+        // Handle Registration/Notification Token Requests (no location data)
+        if (payload.notificationToken && deviceId) {
+            console.log(`[Traccar] Device registered: ${deviceId}`);
+            return new NextResponse('Registered', { status: 200 });
+        }
+
         if (!deviceId) {
             console.error('[Traccar] Missing device_id');
             return new NextResponse('device_id required', { status: 400 });
