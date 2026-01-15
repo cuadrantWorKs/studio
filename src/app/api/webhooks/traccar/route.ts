@@ -17,6 +17,7 @@ export async function POST(request: NextRequest) {
 async function handleRequest(request: NextRequest) {
     try {
         const url = new URL(request.url);
+        console.log(`[Traccar Webhook] ${request.method} request received`, request.headers.get('content-type'));
         const searchParams = url.searchParams;
 
         // Traccar Client Protocol (OsmAnd)
@@ -38,9 +39,10 @@ async function handleRequest(request: NextRequest) {
             }
         }
 
-        const deviceId = params.id || params.deviceid;
+        const deviceId = params.id || params.deviceid || params.deviceId;
 
         if (!deviceId) {
+            console.error('[Traccar Error] Missing Device ID. Params:', JSON.stringify(params));
             return new NextResponse('Device ID required', { status: 400 });
         }
 
@@ -48,6 +50,7 @@ async function handleRequest(request: NextRequest) {
         const lon = parseFloat(params.lon);
 
         if (isNaN(lat) || isNaN(lon)) {
+            console.error('[Traccar Error] Invalid Lat/Lon. Params:', JSON.stringify(params));
             return new NextResponse('Valid Latitude and Longitude required', { status: 400 });
         }
 
