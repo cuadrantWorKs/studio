@@ -142,7 +142,7 @@ async function handleRequest(request: NextRequest) {
         // 6. GEOFENCE LOGIC (only for UUID device IDs = TechTrack users)
         const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
         if (uuidRegex.test(deviceId)) {
-            await processGeofence(adminDb, deviceId, lat, lon, timestamp, rawData.accuracy);
+            await processGeofence(adminDb, deviceId, lat, lon, timestamp, rawData.accuracy ?? null);
         }
 
         return new NextResponse('OK', { status: 200 });
