@@ -612,12 +612,13 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
                 {geolocationError.message}
               </div>
             )}
-            {currentLocation ? (
+            {currentLocation && !geolocationError ? (
               <div className="text-green-600 text-sm flex items-center gap-2">
                 <CheckCircle className="h-4 w-4" />
                 Ubicación lista
               </div>
-            ) : (
+            ) : null}
+            {!currentLocation && !geolocationError && (
               <div className="text-amber-600 text-sm flex items-center gap-2">
                 <Loader2 className="h-4 w-4 animate-spin" />
                 Obteniendo ubicación...
@@ -669,6 +670,27 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
                     GPS ONLINE
                   </div>
                 )}
+              </div>
+
+              {/* GPS Debug Toggle */}
+              <div className="mt-2 text-[10px] text-slate-500 cursor-pointer hover:text-white transition-colors"
+                onClick={() => toast({
+                  title: "Datos GPS en Vivo (Traccar)",
+                  description: (
+                    <pre className="text-[10px] bg-slate-950 p-2 rounded mt-2 overflow-auto max-w-[300px]">
+                      {JSON.stringify({
+                        lat: currentLocation?.latitude.toFixed(5),
+                        lon: currentLocation?.longitude.toFixed(5),
+                        acc: currentLocation?.accuracy,
+                        time: currentLocation ? new Date(currentLocation.timestamp).toLocaleTimeString() : 'N/A',
+                        error: geolocationError?.message || 'None'
+                      }, null, 2)}
+                    </pre>
+                  ),
+                  duration: 10000,
+                })}
+              >
+                ver datos crudos
               </div>
             </div>
             <div className={`px-3 py-1 rounded-full text-xs font-medium flex items-center gap-1 ${workday.status === 'tracking' ? 'bg-green-500/20 text-green-400' :
