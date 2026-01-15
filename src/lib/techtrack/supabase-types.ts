@@ -244,12 +244,17 @@ export interface Database {
           device_id: string
           latitude: number
           longitude: number
-          timestamp: number
+          timestamp: string  // ISO 8601 string stored as timestamptz
           speed: number | null
           bearing: number | null
           altitude: number | null
           accuracy: number | null
           battery: number | null
+          battery_is_charging: boolean | null
+          event: string | null
+          is_moving: boolean | null
+          odometer: number | null
+          activity_type: string | null
           created_at: string
           processed: boolean
         }
@@ -258,12 +263,17 @@ export interface Database {
           device_id: string
           latitude: number
           longitude: number
-          timestamp: number
+          timestamp: string  // ISO 8601 string
           speed?: number | null
           bearing?: number | null
           altitude?: number | null
           accuracy?: number | null
           battery?: number | null
+          battery_is_charging?: boolean | null
+          event?: string | null
+          is_moving?: boolean | null
+          odometer?: number | null
+          activity_type?: string | null
           created_at?: string
           processed?: boolean
         }
@@ -272,12 +282,17 @@ export interface Database {
           device_id?: string
           latitude?: number
           longitude?: number
-          timestamp?: number
+          timestamp?: string
           speed?: number | null
           bearing?: number | null
           altitude?: number | null
           accuracy?: number | null
           battery?: number | null
+          battery_is_charging?: boolean | null
+          event?: string | null
+          is_moving?: boolean | null
+          odometer?: number | null
+          activity_type?: string | null
           created_at?: string
           processed?: boolean
         }
