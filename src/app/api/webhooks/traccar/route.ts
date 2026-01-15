@@ -74,10 +74,10 @@ async function handleRequest(request: NextRequest) {
 
         // 4. ROBUST TIMESTAMP PARSING
         let timestampVal = params.timestamp;
-        let finalTimestamp: string;
+        let finalTimestampMs: number;
 
         if (!timestampVal) {
-            finalTimestamp = new Date().toISOString();
+            finalTimestampMs = Date.now();
         } else {
             // Check if it's a pure number (Unix timestamp).
             // Regex check because parseFloat("2026-01-15") returns 2026.
@@ -86,34 +86,25 @@ async function handleRequest(request: NextRequest) {
             if (isNumeric) {
                 const tsNum = Number(timestampVal);
                 if (tsNum < 10000000000) { // Seconds
-                    finalTimestamp = new Date(tsNum * 1000).toISOString();
+                    finalTimestampMs = tsNum * 1000;
                 } else { // Ms
-                    finalTimestamp = new Date(tsNum).toISOString();
+                    finalTimestampMs = tsNum;
                 }
             } else {
                 // Treat as date string
-                try {
-                    const dateObj = new Date(timestampVal);
-                    if (isNaN(dateObj.getTime())) {
-                        finalTimestamp = new Date().toISOString();
-                    } else {
-                        finalTimestamp = dateObj.toISOString();
-                    }
-                } catch {
-                    finalTimestamp = new Date().toISOString();
-                }
+                const dateObj = new Date(timestampVal);
+                finalTimestampMs = isNaN(dateObj.getTime()) ? Date.now() : dateObj.getTime();
             }
 
-            // Sanity Check: If timestamp is too old (e.g. 1970 or < 2025), use current time
-            const dateObj = new Date(finalTimestamp);
+            // Sanity Check: If timestamp is too old (e.g. < 2025), use current time
             const minDate = new Date('2025-01-01').getTime();
-            if (isNaN(dateObj.getTime()) || dateObj.getTime() < minDate) {
-                console.warn(`[Traccar Warning] Invalid/Old timestamp received (${timestampVal} -> ${finalTimestamp}). Defaulting to NOW.`);
-                finalTimestamp = new Date().toISOString();
+            if (finalTimestampMs < minDate) {
+                console.warn(`[Traccar Warning] Invalid/Old timestamp received (${timestampVal} -> ${finalTimestampMs}). Defaulting to NOW.`);
+                finalTimestampMs = Date.now();
             }
         }
 
-        console.log(`[Traccar Debug] Processing ${deviceId} at ${finalTimestamp}`);
+        console.log(`[Traccar Debug] Processing ${deviceId} at ${new Date(finalTimestampMs).toISOString()}`);
 
         const adminDb = getAdminSupabase();
 
@@ -122,7 +113,7 @@ async function handleRequest(request: NextRequest) {
             device_id: deviceId,
             latitude: lat,
             longitude: lon,
-            timestamp: finalTimestamp,
+            timestamp: finalTimestampMs,
             speed: params.speed ? parseFloat(params.speed) : null,
             bearing: params.bearing ? parseFloat(params.bearing) : params.heading ? parseFloat(params.heading) : null,
             altitude: params.altitude ? parseFloat(params.altitude) : null,
@@ -192,12 +183,12 @@ async function handleRequest(request: NextRequest) {
                             const exitEvent = {
                                 workday_id: workday.id,
                                 type: 'GEOFENCE_EXIT',
-                                timestamp: new Date(finalTimestamp).getTime(),
+                                timestamp: finalTimestampMs,
                                 job_id: currentJob.id,
                                 details: `Detected exit from job site (${Math.round(dist)}m away)`,
                                 location_latitude: lat,
                                 location_longitude: lon,
-                                location_timestamp: new Date(finalTimestamp).getTime(),
+                                location_timestamp: finalTimestampMs,
                                 location_accuracy: params.accuracy ? parseFloat(params.accuracy) : null
                             };
                             await adminDb.from('events').insert(exitEvent as any);

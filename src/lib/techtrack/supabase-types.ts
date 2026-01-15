@@ -244,7 +244,7 @@ export interface Database {
           device_id: string
           latitude: number
           longitude: number
-          timestamp: string
+          timestamp: number
           speed: number | null
           bearing: number | null
           altitude: number | null
@@ -258,7 +258,7 @@ export interface Database {
           device_id: string
           latitude: number
           longitude: number
-          timestamp: string
+          timestamp: number
           speed?: number | null
           bearing?: number | null
           altitude?: number | null
@@ -272,7 +272,7 @@ export interface Database {
           device_id?: string
           latitude?: number
           longitude?: number
-          timestamp?: string
+          timestamp?: number
           speed?: number | null
           bearing?: number | null
           altitude?: number | null
