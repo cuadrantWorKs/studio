@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { db } from '@/lib/supabase';
 import { LocationPoint, GeolocationError } from '@/lib/techtrack/types';
 import { useToast } from '@/hooks/use-toast';
 
@@ -28,27 +29,66 @@ export function useGeolocation() {
     const [geolocationError, setGeolocationError] = useState<GeolocationError | null>(null);
     const { toast } = useToast();
 
+    // Hardcoded Device ID mapping for now (as per plan)
+    // In a real app, this should come from a user profile or context
+    const TRACCAR_DEVICE_ID = 'ricardo-iphone';
+    const POLLING_INTERVAL_MS = 10000; // Poll every 10 seconds
+
     useEffect(() => {
-        if (typeof navigator !== 'undefined' && navigator.geolocation) {
-            const watchId = navigator.geolocation.watchPosition(
-                (position) => {
+        let isMounted = true;
+        const fetchLocation = async () => {
+            try {
+                const { data, error } = await db
+                    .from('raw_locations')
+                    .select('*')
+                    .eq('device_id', TRACCAR_DEVICE_ID)
+                    .order('timestamp', { ascending: false })
+                    .limit(1);
+
+                if (error) throw error;
+
+                if (data && data.length > 0) {
+                    const latestLoc = data[0];
                     const newLocation: LocationPoint = {
-                        latitude: position.coords.latitude,
-                        longitude: position.coords.longitude,
-                        accuracy: position.coords.accuracy ?? undefined,
-                        timestamp: position.timestamp,
+                        latitude: latestLoc.latitude,
+                        longitude: latestLoc.longitude,
+                        accuracy: latestLoc.accuracy ?? undefined,
+                        timestamp: new Date(latestLoc.timestamp).getTime(),
                     };
-                    setCurrentLocation(sanitizeLocationPoint(newLocation));
-                    setGeolocationError(null);
-                },
-                (error) => {
-                    setGeolocationError({ code: error.code, message: error.message });
-                    toast({ title: "Error de Geolocalización", description: error.message, variant: "destructive" });
-                },
-                { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-            );
-            return () => navigator.geolocation.clearWatch(watchId);
-        }
+
+                    if (isMounted) {
+                        setCurrentLocation(sanitizeLocationPoint(newLocation));
+                        setGeolocationError(null);
+
+                        // Check for staleness
+                        const timeDiff = Date.now() - newLocation.timestamp;
+                        if (timeDiff > 5 * 60 * 1000) { // 5 minutes
+                            setGeolocationError({ code: 999, message: "GPS Offline: Sin datos recientes de Traccar (>5min)" });
+                        }
+                    }
+                } else {
+                    if (isMounted) {
+                        setGeolocationError({ code: 404, message: "Esperando datos de Traccar..." });
+                    }
+                }
+            } catch (err) {
+                console.error("Error polling Traccar location:", err);
+                if (isMounted) {
+                    setGeolocationError({ code: 500, message: "Error conectando con servidor GPS" });
+                }
+            }
+        };
+
+        // Initial fetch
+        fetchLocation();
+
+        // Poll
+        const intervalId = setInterval(fetchLocation, POLLING_INTERVAL_MS);
+
+        return () => {
+            isMounted = false;
+            clearInterval(intervalId);
+        };
     }, [toast]);
 
     return { currentLocation, geolocationError, sanitizeLocationPoint };

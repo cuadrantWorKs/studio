@@ -654,7 +654,22 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
                 <User className="h-5 w-5 text-slate-400" />
                 {technicianName}
               </h2>
-              <p className="text-slate-400 text-sm">{new Date(workday.date.replace(/-/g, '/')).toLocaleDateString()}</p>
+              <div className="flex items-center gap-2 mt-1">
+                <p className="text-slate-400 text-sm">{new Date(workday.date.replace(/-/g, '/')).toLocaleDateString()}</p>
+
+                {/* GPS Status Indicator */}
+                {geolocationError ? (
+                  <div className="flex items-center gap-1 px-2 py-0.5 rounded bg-red-500/10 border border-red-500/20 text-red-400 text-[10px] font-bold">
+                    <div className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
+                    SIN GPS
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-1 px-2 py-0.5 rounded bg-green-500/10 border border-green-500/20 text-green-400 text-[10px] font-bold">
+                    <div className="w-1.5 h-1.5 rounded-full bg-green-500" />
+                    GPS ONLINE
+                  </div>
+                )}
+              </div>
             </div>
             <div className={`px-3 py-1 rounded-full text-xs font-medium flex items-center gap-1 ${workday.status === 'tracking' ? 'bg-green-500/20 text-green-400' :
               workday.status === 'paused' ? 'bg-amber-500/20 text-amber-400' :
