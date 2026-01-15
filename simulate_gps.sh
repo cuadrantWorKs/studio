@@ -87,7 +87,8 @@ while true; do
     draw_ui "SENDING" "$HTTP_CODE" "$TIMESTAMP"
     
     # Payload
-    FULL_TS=$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")
+    # Get Epoch Ms (macOS compatible calculation since BSD date lacks %N)
+    FULL_TS=$(($(date +%s) * 1000))
     PAYLOAD=$(cat <<EOF
 {
   "location": {
