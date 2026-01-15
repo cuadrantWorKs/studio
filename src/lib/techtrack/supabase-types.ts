@@ -238,6 +238,50 @@ export interface Database {
           created_at?: string
         }
       }
+      raw_locations: {
+        Row: {
+          id: string
+          device_id: string
+          latitude: number
+          longitude: number
+          timestamp: string
+          speed: number | null
+          bearing: number | null
+          altitude: number | null
+          accuracy: number | null
+          battery: number | null
+          created_at: string
+          processed: boolean
+        }
+        Insert: {
+          id?: string
+          device_id: string
+          latitude: number
+          longitude: number
+          timestamp: string
+          speed?: number | null
+          bearing?: number | null
+          altitude?: number | null
+          accuracy?: number | null
+          battery?: number | null
+          created_at?: string
+          processed?: boolean
+        }
+        Update: {
+          id?: string
+          device_id?: string
+          latitude?: number
+          longitude?: number
+          timestamp?: string
+          speed?: number | null
+          bearing?: number | null
+          altitude?: number | null
+          accuracy?: number | null
+          battery?: number | null
+          created_at?: string
+          processed?: boolean
+        }
+      }
     }
   }
 }

@@ -35,6 +35,7 @@ export interface TrackingEvent {
   | 'JOB_COMPLETION_PROMPT'
   | 'JOB_COMPLETED'
   | 'NEW_JOB_PROMPT'
+  | 'GEOFENCE_EXIT' // Triggered when leaving active job site
   | 'USER_ACTION' // Added for manual user interactions
   | 'ERROR';
   timestamp: number;

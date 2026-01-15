@@ -1,6 +1,4 @@
-"use client";
-
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogClose } from '@/components/ui/dialog';
@@ -27,8 +25,11 @@ import { useGeolocation } from '@/hooks/useGeolocation';
 import { useWorkday } from '@/hooks/useWorkday';
 import { useAiPrompts } from '@/hooks/useAiPrompts';
 import { SupabaseService } from '@/lib/techtrack/supabase-service';
+import { GeofenceExitPrompt } from './GeofenceExitPrompt';
+import { db } from '@/lib/supabase';
 
 const LOCATION_INTERVAL_MS = 5 * 60 * 1000;
+const GEOFENCE_CHECK_INTERVAL_MS = 60 * 1000; // Check every minute
 
 interface TechTrackAppProps {
   technicianName: string;
@@ -51,6 +52,11 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
   const [isSavingToCloud, setIsSavingToCloud] = useState(false);
   const [pendingEndDayAction, setPendingEndDayAction] = useState(false);
   const [jobToSummarizeId, setJobToSummarizeId] = useState<string | null>(null);
+
+  // Geofence Prompt State
+  const [showGeofencePrompt, setShowGeofencePrompt] = useState(false);
+  const [detectedExitEvent, setDetectedExitEvent] = useState<TrackingEvent | null>(null);
+  const lastChekedEventTimestamp = useRef<number>(Date.now());
 
   const { toast } = useToast();
 
@@ -95,6 +101,127 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
     }
     return () => clearInterval(intervalId);
   }, [workday?.status, currentLocation, recordEvent, sanitizeLocationPoint, setWorkday]);
+
+  // Poll for Geofence Exits
+  useEffect(() => {
+    let intervalId: NodeJS.Timeout;
+
+    const checkGeofenceEvents = async () => {
+      if (!workday || !currentJob || currentJob.status !== 'active') return;
+
+      try {
+        // Query events for this workday that are GEOFENCE_EXIT
+        // We look for events created AFTER the job started
+        const { data: events } = await db
+          .from('events')
+          .select('*')
+          .eq('workday_id', workday.id)
+          .eq('job_id', currentJob.id)
+          .eq('type', 'GEOFENCE_EXIT')
+          .gt('timestamp', Math.max(currentJob.startTime, lastChekedEventTimestamp.current))
+          .order('timestamp', { ascending: false })
+          .limit(1);
+
+        if (events && events.length > 0) {
+          const exitEvent = events[0];
+          // Found a new exit event!
+          // Map to local TrackingEvent type
+          const mappedEvent: TrackingEvent = {
+            id: exitEvent.id,
+            type: 'GEOFENCE_EXIT',
+            timestamp: exitEvent.timestamp || Date.now(),
+            jobId: exitEvent.job_id || undefined,
+            details: exitEvent.details || undefined,
+            location: exitEvent.location_latitude ? {
+              latitude: exitEvent.location_latitude,
+              longitude: exitEvent.location_longitude,
+              timestamp: exitEvent.location_timestamp || 0
+            } : undefined
+          };
+
+          setDetectedExitEvent(mappedEvent);
+          setShowGeofencePrompt(true);
+          lastChekedEventTimestamp.current = mappedEvent.timestamp;
+        }
+      } catch (error) {
+        console.error("Error polling geofence events:", error);
+      }
+    };
+
+    if (workday?.status === 'tracking') {
+      intervalId = setInterval(checkGeofenceEvents, GEOFENCE_CHECK_INTERVAL_MS);
+      // Initial check
+      checkGeofenceEvents();
+    }
+
+    return () => clearInterval(intervalId);
+  }, [workday, currentJob]);
+
+  const handleRetroactiveJobCompletion = (summary: string, isWorkRelated: boolean, exitTime: number) => {
+    if (!currentJob || !detectedExitEvent) return;
+
+    if (isWorkRelated) {
+      // Complete the job normally but with retroactive time
+      setWorkday(prev => {
+        if (!prev) return null;
+
+        const jobIndex = prev.jobs.findIndex(j => j.id === currentJob.id);
+        if (jobIndex === -1) return prev;
+
+        const updatedJobs = [...prev.jobs];
+        updatedJobs[jobIndex] = {
+          ...updatedJobs[jobIndex],
+          status: 'completed',
+          endTime: exitTime,
+          summary: summary, // Use the summary from the prompt
+          endLocation: detectedExitEvent.location || updatedJobs[jobIndex].startLocation
+        };
+
+        return {
+          ...prev,
+          jobs: updatedJobs,
+          currentJobId: null
+        };
+      });
+
+      recordEvent('JOB_COMPLETED', detectedExitEvent.location, currentJob.id, `Completado tras salir del sitio. Resumen: ${summary}`, exitTime);
+      toast({ title: "Trabajo Cerrado", description: `Registrado a las ${new Date(exitTime).toLocaleTimeString()}` });
+    } else {
+      // Convert to Personal Break
+      // 1. Mark job as "cancelled" (or delete it? User says personal breaks are not paid, effectively nullifying the job)
+      // A better approach is to delete the job from the array and insert a pause interval
+
+      setWorkday(prev => {
+        if (!prev) return null;
+
+        // Remove the job
+        const updatedJobs = prev.jobs.filter(j => j.id !== currentJob.id);
+
+        // Create a pause interval covering the time
+        const newPause: PauseInterval = {
+          id: crypto.randomUUID(),
+          startTime: currentJob.startTime,
+          endTime: exitTime,
+          startLocation: currentJob.startLocation,
+          endLocation: detectedExitEvent.location || undefined
+        };
+
+        return {
+          ...prev,
+          jobs: updatedJobs,
+          currentJobId: null,
+          pauseIntervals: [...prev.pauseIntervals, newPause]
+        };
+      });
+
+      recordEvent('USER_ACTION', detectedExitEvent.location, undefined, `Trabajo convertido a Pausa Personal: ${summary}`, exitTime);
+      toast({ title: "Registrado como Pausa", description: "La actividad fue marcada como personal." });
+    }
+
+    setShowGeofencePrompt(false);
+    setDetectedExitEvent(null);
+  };
+
 
   const handleStartTracking = () => {
     const safeCurrentLocation = sanitizeLocationPoint(currentLocation);
@@ -617,6 +744,22 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
 
       {/* Location Info */}
       <LocationInfo currentLocation={currentLocation} />
+
+      {/* Location Info */}
+      <LocationInfo currentLocation={currentLocation} />
+
+      {/* Geofence Prompt */}
+      {currentJob && detectedExitEvent && (
+        <GeofenceExitPrompt
+          isOpen={showGeofencePrompt}
+          exitTime={detectedExitEvent.timestamp}
+          startTime={currentJob.startTime}
+          startLocation={currentJob.startLocation}
+          jobDescription={currentJob.description}
+          onConfirmExit={handleRetroactiveJobCompletion}
+          onContinueWorking={() => setShowGeofencePrompt(false)}
+        />
+      )}
 
       {/* Job Modal */}
       <Dialog open={isJobModalOpen} onOpenChange={setIsJobModalOpen}>

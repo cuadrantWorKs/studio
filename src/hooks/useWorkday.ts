@@ -89,14 +89,14 @@ export function useWorkday(technicianName: string, currentLocation: LocationPoin
         };
     }, [workday]);
 
-    const recordEvent = useCallback((type: TrackingEvent['type'], locationParam: LocationPoint | null | undefined, jobId?: string, details?: string) => {
+    const recordEvent = useCallback((type: TrackingEvent['type'], locationParam: LocationPoint | null | undefined, jobId?: string, details?: string, timestamp?: number) => {
         setWorkday(prev => {
             if (!prev) return null;
             const eventLocation = sanitizeLocationPoint(locationParam === undefined ? currentLocation : locationParam);
             const newEvent: TrackingEvent = {
                 id: crypto.randomUUID(),
                 type,
-                timestamp: Date.now(),
+                timestamp: timestamp ?? Date.now(),
                 jobId,
                 details: details ?? undefined,
                 location: eventLocation ?? undefined,
