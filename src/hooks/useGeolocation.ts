@@ -61,8 +61,13 @@ export function useGeolocation() {
 
                         // Check for staleness
                         const timeDiff = Date.now() - newLocation.timestamp;
-                        if (timeDiff > 5 * 60 * 1000) { // 5 minutes
-                            setGeolocationError({ code: 999, message: "GPS Offline: Sin datos recientes de Traccar (>5min)" });
+                        const STALE_THRESHOLD_MS = 60 * 60 * 1000; // 1 hour (Technicians might stand still at a job)
+
+                        // Debugging logs in console
+                        console.log(`[GPS] Latest: ${new Date(newLocation.timestamp).toLocaleTimeString()}, Diff: ${(timeDiff / 60000).toFixed(1)}m`);
+
+                        if (timeDiff > STALE_THRESHOLD_MS) {
+                            setGeolocationError({ code: 999, message: `GPS Offline: Datos antiguos (${(timeDiff / 60000).toFixed(0)} min)` });
                         }
                     }
                 } else {
