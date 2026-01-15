@@ -21,7 +21,7 @@ async function handleRequest(request: NextRequest) {
         const searchParams = url.searchParams;
 
         // 1. EXTRACT DATA
-        let params = Object.fromEntries(searchParams.entries());
+        let params: any = Object.fromEntries(searchParams.entries());
 
         if (request.method === 'POST') {
             try {
