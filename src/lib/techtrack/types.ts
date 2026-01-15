@@ -6,6 +6,22 @@ export interface LocationPoint {
   accuracy?: number;
 }
 
+/**
+ * Extended location data from TransistorSoft / raw_locations table
+ */
+export interface RawLocationData extends LocationPoint {
+  deviceId: string;
+  altitude?: number;
+  speed?: number;
+  bearing?: number;
+  battery?: number;
+  batteryIsCharging?: boolean;
+  event?: string;  // 'motionchange', 'heartbeat', 'geofence', etc.
+  isMoving?: boolean;
+  odometer?: number;
+  activityType?: string;  // 'unknown', 'walking', 'in_vehicle', etc.
+}
+
 export interface Job {
   id: string;
   description: string;

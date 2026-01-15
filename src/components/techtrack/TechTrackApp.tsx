@@ -36,7 +36,7 @@ interface TechTrackAppProps {
 }
 
 export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
-  const { currentLocation, geolocationError, sanitizeLocationPoint } = useGeolocation();
+  const { currentLocation, rawLocationData, geolocationError, sanitizeLocationPoint } = useGeolocation();
   const { workday, setWorkday, elapsedTime, recordEvent, currentJob, getLocalStorageKey } = useWorkday(technicianName, currentLocation);
 
   const [isJobModalOpen, setIsJobModalOpen] = useState(false);
@@ -667,7 +667,29 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
                 ) : (
                   <div className="flex items-center gap-1 px-2 py-0.5 rounded bg-green-500/10 border border-green-500/20 text-green-400 text-[10px] font-bold">
                     <div className="w-1.5 h-1.5 rounded-full bg-green-500" />
-                    GPS ONLINE
+                    GPS
+                  </div>
+                )}
+
+                {/* Battery Indicator */}
+                {rawLocationData?.battery !== undefined && (
+                  <div className={`flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold ${rawLocationData.batteryIsCharging
+                      ? 'bg-yellow-500/10 border border-yellow-500/20 text-yellow-400'
+                      : rawLocationData.battery < 0.2
+                        ? 'bg-red-500/10 border border-red-500/20 text-red-400'
+                        : 'bg-slate-700 text-slate-300'
+                    }`}>
+                    {rawLocationData.batteryIsCharging ? '⚡' : '🔋'} {(rawLocationData.battery * 100).toFixed(0)}%
+                  </div>
+                )}
+
+                {/* Motion Status */}
+                {rawLocationData?.isMoving !== undefined && (
+                  <div className={`flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold ${rawLocationData.isMoving
+                      ? 'bg-blue-500/10 border border-blue-500/20 text-blue-400'
+                      : 'bg-slate-700 text-slate-400'
+                    }`}>
+                    {rawLocationData.isMoving ? '🚗' : '🅿️'}
                   </div>
                 )}
               </div>
@@ -675,14 +697,20 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
               {/* GPS Debug Toggle */}
               <div className="mt-2 text-[10px] text-slate-500 cursor-pointer hover:text-white transition-colors"
                 onClick={() => toast({
-                  title: "Datos GPS en Vivo (Traccar)",
+                  title: "Datos GPS (TransistorSoft)",
                   description: (
                     <pre className="text-[10px] bg-slate-950 p-2 rounded mt-2 overflow-auto max-w-[300px]">
                       {JSON.stringify({
                         lat: currentLocation?.latitude.toFixed(5),
                         lon: currentLocation?.longitude.toFixed(5),
-                        acc: currentLocation?.accuracy,
+                        acc: currentLocation?.accuracy?.toFixed(0),
                         time: currentLocation ? new Date(currentLocation.timestamp).toLocaleTimeString() : 'N/A',
+                        event: rawLocationData?.event || 'N/A',
+                        moving: rawLocationData?.isMoving,
+                        activity: rawLocationData?.activityType || 'N/A',
+                        battery: rawLocationData?.battery ? `${(rawLocationData.battery * 100).toFixed(0)}%` : 'N/A',
+                        charging: rawLocationData?.batteryIsCharging,
+                        odometer: rawLocationData?.odometer ? `${(rawLocationData.odometer / 1000).toFixed(2)}km` : 'N/A',
                         error: geolocationError?.message || 'None'
                       }, null, 2)}
                     </pre>
