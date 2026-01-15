@@ -13,6 +13,7 @@ You **MUST** set these environment variables in your Vercel Project Settings:
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Your Supabase Anon Key (public) | Yes |
 | `SUPABASE_SERVICE_ROLE_KEY` | **CRITICAL**: The "Service Role" secret key. Used by the Traccar webhook to write location data securely. | **YES** |
 | `GROQ_API_KEY` | Your Groq API Key (for AI summaries) | Yes |
+| `NEXT_PUBLIC_TRACCAR_DEVICE_ID` | The Device Identifier you will use in the Traccar App (e.g., your User UUID). Defaults to `ricardo-iphone`. | Yes |
 | `NEXT_PUBLIC_TECHNICIAN_HOME_LAT`| Home base Latitude (e.g. `-34.6037`) | Optional |
 | `NEXT_PUBLIC_TECHNICIAN_HOME_LON`| Home base Longitude (e.g. `-58.3816`) | Optional |
 
@@ -36,7 +37,10 @@ You **MUST** set these environment variables in your Vercel Project Settings:
 To start feeding data into your Vercel app:
 
 1.  Download **Traccar Client** (iOS/Android) - *The app with the orange icon*.
-2.  **Device Identifier**: Enter the **User UUID** or the specific ID configured in code (e.g. `ricardo-iphone`).
+2.  **Device Identifier**:
+    *   **Recommended**: Use your **TechTrack User UUID** (found in Supabase `auth.users` or `workdays` table).
+    *   *Why?* This ensures the "Auto-Job-Exit" feature works correctly.
+    *   *Note*: Ensure this matches `NEXT_PUBLIC_TRACCAR_DEVICE_ID` in Vercel.
 3.  **Server URL**: `https://[YOUR-VERCEL-DOMAIN]/api/webhooks/traccar`
     *   *Example*: `https://techtrack-app.vercel.app/api/webhooks/traccar`
     *   **Note**: Ensure it starts with `https://`.
@@ -47,7 +51,7 @@ To start feeding data into your Vercel app:
 
 *   **"GPS Offline" / Red Status in App**:
     *   Check if Traccar Client is running and "Service Status" is ON.
-    *   Check if the **Device Identifier** matches what the app expects (e.g. `ricardo-iphone`).
+    *   Check if the **Device Identifier** matches `NEXT_PUBLIC_TRACCAR_DEVICE_ID`.
     *   Check Vercel Logs for errors in `/api/webhooks/traccar`.
     *   Verify `SUPABASE_SERVICE_ROLE_KEY` is set in Vercel.
 

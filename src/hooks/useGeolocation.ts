@@ -29,9 +29,8 @@ export function useGeolocation() {
     const [geolocationError, setGeolocationError] = useState<GeolocationError | null>(null);
     const { toast } = useToast();
 
-    // Hardcoded Device ID mapping for now (as per plan)
-    // In a real app, this should come from a user profile or context
-    const TRACCAR_DEVICE_ID = 'ricardo-iphone';
+    // Device ID from Environment or default to 'ricardo-iphone'
+    const TRACCAR_DEVICE_ID = process.env.NEXT_PUBLIC_TRACCAR_DEVICE_ID || 'ricardo-iphone';
     const POLLING_INTERVAL_MS = 10000; // Poll every 10 seconds
 
     useEffect(() => {
