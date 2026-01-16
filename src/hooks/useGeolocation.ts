@@ -37,32 +37,32 @@ export function useGeolocation() {
     useEffect(() => {
         let isMounted = true;
 
-        const getBrowserLocation = () => {
-            if (!navigator.geolocation) {
-                if (isMounted) setGeolocationError({ code: 0, message: "Geolocalización no soportada" });
-                return;
-            }
+        // const getBrowserLocation = () => {
+        //     if (!navigator.geolocation) {
+        //         if (isMounted) setGeolocationError({ code: 0, message: "Geolocalización no soportada" });
+        //         return;
+        //     }
 
-            navigator.geolocation.getCurrentPosition(
-                (position) => {
-                    if (!isMounted) return;
-                    const browserLoc: LocationPoint = {
-                        latitude: position.coords.latitude,
-                        longitude: position.coords.longitude,
-                        accuracy: position.coords.accuracy,
-                        timestamp: position.timestamp
-                    };
-                    setCurrentLocation(sanitizeLocationPoint(browserLoc));
-                    setGeolocationError(null);
-                    console.log("[GPS] Usando ubicación del navegador (Fallback)");
-                },
-                (error) => {
-                    if (!isMounted) return;
-                    console.warn("[GPS] Falló la ubicación del navegador:", error);
-                },
-                { enableHighAccuracy: true, timeout: 5000, maximumAge: 60000 }
-            );
-        };
+        //     navigator.geolocation.getCurrentPosition(
+        //         (position) => {
+        //             if (!isMounted) return;
+        //             const browserLoc: LocationPoint = {
+        //                 latitude: position.coords.latitude,
+        //                 longitude: position.coords.longitude,
+        //                 accuracy: position.coords.accuracy,
+        //                 timestamp: position.timestamp
+        //             };
+        //             setCurrentLocation(sanitizeLocationPoint(browserLoc));
+        //             setGeolocationError(null);
+        //             console.log("[GPS] Usando ubicación del navegador (Fallback)");
+        //         },
+        //         (error) => {
+        //             if (!isMounted) return;
+        //             console.warn("[GPS] Falló la ubicación del navegador:", error);
+        //         },
+        //         { enableHighAccuracy: true, timeout: 5000, maximumAge: 60000 }
+        //     );
+        // };
 
         const fetchLocation = async () => {
             try {
@@ -119,7 +119,7 @@ export function useGeolocation() {
 
                         if (timeDiff > STALE_THRESHOLD_MS) {
                             setGeolocationError({ code: 999, message: `GPS Offline: ${(timeDiff / 60000).toFixed(0)} min` });
-                            getBrowserLocation();
+                            // getBrowserLocation(); // DISABLED PER USER REQUEST
                         } else {
                             setCurrentLocation(sanitizeLocationPoint(basicLocation));
                             setRawLocationData(extendedData);
@@ -129,14 +129,14 @@ export function useGeolocation() {
                 } else {
                     if (isMounted) {
                         setGeolocationError({ code: 404, message: "Esperando datos GPS..." });
-                        getBrowserLocation();
+                        // getBrowserLocation(); // DISABLED PER USER REQUEST
                     }
                 }
             } catch (err) {
                 console.error("Error polling GPS:", err);
                 if (isMounted) {
                     setGeolocationError({ code: 500, message: "Error de conexión GPS" });
-                    getBrowserLocation();
+                    // getBrowserLocation(); // DISABLED PER USER REQUEST
                 }
             }
         };
