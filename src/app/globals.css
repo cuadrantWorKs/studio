@@ -1,13 +1,14 @@
+@import 'leaflet/dist/leaflet.css';
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-@import 'leaflet/dist/leaflet.css';
-
 @layer base {
   :root {
-    --background: 210 17% 98%; /* Light Gray #ecf0f1 */
-    --foreground: 210 29% 24%; /* Dark Blue #2c3e50 */
+    --background: 210 17% 98%;
+    /* Light Gray #ecf0f1 */
+    --foreground: 210 29% 24%;
+    /* Dark Blue #2c3e50 */
 
     --card: 0 0% 100%;
     --card-foreground: 210 29% 24%;
@@ -15,24 +16,32 @@
     --popover: 0 0% 100%;
     --popover-foreground: 210 29% 24%;
 
-    --primary: 210 29% 24%; /* Dark Blue #2c3e50 */
-    --primary-foreground: 210 17% 98%; /* Light Gray #ecf0f1 */
+    --primary: 210 29% 24%;
+    /* Dark Blue #2c3e50 */
+    --primary-foreground: 210 17% 98%;
+    /* Light Gray #ecf0f1 */
 
-    --secondary: 210 16% 93%; /* Lighter Gray */
-    --secondary-foreground: 210 29% 24%; /* Dark Blue #2c3e50 */
+    --secondary: 210 16% 93%;
+    /* Lighter Gray */
+    --secondary-foreground: 210 29% 24%;
+    /* Dark Blue #2c3e50 */
 
-    --muted: 210 16% 90%; 
-    --muted-foreground: 210 25% 50%; /* Adjusted for better readability */
+    --muted: 210 16% 90%;
+    --muted-foreground: 210 25% 50%;
+    /* Adjusted for better readability */
 
-    --accent: 204 70% 53%; /* Teal #3498db */
-    --accent-foreground: 0 0% 100%; /* White */
+    --accent: 204 70% 53%;
+    /* Teal #3498db */
+    --accent-foreground: 0 0% 100%;
+    /* White */
 
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 98%;
 
     --border: 210 14% 89%;
     --input: 210 14% 89%;
-    --ring: 204 70% 53%; /* Teal #3498db */
+    --ring: 204 70% 53%;
+    /* Teal #3498db */
 
     --radius: 0.5rem;
 
@@ -41,7 +50,7 @@
     --chart-3: 197 37% 24%;
     --chart-4: 43 74% 66%;
     --chart-5: 27 87% 67%;
-    
+
     --sidebar-background: 210 17% 98%;
     --sidebar-foreground: 210 29% 24%;
     --sidebar-primary: 210 29% 24%;
@@ -53,25 +62,32 @@
   }
 
   .dark {
-    --background: 210 29% 10%; /* Very Dark Blue */
-    --foreground: 210 17% 90%; /* Light Gray for text */
+    --background: 210 29% 10%;
+    /* Very Dark Blue */
+    --foreground: 210 17% 90%;
+    /* Light Gray for text */
 
-    --card: 210 29% 12%; /* Slightly lighter than background */
+    --card: 210 29% 12%;
+    /* Slightly lighter than background */
     --card-foreground: 210 17% 90%;
 
     --popover: 210 29% 12%;
     --popover-foreground: 210 17% 90%;
 
-    --primary: 204 70% 53%; /* Teal #3498db */
-    --primary-foreground: 210 29% 10%; /* Very Dark Blue for text on Teal */
+    --primary: 204 70% 53%;
+    /* Teal #3498db */
+    --primary-foreground: 210 29% 10%;
+    /* Very Dark Blue for text on Teal */
 
-    --secondary: 210 25% 20%; /* Darker Gray */
+    --secondary: 210 25% 20%;
+    /* Darker Gray */
     --secondary-foreground: 210 17% 90%;
 
     --muted: 210 25% 18%;
     --muted-foreground: 210 17% 70%;
 
-    --accent: 210 29% 24%; /* Dark Blue #2c3e50 */
+    --accent: 210 29% 24%;
+    /* Dark Blue #2c3e50 */
     --accent-foreground: 210 17% 90%;
 
     --destructive: 0 62.8% 30.6%;
@@ -79,8 +95,9 @@
 
     --border: 210 25% 25%;
     --input: 210 25% 25%;
-    --ring: 204 70% 53%; /* Teal #3498db */
-    
+    --ring: 204 70% 53%;
+    /* Teal #3498db */
+
     --chart-1: 220 70% 50%;
     --chart-2: 160 60% 45%;
     --chart-3: 30 80% 55%;
@@ -102,6 +119,7 @@
   * {
     @apply border-border;
   }
+
   body {
     @apply bg-background text-foreground;
     /* Font family is handled by layout.tsx with Geist font */
