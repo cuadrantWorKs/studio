@@ -38,12 +38,27 @@ export function useAiPrompts({
         if (workday?.status === 'tracking' && !currentJob && currentLocation && !isEndingDay) {
             if (aiLoading.newJob || isJobModalOpen) return;
 
+            // Find the last job end time to prevent prompting for time spent working
+            const lastJobEndTime = Math.max(
+                workday.startTime || 0,
+                ...(workday.jobs || [])
+                    .filter(j => j.status === 'completed' && j.endTime)
+                    .map(j => j.endTime!)
+            );
+
             // Find the point where the technician first stopped moving
             // Iterate backwards through history to find the first point that is far away
             let stopStartTime = workday.locationHistory[workday.locationHistory.length - 1]?.timestamp || workday.startTime || Date.now();
 
             for (let i = workday.locationHistory.length - 1; i >= 0; i--) {
                 const point = workday.locationHistory[i];
+
+                // If we reach a point before the last job ended, we stop looking back
+                if (point.timestamp < lastJobEndTime) {
+                    stopStartTime = Math.max(stopStartTime, lastJobEndTime);
+                    break;
+                }
+
                 const distance = haversineDistance(point, currentLocation);
                 if (distance > MOVEMENT_THRESHOLD_METERS) {
                     // This was the last time we were "far away"
@@ -55,6 +70,9 @@ export function useAiPrompts({
                     stopStartTime = point.timestamp;
                 }
             }
+
+            // Ensure stopStartTime is never before the last job ended
+            stopStartTime = Math.max(stopStartTime, lastJobEndTime);
 
             const timeSinceStopStarted = Date.now() - stopStartTime;
             const timeSinceWorkdayStart = Date.now() - (workday.startTime || Date.now());
