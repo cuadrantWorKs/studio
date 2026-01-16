@@ -10,6 +10,25 @@ import {
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
+import dynamic from "next/dynamic";
+
+// Dynamic import for Leaflet map to avoid SSR issues
+const MapContainer = dynamic(
+  () => import("react-leaflet").then((mod) => mod.MapContainer),
+  { ssr: false }
+);
+const TileLayer = dynamic(
+  () => import("react-leaflet").then((mod) => mod.TileLayer),
+  { ssr: false }
+);
+const Marker = dynamic(
+  () => import("react-leaflet").then((mod) => mod.Marker),
+  { ssr: false }
+);
+const Popup = dynamic(
+  () => import("react-leaflet").then((mod) => mod.Popup),
+  { ssr: false }
+);
 
 interface WorkdaySummaryDisplayProps {
   summary: WorkdaySummaryContext;
@@ -59,6 +78,47 @@ export default function WorkdaySummaryDisplay({ summary, showTitle = true }: Wor
           value={`${summary.totalDistanceKm.toFixed(2)} km`}
           bgColor="bg-blue-50"
         />
+      </div>
+
+      {/* Route Map */}
+      <div className="h-48 w-full rounded-md overflow-hidden bg-slate-100 border relative z-0">
+        {typeof window !== 'undefined' && summary.locationHistory && summary.locationHistory.length > 0 && (
+          <MapContainer
+            center={[summary.locationHistory[summary.locationHistory.length - 1].latitude, summary.locationHistory[summary.locationHistory.length - 1].longitude]}
+            zoom={13}
+            style={{ height: "100%", width: "100%" }}
+            zoomControl={false}
+            attributionControl={false}
+          >
+            <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+            {/* Start Marker */}
+            {summary.startLocation && (
+              <Marker position={[summary.startLocation.latitude, summary.startLocation.longitude]}>
+                <Popup>Inicio de Jornada</Popup>
+              </Marker>
+            )}
+            {/* Job Markers */}
+            {summary.jobs.map(job => (
+              job.startLocation && (
+                <Marker key={job.id} position={[job.startLocation.latitude, job.startLocation.longitude]}>
+                  <Popup>{job.description}</Popup>
+                </Marker>
+              )
+            ))}
+            {/* End Marker */}
+            {summary.endLocation && (
+              <Marker position={[summary.endLocation.latitude, summary.endLocation.longitude]}>
+                <Popup>Fin de Jornada</Popup>
+              </Marker>
+            )}
+          </MapContainer>
+        )}
+        {(!summary.locationHistory || summary.locationHistory.length === 0) && (
+          <div className="flex items-center justify-center h-full text-slate-400 text-sm">
+            <MapPin className="h-4 w-4 mr-2" />
+            Sin datos de ruta
+          </div>
+        )}
       </div>
 
       {/* Start/End Locations */}

@@ -24,14 +24,14 @@ export const sanitizeLocationPoint = (location: LocationPoint | null | undefined
     return null;
 };
 
-export function useGeolocation() {
+export function useGeolocation(deviceId?: string) {
     const [currentLocation, setCurrentLocation] = useState<LocationPoint | null>(null);
     const [rawLocationData, setRawLocationData] = useState<RawLocationData | null>(null);
     const [geolocationError, setGeolocationError] = useState<GeolocationError | null>(null);
     const { toast } = useToast();
 
-    // Device ID from Environment or default to 'ricardo-iphone'
-    const TRACCAR_DEVICE_ID = process.env.NEXT_PUBLIC_TRACCAR_DEVICE_ID || 'ricardo-iphone';
+    // Device ID from Argument (preferred) or Environment (fallback)
+    const TRACCAR_DEVICE_ID = deviceId || process.env.NEXT_PUBLIC_TRACCAR_DEVICE_ID || 'ricardo-iphone';
     const POLLING_INTERVAL_MS = 10000; // Poll every 10 seconds
 
     useEffect(() => {

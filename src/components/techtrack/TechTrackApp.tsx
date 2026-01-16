@@ -8,10 +8,30 @@ import {
   MapPin, Play, Pause, StopCircle, Briefcase, Clock, CheckCircle,
   AlertTriangle, Loader2, User, MessageSquareText, MapPinned, BrainCircuit
 } from 'lucide-react';
+import dynamic from "next/dynamic";
+
+// Dynamic import for Leaflet map to avoid SSR issues
+const MapContainer = dynamic(
+  () => import("react-leaflet").then((mod) => mod.MapContainer),
+  { ssr: false }
+);
+const TileLayer = dynamic(
+  () => import("react-leaflet").then((mod) => mod.TileLayer),
+  { ssr: false }
+);
+const Marker = dynamic(
+  () => import("react-leaflet").then((mod) => mod.Marker),
+  { ssr: false }
+);
+const Popup = dynamic(
+  () => import("react-leaflet").then((mod) => mod.Popup),
+  { ssr: false }
+);
 
 import { calculateWorkdaySummary } from '@/lib/techtrack/summary';
 import { calculateRobustDistance, fetchDrivingDistance } from '@/lib/techtrack/geometry';
 import WorkdaySummaryDisplay from './WorkdaySummaryDisplay';
+import TechnicianStatus from './TechnicianStatus';
 import { Label } from '@/components/ui/label';
 import { formatTime } from '@/lib/utils';
 import LocationInfo from './LocationInfo';
@@ -36,7 +56,7 @@ interface TechTrackAppProps {
 }
 
 export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
-  const { currentLocation, rawLocationData, geolocationError, sanitizeLocationPoint } = useGeolocation();
+  const { currentLocation, rawLocationData, geolocationError, sanitizeLocationPoint } = useGeolocation(technicianName);
   const { workday, setWorkday, elapsedTime, recordEvent, currentJob, getLocalStorageKey } = useWorkday(technicianName, currentLocation);
 
   const [isJobModalOpen, setIsJobModalOpen] = useState(false);
@@ -76,7 +96,8 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
     isJobModalOpen,
     setWorkday,
     recordEvent,
-    openJobModal
+    openJobModal,
+    isEndingDay: isSavingToCloud || pendingEndDayAction
   });
 
   const getCurrentFormattedDate = () => {
@@ -655,43 +676,16 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
                 <User className="h-5 w-5 text-slate-400" />
                 {technicianName}
               </h2>
-              <div className="flex items-center gap-2 mt-1">
-                <p className="text-slate-400 text-sm">{new Date(workday.date.replace(/-/g, '/')).toLocaleDateString()}</p>
+              <div className="flex items-center gap-2 mt-1 w-full relative">
+                <p className="text-slate-400 text-sm hidden sm:block">{new Date(workday.date.replace(/-/g, '/')).toLocaleDateString()}</p>
 
-                {/* GPS Status Indicator */}
-                {geolocationError ? (
-                  <div className="flex items-center gap-1 px-2 py-0.5 rounded bg-red-500/10 border border-red-500/20 text-red-400 text-[10px] font-bold">
-                    <div className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
-                    SIN GPS
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-1 px-2 py-0.5 rounded bg-green-500/10 border border-green-500/20 text-green-400 text-[10px] font-bold">
-                    <div className="w-1.5 h-1.5 rounded-full bg-green-500" />
-                    GPS
-                  </div>
-                )}
-
-                {/* Battery Indicator */}
-                {rawLocationData?.battery !== undefined && (
-                  <div className={`flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold ${rawLocationData.batteryIsCharging
-                      ? 'bg-yellow-500/10 border border-yellow-500/20 text-yellow-400'
-                      : rawLocationData.battery < 0.2
-                        ? 'bg-red-500/10 border border-red-500/20 text-red-400'
-                        : 'bg-slate-700 text-slate-300'
-                    }`}>
-                    {rawLocationData.batteryIsCharging ? '⚡' : '🔋'} {(rawLocationData.battery * 100).toFixed(0)}%
-                  </div>
-                )}
-
-                {/* Motion Status */}
-                {rawLocationData?.isMoving !== undefined && (
-                  <div className={`flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold ${rawLocationData.isMoving
-                      ? 'bg-blue-500/10 border border-blue-500/20 text-blue-400'
-                      : 'bg-slate-700 text-slate-400'
-                    }`}>
-                    {rawLocationData.isMoving ? '🚗' : '🅿️'}
-                  </div>
-                )}
+                <div className="flex-1">
+                  <TechnicianStatus
+                    currentLocation={currentLocation}
+                    rawLocationData={rawLocationData}
+                    geolocationError={geolocationError}
+                  />
+                </div>
               </div>
 
               {/* GPS Debug Toggle */}
@@ -918,47 +912,94 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
             )}
 
             {jobModalMode === 'summary' && (
-              <div className="grid gap-2">
-                <Label htmlFor="summary" className="flex items-center gap-2">
-                  <CheckCircle className="h-4 w-4" />
-                  Resumen de Cierre
-                </Label>
-                <div className="relative">
-                  <Textarea
-                    id="summary"
-                    value={currentJobFormData.summary}
-                    onChange={(e) => setCurrentJobFormData({ ...currentJobFormData, summary: e.target.value })}
-                    placeholder="Ej: Instalación exitosa, señal verificada."
-                    className="pr-10"
-                  />
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    className="absolute right-2 top-2 h-6 w-6 text-purple-600 hover:text-purple-700 hover:bg-purple-100"
-                    title="Generar resumen con IA"
-                    onClick={async () => {
-                      if (!currentJobFormData.description) return;
-                      setIsLoading(true);
-                      try {
-                        const result = await summarizeJobDescription({
-                          jobDescription: currentJobFormData.description,
-                          additionalNotes: currentJobFormData.summary
-                        });
-                        setCurrentJobFormData(prev => ({ ...prev, summary: result.summary }));
-                        toast({ title: "Resumen Generado", description: "La IA ha generado un resumen de tu trabajo." });
-                      } catch (error) {
-                        console.error(error);
-                        toast({ title: "Error IA", description: "No se pudo generar el resumen.", variant: "destructive" });
-                      } finally {
-                        setIsLoading(false);
-                      }
-                    }}
-                    disabled={isLoading || !currentJobFormData.description}
-                  >
-                    {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wand2 className="h-4 w-4" />}
-                  </Button>
+              <>
+                {/* Map Preview and Time Info */}
+                {(currentJob || jobToSummarizeId) && (
+                  (() => {
+                    // Resolve the job to show
+                    const summaryJob = jobToSummarizeId ? workday.jobs.find(j => j.id === jobToSummarizeId) : currentJob;
+                    if (!summaryJob || !summaryJob.startLocation) return null;
+
+                    return (
+                      <div className="space-y-3 mb-2">
+                        <div className="h-40 w-full rounded-md overflow-hidden bg-slate-100 border relative z-0">
+                          {typeof window !== 'undefined' && (
+                            <MapContainer
+                              center={[summaryJob.startLocation.latitude, summaryJob.startLocation.longitude]}
+                              zoom={15}
+                              style={{ height: "100%", width: "100%" }}
+                              zoomControl={false}
+                              attributionControl={false}
+                            >
+                              <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+                              <Marker position={[summaryJob.startLocation.latitude, summaryJob.startLocation.longitude]}>
+                                <Popup>{summaryJob.description}</Popup>
+                              </Marker>
+                            </MapContainer>
+                          )}
+                          <div className="absolute bottom-2 right-2 bg-white/90 px-2 py-1 text-xs rounded shadow flex items-center gap-1 z-[400]">
+                            <MapPin className="h-3 w-3 text-red-500" />
+                            {summaryJob.startLocation.latitude.toFixed(4)}, {summaryJob.startLocation.longitude.toFixed(4)}
+                          </div>
+                        </div>
+
+                        <div className="flex items-center justify-between text-sm bg-slate-50 p-2 rounded border">
+                          <div className="flex items-center gap-2">
+                            <Clock className="h-4 w-4 text-blue-500" />
+                            <span>Llegada: {new Date(summaryJob.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Clock className="h-4 w-4 text-orange-500" />
+                            <span>Salida: {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()
+                )}
+
+                <div className="grid gap-2">
+                  <Label htmlFor="summary" className="flex items-center gap-2">
+                    <CheckCircle className="h-4 w-4" />
+                    Resumen de Cierre
+                  </Label>
+                  <div className="relative">
+                    <Textarea
+                      id="summary"
+                      value={currentJobFormData.summary}
+                      onChange={(e) => setCurrentJobFormData({ ...currentJobFormData, summary: e.target.value })}
+                      placeholder="Ej: Instalación exitosa, señal verificada."
+                      className="pr-10"
+                    />
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="absolute right-2 top-2 h-6 w-6 text-purple-600 hover:text-purple-700 hover:bg-purple-100"
+                      title="Generar resumen con IA"
+                      onClick={async () => {
+                        if (!currentJobFormData.description) return;
+                        setIsLoading(true);
+                        try {
+                          const result = await summarizeJobDescription({
+                            jobDescription: currentJobFormData.description,
+                            additionalNotes: currentJobFormData.summary
+                          });
+                          setCurrentJobFormData(prev => ({ ...prev, summary: result.summary }));
+                          toast({ title: "Resumen Generado", description: "La IA ha generado un resumen de tu trabajo." });
+                        } catch (error) {
+                          console.error(error);
+                          toast({ title: "Error IA", description: "No se pudo generar el resumen.", variant: "destructive" });
+                        } finally {
+                          setIsLoading(false);
+                        }
+                      }}
+                      disabled={isLoading || !currentJobFormData.description}
+                    >
+                      {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wand2 className="h-4 w-4" />}
+                    </Button>
+                  </div>
                 </div>
-              </div>
+              </>
             )}
           </div>
           <DialogFooter className="flex-col sm:flex-row gap-2">

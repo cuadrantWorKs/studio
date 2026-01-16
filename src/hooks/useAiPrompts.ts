@@ -17,6 +17,7 @@ interface UseAiPromptsProps {
     setWorkday: React.Dispatch<React.SetStateAction<Workday | null>>;
     recordEvent: (type: TrackingEvent['type'], location: LocationPoint | null, jobId?: string, details?: string) => void;
     openJobModal: (mode: 'new' | 'summary', data?: { description?: string; summary?: string }, startTime?: number) => void;
+    isEndingDay?: boolean;
 }
 
 export function useAiPrompts({
@@ -26,14 +27,15 @@ export function useAiPrompts({
     isJobModalOpen,
     setWorkday,
     recordEvent,
-    openJobModal
+    openJobModal,
+    isEndingDay = false
 }: UseAiPromptsProps) {
     const [aiLoading, setAiLoading] = useState<Record<string, boolean>>({});
     const { toast } = useToast();
 
     // New Job Prompt Logic
     useEffect(() => {
-        if (workday?.status === 'tracking' && !currentJob && currentLocation) {
+        if (workday?.status === 'tracking' && !currentJob && currentLocation && !isEndingDay) {
             if (aiLoading.newJob || isJobModalOpen) return;
 
             // Find the point where the technician first stopped moving
@@ -88,7 +90,7 @@ export function useAiPrompts({
 
     // Job Completion Prompt Logic
     useEffect(() => {
-        if (workday?.status === 'tracking' && currentJob && currentJob.status === 'active' && currentLocation) {
+        if (workday?.status === 'tracking' && currentJob && currentJob.status === 'active' && currentLocation && !isEndingDay) {
             if (aiLoading.jobCompletion || isJobModalOpen) return;
 
             const jobStartLocation = currentJob.startLocation;

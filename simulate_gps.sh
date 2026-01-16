@@ -17,9 +17,15 @@ WEBHOOK_URL="https://studio-jade-two.vercel.app/api/webhooks/traccar"
 DEVICE_ID=${1:-"ricardo-iphone"}
 LAT=${2:-"-34.6037"}
 LON=${3:-"-58.3816"}
-LAT_INC=${4:-"0.0001"}
-LON_INC=${5:-"0.0001"}
+STEP_METERS=${4:-"100"}
 INTERVAL=30
+
+# Calculate increments based on meters
+# 1 degree lat ≈ 111,132 meters
+# 1 degree lon ≈ 111,320 * cos(lat) meters
+LAT_INC=$(echo "scale=10; $STEP_METERS / 111132" | bc -l)
+# Simple approximation for longitude based on current latitude
+LON_INC=$(echo "scale=10; $STEP_METERS / (111320 * 0.82)" | bc -l) # 0.82 is approx cos(-34.6)
 
 # Helper: Box Drawing
 draw_box_top()    { echo -e "${ORANGE}┌──────────────────────────────────────────────────────────┐${NC}"; }
@@ -30,7 +36,7 @@ draw_line()       { echo -e "${ORANGE}├─────────────
 draw_dolphin() {
     echo -e "${ORANGE}     .-''-.${NC}"
     echo -e "${ORANGE}   .' .-.  )   ${WHITE}TechTrack GPS${NC}"
-    echo -e "${ORANGE}  / .'/  ) /   ${WHITE}Simulator v1.0${NC}"
+    echo -e "${ORANGE}  / .'/  ) /   ${WHITE}Simulator v1.1${NC}"
     echo -e "${ORANGE} ( (  ( / /    ${WHITE}Dolphin Mode: ON${NC}"
     echo -e "${ORANGE}  \ \  ) )     ${WHITE}Device: $DEVICE_ID${NC}"
     echo -e "${ORANGE}   '._'._.'${NC}"
@@ -52,7 +58,7 @@ draw_ui() {
     
     printf "${ORANGE}│${NC}  ${BOLD}LOCATION DATA${NC}                                        ${ORANGE}│${NC}\n"
     printf "${ORANGE}│${NC}  LAT: ${WHITE}%-15s${NC} LON: ${WHITE}%-15s${NC}      ${ORANGE}│${NC}\n" "$LAT" "$LON"
-    printf "${ORANGE}│${NC}  INC: ${ORANGE}+%-14s${NC} INC: ${ORANGE}+%-14s${NC}      ${ORANGE}│${NC}\n" "$LAT_INC" "$LON_INC"
+    printf "${ORANGE}│${NC}  STEP: ${ORANGE}%-10s m${NC}    INC: ${ORANGE}%-14s${NC}      ${ORANGE}│${NC}\n" "$STEP_METERS" "$LAT_INC"
     draw_line
     
     printf "${ORANGE}│${NC}  ${BOLD}SIMULATION STATUS${NC}                                    ${ORANGE}│${NC}\n"
@@ -87,7 +93,6 @@ while true; do
     draw_ui "SENDING" "$HTTP_CODE" "$TIMESTAMP"
     
     # Payload
-    # TransistorSoft uses ISO 8601 strings in the default template "<%= timestamp %>"
     FULL_TS=$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")
     
     PAYLOAD=$(cat <<EOF
@@ -97,18 +102,15 @@ while true; do
     "coords": {
       "latitude": $LAT,
       "longitude": $LON,
-      "accuracy": 12,
-      "speed": 0.8,
-      "heading": 270,
-      "altitude": 25
+      "accuracy": 10,
+      "speed": 5.0,
+      "heading": 0,
+      "altitude": 0
     },
     "is_moving": true,
-    "odometer": 245.25,
-    "event": "heartbeat",
-    "battery": { "level": 0.62, "is_charging": false },
-    "activity": { "type": "in_vehicle" },
-    "extras": {},
-    "_": "&id=$DEVICE_ID&lat=$LAT&lon=$LON&timestamp=$FULL_TS&"
+    "event": "motionchange",
+    "battery": { "level": 0.85, "is_charging": false },
+    "activity": { "type": "on_foot" }
   },
   "device_id": "$DEVICE_ID"
 }
@@ -121,13 +123,11 @@ EOF
         -d "$PAYLOAD")
 
     # Increment
-    LAT=$(echo "$LAT + $LAT_INC" | bc)
-    LON=$(echo "$LON + $LON_INC" | bc)
+    LAT=$(echo "scale=10; $LAT + $LAT_INC" | bc)
+    LON=$(echo "scale=10; $LON + $LON_INC" | bc)
 
     # Draw UI - IDLE state
     draw_ui "IDLE" "$HTTP_CODE" "$TIMESTAMP"
 
-    # Sleep with a "countdown" logic would be cooler but might be overkill.
-    # We'll just sleep and redraw.
     sleep $INTERVAL
 done

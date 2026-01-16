@@ -11,7 +11,10 @@ interface TechnicianSelectionProps {
   onTechnicianSelect: (technicianName: string) => void;
 }
 
-const technicians = [{ id: 'RICARDO', name: 'RICARDO' }]; // Por ahora, solo Ricardo
+const technicians = [
+  { id: 'ricardo-iphone', name: 'RICARDO' },
+  { id: 'rodrigo-nxt', name: 'RODRIGO' }
+];
 
 export default function TechnicianSelection({ onTechnicianSelect }: TechnicianSelectionProps) {
   const [selectedTechnician, setSelectedTechnician] = useState<string>(technicians[0].id);
@@ -33,7 +36,7 @@ export default function TechnicianSelection({ onTechnicianSelect }: TechnicianSe
             <label htmlFor="technician-select" className="text-sm font-medium text-foreground">
               Técnico
             </label>
-            <Select value={selectedTechnician} onValueChange={setSelectedTechnician} disabled>
+            <Select value={selectedTechnician} onValueChange={setSelectedTechnician}>
               <SelectTrigger id="technician-select" className="w-full">
                 <div className="flex items-center">
                   <User className="mr-2 h-4 w-4 text-muted-foreground" />
