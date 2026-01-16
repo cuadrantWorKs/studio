@@ -57,88 +57,84 @@ export default function TechnicianStatus({
     // -- Motion Logic --
     const isMoving = rawLocationData?.isMoving;
     const speedKmh = rawLocationData?.speed ? (rawLocationData.speed * 3.6).toFixed(1) : '0.0';
-    const activityType = rawLocationData?.activityType || 'quieto';
 
     return (
         <Card className={cn(
-            "bg-slate-900/50 backdrop-blur-md border-slate-800/50 p-2 flex items-center justify-between gap-2 shadow-lg overflow-x-auto",
+            "bg-slate-800/50 backdrop-blur-md border-slate-700/50 p-2 shadow-inner",
             className
         )}>
+            <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
 
-            {/* Group 1: GPS & Connectivity */}
-            <div className="flex items-center gap-3">
+                {/* Group 1: GPS */}
                 <TooltipProvider>
                     <Tooltip>
                         <TooltipTrigger asChild>
                             <div className={cn(
-                                "flex items-center gap-2 px-3 py-1.5 rounded-full border bg-opacity-10 transition-colors cursor-help",
+                                "flex items-center gap-2 px-3 py-2 rounded-lg border bg-slate-900/50 transition-colors flex-1 justify-center min-w-[90px]",
                                 isGpsOnline
-                                    ? "bg-green-500 border-green-500/30 text-green-400"
-                                    : "bg-red-500 border-red-500/30 text-red-400"
+                                    ? "border-green-500/20 text-green-400"
+                                    : "border-red-500/20 text-red-400"
                             )}>
-                                {isGpsOnline ? <Wifi className="h-3.5 w-3.5" /> : <WifiOff className="h-3.5 w-3.5" />}
-                                <span className="text-xs font-bold tracking-wider hidden sm:inline">
-                                    {isGpsOnline ? 'GPS' : 'OFFLINE'}
-                                </span>
-                                {isGpsOnline && (
-                                    <span className="text-[10px] opacity-70 border-l border-green-500/30 pl-2 ml-1 hidden sm:inline">
-                                        ±{accuracy.toFixed(0)}m
+                                {isGpsOnline ? <Wifi className="h-4 w-4" /> : <WifiOff className="h-4 w-4" />}
+                                <div className="flex flex-col leading-none items-start">
+                                    <span className="font-bold tracking-wider">
+                                        {isGpsOnline ? 'ONLINE' : 'OFFLINE'}
                                     </span>
-                                )}
+                                    {isGpsOnline && (
+                                        <span className="text-[9px] opacity-70 font-mono">
+                                            ±{accuracy.toFixed(0)}m
+                                        </span>
+                                    )}
+                                </div>
                             </div>
                         </TooltipTrigger>
-                        <TooltipContent className="bg-slate-800 border-slate-700 text-xs text-slate-300">
+                        <TooltipContent className="bg-slate-900 border-slate-700 text-xs text-slate-300">
                             {isGpsOnline
                                 ? `Conexión estable. Precisión: ${accuracy.toFixed(1)} metros`
                                 : `Error GPS: ${geolocationError?.message || 'Señal perdida'}`}
                         </TooltipContent>
                     </Tooltip>
                 </TooltipProvider>
-            </div>
 
-            {/* Group 2: Battery Status */}
-            {rawLocationData?.battery !== undefined && (
-                <div className="flex items-center gap-2">
+                {/* Group 2: Battery */}
+                {rawLocationData?.battery !== undefined && (
                     <div className={cn(
-                        "flex items-center gap-2 px-3 py-1.5 rounded-full border bg-opacity-10",
+                        "flex items-center gap-2 px-3 py-2 rounded-lg border bg-slate-900/50 flex-1 justify-center min-w-[90px]",
                         isCharging
-                            ? "bg-yellow-500 border-yellow-500/30 text-yellow-500"
+                            ? "border-yellow-500/20 text-yellow-500"
                             : batteryLevel < 0.2
-                                ? "bg-red-500 border-red-500/30 text-red-500"
-                                : "bg-slate-700 border-slate-600 text-slate-300"
+                                ? "border-red-500/20 text-red-500"
+                                : "border-slate-600/50 text-slate-300"
                     )}>
                         {getBatteryIcon(batteryLevel, isCharging)}
-                        <span className="text-xs font-mono font-bold">
+                        <span className="font-mono font-bold text-sm">
                             {(batteryLevel * 100).toFixed(0)}%
                         </span>
                     </div>
-                </div>
-            )}
+                )}
 
-            {/* Group 3: Motion & Activity */}
-            {(rawLocationData?.isMoving !== undefined || rawLocationData?.speed !== undefined) && (
-                <div className="flex items-center gap-2">
+                {/* Group 3: Motion */}
+                {(rawLocationData?.isMoving !== undefined || rawLocationData?.speed !== undefined) && (
                     <div className={cn(
-                        "flex items-center gap-2 px-3 py-1.5 rounded-full border bg-opacity-10",
+                        "flex items-center gap-2 px-3 py-2 rounded-lg border bg-slate-900/50 flex-1 justify-center min-w-[90px]",
                         isMoving
-                            ? "bg-blue-500 border-blue-500/30 text-blue-400"
-                            : "bg-slate-700 border-slate-600 text-slate-400"
+                            ? "border-blue-500/20 text-blue-400"
+                            : "border-slate-600/50 text-slate-400"
                     )}>
-                        {isMoving ? <Navigation className="h-3.5 w-3.5" /> : <Activity className="h-3.5 w-3.5" />}
-                        <div className="flex flex-col leading-none">
-                            <span className="text-[10px] font-bold uppercase tracking-wider hidden sm:inline">
-                                {isMoving ? 'En Ruta' : 'Quieto'}
+                        {isMoving ? <Navigation className="h-4 w-4" /> : <Activity className="h-4 w-4" />}
+                        <div className="flex flex-col leading-none items-start">
+                            <span className="font-bold tracking-wider">
+                                {isMoving ? 'RUTA' : 'QUIETO'}
                             </span>
+                            {isMoving && (
+                                <span className="text-[9px] font-mono opacity-70">
+                                    {speedKmh} km/h
+                                </span>
+                            )}
                         </div>
-                        {isMoving && (
-                            <span className="text-[10px] font-mono border-l border-blue-500/30 pl-2 ml-1">
-                                {speedKmh} km/h
-                            </span>
-                        )}
                     </div>
-                </div>
-            )}
-
+                )}
+            </div>
         </Card>
     );
 }

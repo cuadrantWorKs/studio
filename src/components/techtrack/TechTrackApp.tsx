@@ -123,11 +123,30 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
     return () => clearInterval(intervalId);
   }, [workday?.status, currentLocation, recordEvent, sanitizeLocationPoint, setWorkday]);
 
+  // Fix Leaflet Icons
+  useEffect(() => {
+    (async () => {
+      try {
+        const L = (await import('leaflet')).default;
+        // @ts-ignore
+        delete L.Icon.Default.prototype._getIconUrl;
+        L.Icon.Default.mergeOptions({
+          iconUrl: 'https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon.png',
+          iconRetinaUrl: 'https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon-2x.png',
+          shadowUrl: 'https://unpkg.com/leaflet@1.7.1/dist/images/marker-shadow.png',
+        });
+      } catch (e) {
+        console.error("Leaflet icon fix failed", e);
+      }
+    })();
+  }, []);
+
   // Poll for Geofence Exits
   useEffect(() => {
     let intervalId: NodeJS.Timeout;
 
     const checkGeofenceEvents = async () => {
+
       if (!workday || !currentJob || currentJob.status !== 'active') return;
 
       try {
@@ -670,26 +689,51 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
       {/* Header Card */}
       <Card className="bg-slate-900 text-white border-none shadow-lg">
         <CardContent className="p-6">
-          <div className="flex justify-between items-start mb-4">
-            <div>
-              <h2 className="text-xl font-bold flex items-center gap-2">
-                <User className="h-5 w-5 text-slate-400" />
-                {technicianName}
-              </h2>
-              <div className="flex items-center gap-2 mt-1 w-full relative">
-                <p className="text-slate-400 text-sm hidden sm:block">{new Date(workday.date.replace(/-/g, '/')).toLocaleDateString()}</p>
-
-                <div className="flex-1">
-                  <TechnicianStatus
-                    currentLocation={currentLocation}
-                    rawLocationData={rawLocationData}
-                    geolocationError={geolocationError}
-                  />
+          <div className="flex flex-col gap-4 mb-6">
+            {/* Top Row: Name and Session Status */}
+            <div className="flex justify-between items-center w-full">
+              <div className="flex items-center gap-3">
+                <div className="bg-slate-800 p-2 rounded-full">
+                  <User className="h-6 w-6 text-slate-300" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold text-white leading-none">
+                    {technicianName}
+                  </h2>
+                  <p className="text-slate-400 text-xs mt-1 font-mono">
+                    {new Date(workday.date.replace(/-/g, '/')).toLocaleDateString()}
+                  </p>
                 </div>
               </div>
 
-              {/* GPS Debug Toggle */}
-              <div className="mt-2 text-[10px] text-slate-500 cursor-pointer hover:text-white transition-colors"
+              <div className={`px-3 py-1.5 rounded-full text-xs font-bold flex items-center gap-2 shadow-sm border ${workday.status === 'tracking' ? 'bg-green-500/10 border-green-500/20 text-green-400' :
+                  workday.status === 'paused' ? 'bg-amber-500/10 border-amber-500/20 text-amber-400' :
+                    'bg-slate-700/50 border-slate-600/50 text-slate-300'
+                }`}>
+                {workday.status === 'tracking' && (
+                  <span className="relative flex h-2.5 w-2.5">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-green-500"></span>
+                  </span>
+                )}
+                {workday.status === 'tracking' ? 'ACTIVO' : workday.status === 'paused' ? 'PAUSADO' : 'FINALIZADO'}
+              </div>
+            </div>
+
+            {/* Middle Row: Device Status Bar */}
+            <div className="w-full">
+              <TechnicianStatus
+                currentLocation={currentLocation}
+                rawLocationData={rawLocationData}
+                geolocationError={geolocationError}
+                className="w-full h-auto py-3"
+              />
+            </div>
+
+            {/* Bottom Row: Debug Toggle (Subtle) */}
+            <div className="flex justify-end">
+              <button
+                className="text-[10px] text-slate-600 hover:text-slate-400 transition-colors uppercase font-bold tracking-widest"
                 onClick={() => toast({
                   title: "Datos GPS (TransistorSoft)",
                   description: (
@@ -713,14 +757,7 @@ export default function TechTrackApp({ technicianName }: TechTrackAppProps) {
                 })}
               >
                 ver datos crudos
-              </div>
-            </div>
-            <div className={`px-3 py-1 rounded-full text-xs font-medium flex items-center gap-1 ${workday.status === 'tracking' ? 'bg-green-500/20 text-green-400' :
-              workday.status === 'paused' ? 'bg-amber-500/20 text-amber-400' :
-                'bg-slate-700 text-slate-300'
-              }`}>
-              {workday.status === 'tracking' && <span className="relative flex h-2 w-2 mr-1"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span><span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span></span>}
-              {workday.status === 'tracking' ? 'ACTIVO' : workday.status === 'paused' ? 'PAUSADO' : 'FINALIZADO'}
+              </button>
             </div>
           </div>
 
