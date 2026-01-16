@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Workday, LocationPoint, Job, TrackingEvent } from '@/lib/techtrack/types';
 import { decidePromptForNewJob } from '@/ai/flows/decide-prompt-for-new-job';
 import { decidePromptForJobCompletion } from '@/ai/flows/decide-prompt-for-job-completion';
@@ -30,21 +30,51 @@ export function useAiPrompts({
     openJobModal,
     isEndingDay = false
 }: UseAiPromptsProps) {
-    const [aiLoading, setAiLoading] = useState<Record<string, boolean>>({});
-    const { toast } = useToast();
+    const lastLocalJobEndTime = useRef<number>(0);
+    const previousJobIds = useRef<Set<string>>(new Set());
+
+    // Track when a job ends locally to enforce immediate cooldown
+    useEffect(() => {
+        if (currentJob) {
+            previousJobIds.current.add(currentJob.id);
+        } else {
+            // Check if we just transitioned from having a job to not having one
+            // We can't strictly know if it was "completed" vs "cancelled" just by null, 
+            // but for "New Job" prompt supression, assuming "just stopped working" is safe.
+            // However, to be precise, we rely on the fact that if it was cancelled, we likely don't want to prompt immediately either.
+            // But usually this ref will help cover the gap before workday.jobs updates.
+
+            // We only update this if we actually HAD a job recently. 
+            // This runs on every render where !currentJob, so we need a way to detect transition.
+            // Actually, a better way is to check if we had a job in the previous render?
+            // Since we don't have previous props, we can set this when we HAVE a job, to the current time? No.
+        }
+    }, [currentJob]);
+
+    // Better approach: use a ref to store previous currentJob
+    const prevJobRef = useRef<Job | null | undefined>(undefined);
+    useEffect(() => {
+        if (prevJobRef.current && !currentJob) {
+            // Job just ended
+            lastLocalJobEndTime.current = Date.now();
+        }
+        prevJobRef.current = currentJob;
+    }, [currentJob]);
 
     // New Job Prompt Logic
     useEffect(() => {
         if (workday?.status === 'tracking' && !currentJob && currentLocation && !isEndingDay) {
             if (aiLoading.newJob || isJobModalOpen) return;
 
-            // Find the last job end time to prevent prompting for time spent working
-            const lastJobEndTime = Math.max(
+            // Find the last job end time from history OR local execution
+            const lastHistoryJobEndTime = Math.max(
                 workday.startTime || 0,
                 ...(workday.jobs || [])
                     .filter(j => j.status === 'completed' && j.endTime)
                     .map(j => j.endTime!)
             );
+
+            const lastJobEndTime = Math.max(lastHistoryJobEndTime, lastLocalJobEndTime.current);
 
             // Find the point where the technician first stopped moving
             // Iterate backwards through history to find the first point that is far away
